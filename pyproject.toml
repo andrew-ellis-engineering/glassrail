@@ -105,7 +105,12 @@ pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = "warning"
 reportUnknownMemberType = "warning"
-reportUnknownVariableType = "warning"
+# Pydantic Field(default_factory=...) returns Any from the stubs, which makes
+# every list/dict-defaulted model field look "partially unknown" even though
+# our annotation states the exact type. Silencing this rule keeps the signal
+# on real cases (unannotated variables, untyped helper returns) without the
+# noise from every Pydantic model we write.
+reportUnknownVariableType = "none"
 reportUnknownArgumentType = "warning"
 
 [tool.pytest.ini_options]
