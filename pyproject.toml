@@ -112,12 +112,11 @@ reportUnknownMemberType = "warning"
 # noise from every Pydantic model we write.
 reportUnknownVariableType = "none"
 reportUnknownArgumentType = "warning"
-
-# Tests routinely define inner functions that are "used" only via decorator
-# registration (e.g. @harness.tool). Pyright's reportUnusedFunction can't see
-# those side-effect references, so we scope it off inside tests/.
-[[tool.pyright.executionEnvironments]]
-root = "tests"
+# Decorator-registered functions (FastAPI endpoints, @harness.tool, channels,
+# hooks) look "unused" to pyright because the decorator's side effect — not the
+# function name — is the actual reference. The rule fires too noisily in our
+# decorator-heavy codebase to be useful; we accept the loss of detection for
+# the small benefit it would otherwise provide.
 reportUnusedFunction = "none"
 
 [tool.pytest.ini_options]

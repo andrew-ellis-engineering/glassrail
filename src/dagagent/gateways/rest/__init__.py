@@ -8,3 +8,9 @@ The ASGI app is exposed as ``app`` for uvicorn:
 
     uvicorn dagagent.gateways.rest:app
 """
+
+from __future__ import annotations
+
+from dagagent.gateways.rest.app import app, create_app, create_default_app
+
+__all__ = ["app", "create_app", "create_default_app"]
