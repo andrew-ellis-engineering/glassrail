@@ -1,0 +1,24 @@
+# Development-only docker-compose.
+# Production Dockerfile + image publish lands in Phase 1.
+
+services:
+  dagagent:
+    image: python:3.12-slim
+    container_name: dagagent-dev
+    working_dir: /app
+    volumes:
+      - .:/app
+      - dagagent-state:/var/lib/dagagent
+    environment:
+      DAGAGENT_STATE_PATH: /var/lib/dagagent/state.sqlite
+      DAGAGENT_LOG_LEVEL: INFO
+    ports:
+      - "8888:8888"
+    command: >
+      bash -c "pip install uv &&
+               uv sync --all-extras --group dev &&
+               uv run uvicorn dagagent.gateways.rest:app --host 0.0.0.0 --port 8888 --reload"
+    restart: unless-stopped
+
+volumes:
+  dagagent-state:
