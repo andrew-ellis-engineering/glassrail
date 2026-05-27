@@ -6,9 +6,11 @@ A DAG-planning agent with deterministic tier routing, fresh context per node, an
 
 ## Status
 
-**Phase 0.5 — OSS Foundation.** Restructuring the single-file prototype (`agent_server.py`) into a multi-package, src-layout codebase with state persistence, extended node types, and pluggable LLM/state interfaces.
-
-The prototype works end-to-end; the package skeleton in `src/dagagent/` is being filled in module by module.
+Early development. The package ships the core engine end-to-end: planner,
+validator, tier-routed LLM provider abstraction, in-memory state store,
+DAG executor with HITL gate, and a FastAPI surface. State persistence
+(SQLite), extended node types (`think`, `summary`, `result`, `subplan`),
+and the event stream are next.
 
 ## Design
 

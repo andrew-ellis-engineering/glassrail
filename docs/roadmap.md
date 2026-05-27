@@ -4,17 +4,17 @@
 
 ## Phase 0 — Prototype (done)
 
-Single-file FastAPI prototype in `agent_server.py`. Validates DAG planning + tier routing + audit logging end to end.
+Single-file FastAPI prototype. Validated DAG planning + tier routing + audit logging end to end. Now superseded by the package.
 
 ## Phase 0.5 — OSS Foundation (in progress)
 
-- Package restructure (src-layout, subpackages)
+- Package restructure (src-layout, subpackages) ✓
+- Pluggable LLM provider interface (`Protocol`, streaming) ✓
+- Pluggable state store interface ✓
+- HITL approval primitive ✓
 - State persistence (SQLite)
 - Extended node types: `think`, `summary`, `result`, `subplan`
-- HITL approval primitive
 - Property tests for the fresh-context invariant
-- Pluggable LLM provider interface (`Protocol`, streaming)
-- Pluggable state store interface
 
 ## Phase 1 — Reliability & Eval
 
