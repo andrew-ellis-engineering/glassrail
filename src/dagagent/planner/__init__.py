@@ -1,5 +1,7 @@
-"""Plan generation.
+"""Plan generation."""
 
-Single LLM call (via the ``TierRouter``) with JSON-mode output. Validates
-the result, replans once on validation failure, then surfaces the error.
-"""
+from __future__ import annotations
+
+from dagagent.planner.planner import PLANNER_SYSTEM, Planner
+
+__all__ = ["PLANNER_SYSTEM", "Planner"]
