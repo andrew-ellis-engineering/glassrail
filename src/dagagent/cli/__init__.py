@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import typer
 
+from dagagent import __version__
+
 app = typer.Typer(
     name="dagagent",
     help="A DAG-planning agent with deterministic tier routing.",
@@ -19,8 +21,6 @@ app = typer.Typer(
 @app.command()
 def version() -> None:
     """Print the installed dagagent version."""
-    from dagagent import __version__
-
     typer.echo(__version__)
 
 
