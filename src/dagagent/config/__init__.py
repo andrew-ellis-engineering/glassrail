@@ -1,5 +1,24 @@
 """Configuration via pydantic-settings.
 
-Loads from environment variables and an optional ``config.toml``. Twelve-factor
-by default; ``config.toml`` is provided as an ergonomic override for self-hosters.
+Loads from environment variables, an optional ``.env`` file, and an optional
+``config.toml`` file. Twelve-factor by default; ``config.toml`` is provided
+as an ergonomic override for self-hosters.
 """
+
+from __future__ import annotations
+
+from functools import lru_cache
+
+from dagagent.config.settings import Settings, TierConfig
+
+__all__ = ["Settings", "TierConfig", "get_settings"]
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """Return the process-wide :class:`Settings` singleton.
+
+    Use this from production code paths. Tests should construct ``Settings``
+    directly with init kwargs instead of relying on this cache.
+    """
+    return Settings()
