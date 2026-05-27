@@ -113,6 +113,13 @@ reportUnknownMemberType = "warning"
 reportUnknownVariableType = "none"
 reportUnknownArgumentType = "warning"
 
+# Tests routinely define inner functions that are "used" only via decorator
+# registration (e.g. @harness.tool). Pyright's reportUnusedFunction can't see
+# those side-effect references, so we scope it off inside tests/.
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+reportUnusedFunction = "none"
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = [

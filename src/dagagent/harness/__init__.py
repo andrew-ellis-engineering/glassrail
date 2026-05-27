@@ -1,7 +1,23 @@
-"""Tool harness.
+"""Tool harness — registry and built-in tools."""
 
-- ``ToolHarness`` holds the registry of available tools.
-- ``@harness.tool`` is the decorator for first-party tools.
-- Third-party plugins are discovered via the ``dagagent.tools`` entry-point group
-  at startup; the harness loads and registers them automatically.
-"""
+from __future__ import annotations
+
+from dagagent.harness.builtin import (
+    calendar_get,
+    file_read,
+    memory_search,
+    register_builtins,
+    web_search,
+)
+from dagagent.harness.registry import ToolFunc, ToolHarness, ToolSchema
+
+__all__ = [
+    "ToolFunc",
+    "ToolHarness",
+    "ToolSchema",
+    "calendar_get",
+    "file_read",
+    "memory_search",
+    "register_builtins",
+    "web_search",
+]
