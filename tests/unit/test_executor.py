@@ -258,6 +258,45 @@ async def test_summary_failure_marks_node_failed() -> None:
     assert result.results[1].status is NodeStatus.FAILED
 
 
+async def test_result_node_supplies_final_output() -> None:
+    """A RESULT node's output becomes the task's final_output."""
+    result_payload = json.dumps({"output": "the user-facing answer", "confidence": 0.95})
+    executor, _ = _executor([result_payload])
+    plan = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="final answer")])
+    state = _state(plan)
+
+    out = await executor.execute(state)
+    assert out.results[1].status is NodeStatus.COMPLETED
+    assert out.final_output == "the user-facing answer"
+
+
+async def test_result_preferred_over_synthesis_for_final_output() -> None:
+    """When both kinds are present, the RESULT node wins, even if SYNTHESIS
+    runs later in the plan."""
+    synth_payload = json.dumps({"output": "intermediate", "confidence": 0.9})
+    result_payload = json.dumps({"output": "the answer", "confidence": 0.95})
+    executor, _ = _executor([synth_payload, result_payload])
+    plan = Plan(
+        nodes=[
+            Node(id=1, type=NodeType.SYNTHESIS, description="combine"),
+            Node(id=2, type=NodeType.RESULT, description="final", context_needed=[1]),
+        ]
+    )
+    state = _state(plan)
+
+    out = await executor.execute(state)
+    assert out.final_output == "the answer"
+
+
+async def test_result_failure_marks_node_failed() -> None:
+    executor, _ = _executor(["not json"])
+    plan = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="x")])
+    state = _state(plan)
+
+    out = await executor.execute(state)
+    assert out.results[1].status is NodeStatus.FAILED
+
+
 async def test_empty_tool_result_bypasses_shape_check(empty_tool_executor: Executor) -> None:
     """Empty results are flagged as EMPTY without triggering the LLM gate."""
     plan = Plan(nodes=[Node(id=1, type=NodeType.TOOL, description="x", tool="empty_tool")])

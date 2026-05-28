@@ -60,6 +60,11 @@ SUMMARY_SYSTEM = """\
 You are a summarisation engine. Condense the provided context into the shortest form that preserves the facts a downstream node needs. Drop boilerplate, redundancy, and formatting.
 Respond ONLY with valid JSON: {"summary": "<condensed text>", "confidence": <0.0-1.0>}
 """  # noqa: E501
+
+RESULT_SYSTEM = """\
+You produce the final user-facing answer for a task. Use the provided context to compose a clean, direct response — no preamble, no meta-commentary, no scaffolding.
+Respond ONLY with valid JSON: {"output": "<final answer>", "confidence": <0.0-1.0>}
+"""  # noqa: E501
 # fmt: on
 
 
@@ -111,6 +116,8 @@ class Executor:
                 result = await self._execute_think(node, state, tier)
             elif node.type is NodeType.SUMMARY:
                 result = await self._execute_summary(node, state, tier)
+            elif node.type is NodeType.RESULT:
+                result = await self._execute_result(node, state, tier)
             else:
                 result = NodeResult(
                     node_id=node_id,
@@ -315,6 +322,43 @@ class Executor:
             tokens_used=tokens,
         )
 
+    async def _execute_result(
+        self,
+        node: Node,
+        state: ExecutionState,
+        tier: int,
+    ) -> NodeResult:
+        ctx = assemble_context(node, state.results)
+        messages: list[Message] = [
+            {"role": "system", "content": RESULT_SYSTEM},
+            {
+                "role": "user",
+                "content": f"Task: {node.description}\n\nContext from prior nodes:\n{ctx}",
+            },
+        ]
+        try:
+            raw, tokens = await collect(
+                self._router.complete(
+                    messages,
+                    min_tier=tier,
+                    json_mode=True,
+                    max_tokens=self._settings.max_node_output_tokens,
+                )
+            )
+            data = json.loads(raw)
+            output = data.get("output", raw)
+            confidence = float(data.get("confidence", 0.9))
+        except Exception as exc:
+            return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
+
+        return NodeResult(
+            node_id=node.id,
+            status=NodeStatus.COMPLETED,
+            output=output,
+            confidence=confidence,
+            tokens_used=tokens,
+        )
+
     async def _execute_synthesis(
         self,
         node: Node,
@@ -460,12 +504,15 @@ class Executor:
         )
 
     def _extract_final_output(self, state: ExecutionState, plan: Plan) -> str | None:
-        """Last completed SYNTHESIS node's output is the final answer."""
-        for node_id in reversed(plan.sorted_node_ids):
-            node = next((n for n in plan.nodes if n.id == node_id), None)
-            if node is None or node.type is not NodeType.SYNTHESIS:
-                continue
-            result = state.results.get(node_id)
-            if result and result.status is NodeStatus.COMPLETED:
-                return str(result.output)
+        """The last completed RESULT node's output is the final answer; if
+        the plan declared no RESULT node, fall back to the last completed
+        SYNTHESIS node so older plans keep working unchanged."""
+        for target in (NodeType.RESULT, NodeType.SYNTHESIS):
+            for node_id in reversed(plan.sorted_node_ids):
+                node = next((n for n in plan.nodes if n.id == node_id), None)
+                if node is None or node.type is not target:
+                    continue
+                result = state.results.get(node_id)
+                if result and result.status is NodeStatus.COMPLETED:
+                    return str(result.output)
         return None
