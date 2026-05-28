@@ -17,8 +17,8 @@ from pydantic import BaseModel, Field
 class NodeType(StrEnum):
     """Kinds of node that can appear in a plan.
 
-    The remaining extended types (``summary``, ``result``, ``subplan``)
-    land alongside the executor and validator support for each.
+    The remaining extended types (``result``, ``subplan``) land alongside
+    the executor and validator support for each.
     """
 
     TOOL = "tool"
@@ -26,6 +26,8 @@ class NodeType(StrEnum):
     SYNTHESIS = "synthesis"
     THINK = "think"
     """Explicit reasoning step. Pure LLM call, no tool, defaults to tier 2."""
+    SUMMARY = "summary"
+    """Condense upstream context. Cheap LLM call, defaults to tier 0."""
 
 
 class Node(BaseModel):

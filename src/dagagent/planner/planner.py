@@ -33,6 +33,8 @@ Rules:
 - If a node synthesises previous outputs, set type=synthesis
 - If a node performs explicit multi-step reasoning over prior context
   (with no tool call and no final synthesis), set type=think
+- If a node condenses noisy upstream output for a downstream consumer,
+  set type=summary
 - reasoning_required=true only for nodes needing genuine multi-step logic
   beyond what type=think already implies
 
@@ -41,7 +43,7 @@ Output ONLY valid JSON matching this schema (no markdown, no explanation):
   "nodes": [
     {
       "id": <int>,
-      "type": "tool" | "decision" | "synthesis" | "think",
+      "type": "tool" | "decision" | "synthesis" | "think" | "summary",
       "description": "<what this node does>",
       "tool": "<tool_name or null>",
       "args_template": {<static args dict or null>},

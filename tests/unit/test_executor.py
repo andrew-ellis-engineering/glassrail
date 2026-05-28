@@ -235,6 +235,29 @@ async def test_think_failure_marks_node_failed() -> None:
     assert result.results[1].status is NodeStatus.FAILED
 
 
+async def test_summary_condenses_upstream_context() -> None:
+    """A SUMMARY node returns the condensed text as its output at tier 0."""
+    summary_payload = json.dumps({"summary": "two facts: A and B", "confidence": 0.95})
+    executor, _ = _executor([summary_payload])
+    plan = Plan(nodes=[Node(id=1, type=NodeType.SUMMARY, description="condense")])
+    state = _state(plan)
+
+    result = await executor.execute(state)
+    node_result = result.results[1]
+    assert node_result.status is NodeStatus.COMPLETED
+    assert node_result.output == "two facts: A and B"
+    assert node_result.tier_used == 0
+
+
+async def test_summary_failure_marks_node_failed() -> None:
+    executor, _ = _executor(["not json"])
+    plan = Plan(nodes=[Node(id=1, type=NodeType.SUMMARY, description="x")])
+    state = _state(plan)
+
+    result = await executor.execute(state)
+    assert result.results[1].status is NodeStatus.FAILED
+
+
 async def test_empty_tool_result_bypasses_shape_check(empty_tool_executor: Executor) -> None:
     """Empty results are flagged as EMPTY without triggering the LLM gate."""
     plan = Plan(nodes=[Node(id=1, type=NodeType.TOOL, description="x", tool="empty_tool")])

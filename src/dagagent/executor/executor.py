@@ -55,6 +55,11 @@ You are a reasoning engine. Work through the task step by step using the provide
 Produce a concise chain of reasoning, then a confidence score for that reasoning.
 Respond ONLY with valid JSON: {"reasoning": "<your step-by-step reasoning>", "confidence": <0.0-1.0>}
 """  # noqa: E501
+
+SUMMARY_SYSTEM = """\
+You are a summarisation engine. Condense the provided context into the shortest form that preserves the facts a downstream node needs. Drop boilerplate, redundancy, and formatting.
+Respond ONLY with valid JSON: {"summary": "<condensed text>", "confidence": <0.0-1.0>}
+"""  # noqa: E501
 # fmt: on
 
 
@@ -104,6 +109,8 @@ class Executor:
                 result = await self._execute_synthesis(node, state, tier)
             elif node.type is NodeType.THINK:
                 result = await self._execute_think(node, state, tier)
+            elif node.type is NodeType.SUMMARY:
+                result = await self._execute_summary(node, state, tier)
             else:
                 result = NodeResult(
                     node_id=node_id,
@@ -267,6 +274,43 @@ class Executor:
             node_id=node.id,
             status=NodeStatus.COMPLETED,
             output=reasoning,
+            confidence=confidence,
+            tokens_used=tokens,
+        )
+
+    async def _execute_summary(
+        self,
+        node: Node,
+        state: ExecutionState,
+        tier: int,
+    ) -> NodeResult:
+        ctx = assemble_context(node, state.results)
+        messages: list[Message] = [
+            {"role": "system", "content": SUMMARY_SYSTEM},
+            {
+                "role": "user",
+                "content": f"Task: {node.description}\n\nContext to summarise:\n{ctx}",
+            },
+        ]
+        try:
+            raw, tokens = await collect(
+                self._router.complete(
+                    messages,
+                    min_tier=tier,
+                    json_mode=True,
+                    max_tokens=self._settings.max_node_output_tokens,
+                )
+            )
+            data = json.loads(raw)
+            summary = data.get("summary", raw)
+            confidence = float(data.get("confidence", 0.9))
+        except Exception as exc:
+            return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
+
+        return NodeResult(
+            node_id=node.id,
+            status=NodeStatus.COMPLETED,
+            output=summary,
             confidence=confidence,
             tokens_used=tokens,
         )

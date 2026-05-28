@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `think` node type for explicit reasoning steps. Defaults to tier 2
   (reasoning tier) and emits a structured `{reasoning, confidence}`
   payload.
+- `summary` node type for condensing noisy upstream context. Defaults
+  to tier 0 and emits a `{summary, confidence}` payload.
 - Orchestrator wrapping planning, optional HITL gate, execution, and
   persistence handoffs.
 - FastAPI gateway: `/task`, `/task/{id}`, `/task/{id}/resume`,
