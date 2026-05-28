@@ -20,8 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LLM provider abstraction: streaming `LLMProvider` Protocol,
   `TierRouter` with `ProviderUnavailableError`-driven fallthrough,
   OpenAI-compatible concrete provider.
-- StateStore Protocol with in-memory implementation and shared contract
-  tests every backend must pass.
+- StateStore Protocol with in-memory and SQLite (aiosqlite) backends,
+  and a shared contract test suite every backend must pass.
 - Plan validator: topological sort, cycle detection, tool name checks,
   decision-nesting limit, branch-reference sanity.
 - Planner with JSON-mode prompt; node terminology consistent with core.

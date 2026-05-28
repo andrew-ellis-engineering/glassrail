@@ -6,29 +6,41 @@ exercised against the full contract automatically.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from pathlib import Path
 
 import pytest
 
 from dagagent.core import ExecutionState, TaskStatus, new_task_id
 from dagagent.state import InMemoryStateStore, StateStore
+from dagagent.state.sqlite import SqliteStateStore
 
-StoreFactory = Callable[[], Awaitable[StateStore]]
+StoreFactory = Callable[[Path], Awaitable[StateStore]]
 
 
-async def _new_in_memory() -> StateStore:
+async def _new_in_memory(_tmp: Path) -> StateStore:
     return InMemoryStateStore()
+
+
+async def _new_sqlite(tmp: Path) -> StateStore:
+    return SqliteStateStore(tmp / "store.sqlite")
 
 
 STORE_FACTORIES: list[tuple[str, StoreFactory]] = [
     ("in_memory", _new_in_memory),
+    ("sqlite", _new_sqlite),
 ]
 
 
 @pytest.fixture(params=[f for _, f in STORE_FACTORIES], ids=[n for n, _ in STORE_FACTORIES])
-async def store(request: pytest.FixtureRequest) -> StateStore:
+async def store(request: pytest.FixtureRequest, tmp_path: Path) -> AsyncIterator[StateStore]:
     factory: StoreFactory = request.param
-    return await factory()
+    instance = await factory(tmp_path)
+    try:
+        yield instance
+    finally:
+        if isinstance(instance, SqliteStateStore):
+            await instance.close()
 
 
 def _make_state(*, request: str = "do a thing") -> ExecutionState:
@@ -115,3 +127,7 @@ async def test_save_isolates_caller_object(store: StateStore) -> None:
 
 def test_in_memory_satisfies_protocol() -> None:
     assert isinstance(InMemoryStateStore(), StateStore)
+
+
+def test_sqlite_satisfies_protocol(tmp_path: Path) -> None:
+    assert isinstance(SqliteStateStore(tmp_path / "p.sqlite"), StateStore)

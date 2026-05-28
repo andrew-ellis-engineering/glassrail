@@ -3,7 +3,9 @@
 - :mod:`dagagent.state.base` defines the :class:`StateStore` Protocol.
 - :mod:`dagagent.state.memory` provides the in-process implementation used
   for tests and ephemeral runs.
-- A SQLite-backed implementation will land as :mod:`dagagent.state.sqlite`.
+- :mod:`dagagent.state.sqlite` provides the durable SQLite backend; import
+  it directly (it requires the optional ``sqlite`` extra and is not
+  re-exported here to keep that dependency optional).
 """
 
 from __future__ import annotations
