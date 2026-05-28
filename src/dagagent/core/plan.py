@@ -17,14 +17,15 @@ from pydantic import BaseModel, Field
 class NodeType(StrEnum):
     """Kinds of node that can appear in a plan.
 
-    Phase 0 ships ``TOOL``, ``DECISION``, ``SYNTHESIS``. The expanded
-    taxonomy (``think``, ``summary``, ``result``, ``subplan``) lands as the
-    executor and validator gain support for them.
+    The remaining extended types (``summary``, ``result``, ``subplan``)
+    land alongside the executor and validator support for each.
     """
 
     TOOL = "tool"
     DECISION = "decision"
     SYNTHESIS = "synthesis"
+    THINK = "think"
+    """Explicit reasoning step. Pure LLM call, no tool, defaults to tier 2."""
 
 
 class Node(BaseModel):

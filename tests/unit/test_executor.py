@@ -26,8 +26,9 @@ from dagagent.providers import Chunk, Message, TierRouter
 class _ScriptedProvider:
     """Fake provider that pops scripted responses in order."""
 
-    def __init__(self, responses: _Sequence[str]) -> None:
+    def __init__(self, responses: _Sequence[str], *, tier: int = 0) -> None:
         self._responses: list[str] = list(responses)
+        self._tier = tier
 
     @property
     def name(self) -> str:
@@ -35,7 +36,7 @@ class _ScriptedProvider:
 
     @property
     def tier(self) -> int:
-        return 0
+        return self._tier
 
     async def complete(
         self,
@@ -51,10 +52,10 @@ class _ScriptedProvider:
         yield Chunk(text=self._responses.pop(0), tokens_used=1)
 
 
-def _executor(responses: list[str]) -> tuple[Executor, ToolHarness]:
+def _executor(responses: list[str], *, tier: int = 0) -> tuple[Executor, ToolHarness]:
     harness = ToolHarness()
     register_builtins(harness)
-    router = TierRouter([_ScriptedProvider(responses)])
+    router = TierRouter([_ScriptedProvider(responses, tier=tier)])
     return Executor(router=router, harness=harness, settings=Settings()), harness
 
 
@@ -194,6 +195,44 @@ def empty_tool_executor() -> Executor:
     )
     router = TierRouter([_ScriptedProvider([])])
     return Executor(router=router, harness=harness, settings=Settings())
+
+
+async def test_think_completes_with_reasoning_output() -> None:
+    """A THINK node's reasoning becomes its output and routes to tier 2."""
+    think_payload = json.dumps(
+        {"reasoning": "step 1 ... step 2 ... conclusion", "confidence": 0.85}
+    )
+    executor, _ = _executor([think_payload], tier=2)
+    plan = Plan(nodes=[Node(id=1, type=NodeType.THINK, description="reason about x")])
+    state = _state(plan)
+
+    result = await executor.execute(state)
+    node_result = result.results[1]
+    assert node_result.status is NodeStatus.COMPLETED
+    assert node_result.output == "step 1 ... step 2 ... conclusion"
+    assert node_result.confidence == 0.85
+    assert node_result.tier_used == 2
+
+
+async def test_think_forced_tier_overrides_default() -> None:
+    """forced_tier on a THINK node beats the type's default routing."""
+    think_payload = json.dumps({"reasoning": "quick", "confidence": 0.9})
+    executor, _ = _executor([think_payload])
+    plan = Plan(nodes=[Node(id=1, type=NodeType.THINK, description="quick reason", forced_tier=0)])
+    state = _state(plan)
+
+    result = await executor.execute(state)
+    assert result.results[1].tier_used == 0
+
+
+async def test_think_failure_marks_node_failed() -> None:
+    """A malformed THINK response fails the node rather than masking as empty."""
+    executor, _ = _executor(["not json"], tier=2)
+    plan = Plan(nodes=[Node(id=1, type=NodeType.THINK, description="x")])
+    state = _state(plan)
+
+    result = await executor.execute(state)
+    assert result.results[1].status is NodeStatus.FAILED
 
 
 async def test_empty_tool_result_bypasses_shape_check(empty_tool_executor: Executor) -> None:

@@ -31,14 +31,17 @@ Rules:
 - context_needed lists node IDs whose output is required — keep this minimal
 - If a node needs a tool, set type=tool and tool=<name>
 - If a node synthesises previous outputs, set type=synthesis
+- If a node performs explicit multi-step reasoning over prior context
+  (with no tool call and no final synthesis), set type=think
 - reasoning_required=true only for nodes needing genuine multi-step logic
+  beyond what type=think already implies
 
 Output ONLY valid JSON matching this schema (no markdown, no explanation):
 {
   "nodes": [
     {
       "id": <int>,
-      "type": "tool" | "decision" | "synthesis",
+      "type": "tool" | "decision" | "synthesis" | "think",
       "description": "<what this node does>",
       "tool": "<tool_name or null>",
       "args_template": {<static args dict or null>},

@@ -49,6 +49,12 @@ UNEXPECTED_RESULT_SYSTEM = """\
 You check whether a tool result matches its expected type.
 Respond ONLY with valid JSON: {"matches_expectation": true|false, "issue": "<brief description or null>"}
 """  # noqa: E501
+
+THINK_SYSTEM = """\
+You are a reasoning engine. Work through the task step by step using the provided context.
+Produce a concise chain of reasoning, then a confidence score for that reasoning.
+Respond ONLY with valid JSON: {"reasoning": "<your step-by-step reasoning>", "confidence": <0.0-1.0>}
+"""  # noqa: E501
 # fmt: on
 
 
@@ -96,6 +102,8 @@ class Executor:
                 self._record_branch_decision(state, node, result, skipped)
             elif node.type is NodeType.SYNTHESIS:
                 result = await self._execute_synthesis(node, state, tier)
+            elif node.type is NodeType.THINK:
+                result = await self._execute_think(node, state, tier)
             else:
                 result = NodeResult(
                     node_id=node_id,
@@ -226,6 +234,43 @@ class Executor:
             tokens_used=tokens,
         )
 
+    async def _execute_think(
+        self,
+        node: Node,
+        state: ExecutionState,
+        tier: int,
+    ) -> NodeResult:
+        ctx = assemble_context(node, state.results)
+        messages: list[Message] = [
+            {"role": "system", "content": THINK_SYSTEM},
+            {
+                "role": "user",
+                "content": f"Task: {node.description}\n\nContext from prior nodes:\n{ctx}",
+            },
+        ]
+        try:
+            raw, tokens = await collect(
+                self._router.complete(
+                    messages,
+                    min_tier=tier,
+                    json_mode=True,
+                    max_tokens=self._settings.max_node_output_tokens,
+                )
+            )
+            data = json.loads(raw)
+            reasoning = data.get("reasoning", raw)
+            confidence = float(data.get("confidence", 0.7))
+        except Exception as exc:
+            return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
+
+        return NodeResult(
+            node_id=node.id,
+            status=NodeStatus.COMPLETED,
+            output=reasoning,
+            confidence=confidence,
+            tokens_used=tokens,
+        )
+
     async def _execute_synthesis(
         self,
         node: Node,
@@ -273,6 +318,8 @@ class Executor:
             return 0
         if node.type is NodeType.TOOL:
             return 0
+        if node.type is NodeType.THINK:
+            return 2
         if node.reasoning_required:
             return 2
         return 0

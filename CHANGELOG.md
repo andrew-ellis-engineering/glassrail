@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dispatch, branch skip propagation, low-confidence flagging.
 - Hypothesis property tests asserting the fresh-context invariant
   (no out-of-context content leaks into assembled node prompts).
+- `think` node type for explicit reasoning steps. Defaults to tier 2
+  (reasoning tier) and emits a structured `{reasoning, confidence}`
+  payload.
 - Orchestrator wrapping planning, optional HITL gate, execution, and
   persistence handoffs.
 - FastAPI gateway: `/task`, `/task/{id}`, `/task/{id}/resume`,
