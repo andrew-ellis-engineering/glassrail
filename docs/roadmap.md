@@ -14,7 +14,7 @@ Single-file FastAPI prototype. Validated DAG planning + tier routing + audit log
 - HITL approval primitive ✓
 - State persistence (SQLite) ✓
 - Extended node types: `think`, `summary`, `result`, `subplan`
-- Property tests for the fresh-context invariant
+- Property tests for the fresh-context invariant ✓
 
 ## Phase 1 — Reliability & Eval
 

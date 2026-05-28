@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Planner with JSON-mode prompt; node terminology consistent with core.
 - Executor with per-node fresh context, tool / decision / synthesis
   dispatch, branch skip propagation, low-confidence flagging.
+- Hypothesis property tests asserting the fresh-context invariant
+  (no out-of-context content leaks into assembled node prompts).
 - Orchestrator wrapping planning, optional HITL gate, execution, and
   persistence handoffs.
 - FastAPI gateway: `/task`, `/task/{id}`, `/task/{id}/resume`,
