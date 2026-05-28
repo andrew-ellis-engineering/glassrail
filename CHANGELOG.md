@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   completed `result` node's output is the task's `final_output`; plans
   without a `result` node fall back to the last completed `synthesis`
   for backward compatibility.
+- `subplan` node type: a node carries its own nested `Plan` which the
+  executor runs inline, bubbling the nested `final_output` up as the
+  subplan node's output. Validator caps: max 2 subplans per plan, max
+  12 nodes per subplan (both configurable via settings).
 - Orchestrator wrapping planning, optional HITL gate, execution, and
   persistence handoffs.
 - FastAPI gateway: `/task`, `/task/{id}`, `/task/{id}/resume`,

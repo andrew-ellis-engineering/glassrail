@@ -23,20 +23,22 @@ class PlanValidator:
 
     def validate(self, plan: Plan) -> list[int]:
         """Run every check; populate and return ``plan.sorted_node_ids``."""
-        self._check_node_limit(plan)
+        self._check_node_limit(plan, is_subplan=False)
         self._check_tool_names(plan)
         sorted_ids = self._topological_sort(plan)
         self._check_decision_nesting(plan)
         self._check_branch_references(plan)
+        self._check_subplans(plan)
         plan.sorted_node_ids = sorted_ids
         return sorted_ids
 
     # ── Individual checks ─────────────────────────────────────────────────
 
-    def _check_node_limit(self, plan: Plan) -> None:
-        limit = self._settings.max_plan_nodes
+    def _check_node_limit(self, plan: Plan, *, is_subplan: bool) -> None:
+        limit = self._settings.max_subplan_nodes if is_subplan else self._settings.max_plan_nodes
         if len(plan.nodes) > limit:
-            raise PlanValidationError(f"Plan has {len(plan.nodes)} nodes; max is {limit}")
+            scope = "Subplan" if is_subplan else "Plan"
+            raise PlanValidationError(f"{scope} has {len(plan.nodes)} nodes; max is {limit}")
 
     def _check_tool_names(self, plan: Plan) -> None:
         tool_names = [n.tool for n in plan.nodes if n.type is NodeType.TOOL]
@@ -107,6 +109,30 @@ class PlanValidator:
                 depth = self._nesting_depth(branch_nodes, node_map, current + 1)
                 max_depth = max(max_depth, depth)
         return max_depth
+
+    def _check_subplans(self, plan: Plan) -> None:
+        """Validate every SUBPLAN node's nested plan, and cap their count.
+
+        Subplans are not recursively counted against the parent's
+        ``max_subplans_per_plan`` — the limit is per-plan, not per-tree —
+        but each nested plan is itself fully validated (which re-enters
+        this same rule, so a subplan-of-a-subplan must also obey the
+        per-plan cap).
+        """
+        subplan_nodes = [n for n in plan.nodes if n.type is NodeType.SUBPLAN]
+        cap = self._settings.max_subplans_per_plan
+        if len(subplan_nodes) > cap:
+            raise PlanValidationError(f"Plan has {len(subplan_nodes)} subplan nodes; max is {cap}")
+        for node in subplan_nodes:
+            if node.subplan is None:
+                raise PlanValidationError(f"SUBPLAN node {node.id} has no nested plan attached")
+            self._check_node_limit(node.subplan, is_subplan=True)
+            self._check_tool_names(node.subplan)
+            sub_sorted = self._topological_sort(node.subplan)
+            self._check_decision_nesting(node.subplan)
+            self._check_branch_references(node.subplan)
+            self._check_subplans(node.subplan)
+            node.subplan.sorted_node_ids = sub_sorted
 
     def _check_branch_references(self, plan: Plan) -> None:
         all_ids = {n.id for n in plan.nodes}

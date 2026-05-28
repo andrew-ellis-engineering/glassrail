@@ -93,6 +93,8 @@ class Settings(BaseSettings):
     max_node_output_tokens: int = 2000
     max_replan_attempts: int = 1
     confidence_threshold: float = 0.75
+    max_subplan_nodes: int = 12
+    max_subplans_per_plan: int = 2
 
     # ── HITL ─────────────────────────────────────────────────────────────
     confirm_plans: bool = False

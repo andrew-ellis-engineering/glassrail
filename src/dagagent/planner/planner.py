@@ -37,6 +37,10 @@ Rules:
   set type=summary
 - The final node whose output is the user's answer should be type=result;
   use synthesis for intermediate combination steps
+- Use type=subplan sparingly — only when a self-contained sub-task is
+  best expressed as its own DAG. Set "subplan" to a nested plan object
+  with the same shape as this top-level plan. At most 2 subplans per
+  plan, at most 12 nodes per subplan
 - reasoning_required=true only for nodes needing genuine multi-step logic
   beyond what type=think already implies
 
@@ -45,7 +49,7 @@ Output ONLY valid JSON matching this schema (no markdown, no explanation):
   "nodes": [
     {
       "id": <int>,
-      "type": "tool" | "decision" | "synthesis" | "think" | "summary" | "result",
+      "type": "tool" | "decision" | "synthesis" | "think" | "summary" | "result" | "subplan",
       "description": "<what this node does>",
       "tool": "<tool_name or null>",
       "args_template": {<static args dict or null>},
@@ -54,7 +58,8 @@ Output ONLY valid JSON matching this schema (no markdown, no explanation):
       "branches": {"yes": [<node ids>], "no": [<node ids>]} | null,
       "default_branch": "yes" | "no" | null,
       "reasoning_required": true | false,
-      "forced_tier": null
+      "forced_tier": null,
+      "subplan": null | {"nodes": [<nested nodes>]}
     }
   ]
 }

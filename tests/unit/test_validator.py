@@ -137,6 +137,55 @@ def test_decision_nesting_within_limit(validator: PlanValidator) -> None:
     assert set(sorted_ids) == {1, 2, 3, 4}
 
 
+def _subplan_node(id_: int, nested: Plan) -> Node:
+    return Node(id=id_, type=NodeType.SUBPLAN, description=f"sub {id_}", subplan=nested)
+
+
+def test_subplan_validated_and_sorted(validator: PlanValidator) -> None:
+    nested = Plan(nodes=[_tool_node(1), _tool_node(2, ctx=[1])])
+    plan = Plan(nodes=[_subplan_node(1, nested)])
+
+    validator.validate(plan)
+    # Nested plan's sorted_node_ids gets populated as a side effect.
+    assert nested.sorted_node_ids == [1, 2]
+
+
+def test_subplan_missing_nested_plan_raises(validator: PlanValidator) -> None:
+    plan = Plan(nodes=[Node(id=1, type=NodeType.SUBPLAN, description="no plan")])
+    with pytest.raises(PlanValidationError, match="no nested plan"):
+        validator.validate(plan)
+
+
+def test_subplan_count_limit(harness: ToolHarness) -> None:
+    settings = Settings(max_subplans_per_plan=1)
+    v = PlanValidator(harness=harness, settings=settings)
+    nested = Plan(nodes=[_tool_node(1)])
+    plan = Plan(
+        nodes=[
+            _subplan_node(1, nested.model_copy(deep=True)),
+            _subplan_node(2, nested.model_copy(deep=True)),
+        ]
+    )
+    with pytest.raises(PlanValidationError, match="subplan nodes; max is 1"):
+        v.validate(plan)
+
+
+def test_subplan_node_limit(harness: ToolHarness) -> None:
+    settings = Settings(max_subplan_nodes=2)
+    v = PlanValidator(harness=harness, settings=settings)
+    nested = Plan(nodes=[_tool_node(i) for i in range(1, 5)])
+    plan = Plan(nodes=[_subplan_node(1, nested)])
+    with pytest.raises(PlanValidationError, match="Subplan has 4 nodes; max is 2"):
+        v.validate(plan)
+
+
+def test_subplan_invalid_tool_propagates(validator: PlanValidator) -> None:
+    nested = Plan(nodes=[Node(id=1, type=NodeType.TOOL, description="?", tool="bogus")])
+    plan = Plan(nodes=[_subplan_node(1, nested)])
+    with pytest.raises(PlanValidationError, match="unknown tools"):
+        validator.validate(plan)
+
+
 def test_decision_nesting_exceeds_limit(harness: ToolHarness) -> None:
     shallow = Settings(max_decision_nesting_depth=1)
     v = PlanValidator(harness=harness, settings=shallow)

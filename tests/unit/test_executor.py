@@ -297,6 +297,31 @@ async def test_result_failure_marks_node_failed() -> None:
     assert out.results[1].status is NodeStatus.FAILED
 
 
+async def test_subplan_bubbles_nested_final_output() -> None:
+    """A SUBPLAN node's output is the nested plan's final_output."""
+    nested_payload = json.dumps({"output": "nested answer", "confidence": 0.95})
+    executor, _ = _executor([nested_payload])
+    nested = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="nested final")])
+    nested.sorted_node_ids = [1]
+    plan = Plan(
+        nodes=[Node(id=1, type=NodeType.SUBPLAN, description="delegate", subplan=nested)],
+    )
+    state = _state(plan)
+
+    out = await executor.execute(state)
+    assert out.results[1].status is NodeStatus.COMPLETED
+    assert out.results[1].output == "nested answer"
+
+
+async def test_subplan_without_attached_plan_fails() -> None:
+    executor, _ = _executor([])
+    plan = Plan(nodes=[Node(id=1, type=NodeType.SUBPLAN, description="missing")])
+    state = _state(plan)
+
+    out = await executor.execute(state)
+    assert out.results[1].status is NodeStatus.FAILED
+
+
 async def test_empty_tool_result_bypasses_shape_check(empty_tool_executor: Executor) -> None:
     """Empty results are flagged as EMPTY without triggering the LLM gate."""
     plan = Plan(nodes=[Node(id=1, type=NodeType.TOOL, description="x", tool="empty_tool")])

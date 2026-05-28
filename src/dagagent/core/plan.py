@@ -15,11 +15,7 @@ from pydantic import BaseModel, Field
 
 
 class NodeType(StrEnum):
-    """Kinds of node that can appear in a plan.
-
-    The remaining extended type (``subplan``) lands alongside the executor
-    and validator support for it.
-    """
+    """Kinds of node that can appear in a plan."""
 
     TOOL = "tool"
     DECISION = "decision"
@@ -30,6 +26,8 @@ class NodeType(StrEnum):
     """Condense upstream context. Cheap LLM call, defaults to tier 0."""
     RESULT = "result"
     """Explicit final-answer marker. Output becomes the task's final_output."""
+    SUBPLAN = "subplan"
+    """A nested plan executed inline; its final_output is this node's output."""
 
 
 class Node(BaseModel):
@@ -56,6 +54,9 @@ class Node(BaseModel):
     reasoning_required: bool = False
     forced_tier: int | None = None
 
+    # SUBPLAN-only — the nested plan to execute when this node fires.
+    subplan: Plan | None = None
+
 
 class Plan(BaseModel):
     """A validated execution graph."""
@@ -63,3 +64,7 @@ class Plan(BaseModel):
     nodes: list[Node]
     sorted_node_ids: list[int] = Field(default_factory=list)
     """Topologically sorted node ids, populated by the validator."""
+
+
+# Resolve the forward reference: Node.subplan -> Plan (defined just above).
+Node.model_rebuild()

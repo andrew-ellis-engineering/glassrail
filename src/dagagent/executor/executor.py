@@ -118,6 +118,8 @@ class Executor:
                 result = await self._execute_summary(node, state, tier)
             elif node.type is NodeType.RESULT:
                 result = await self._execute_result(node, state, tier)
+            elif node.type is NodeType.SUBPLAN:
+                result = await self._execute_subplan(node, state)
             else:
                 result = NodeResult(
                     node_id=node_id,
@@ -320,6 +322,50 @@ class Executor:
             output=summary,
             confidence=confidence,
             tokens_used=tokens,
+        )
+
+    async def _execute_subplan(
+        self,
+        node: Node,
+        state: ExecutionState,
+    ) -> NodeResult:
+        """Run the nested plan in a fresh ExecutionState and bubble up its
+        final_output as this node's output. The subplan does not see the
+        parent's results — only the upstream outputs the parent passes in
+        as its description's context."""
+        if node.subplan is None:
+            return NodeResult(
+                node_id=node.id,
+                status=NodeStatus.FAILED,
+                error="SUBPLAN node has no nested plan",
+            )
+
+        ctx = assemble_context(node, state.results)
+        sub_request = (
+            f"{node.description}\n\nContext from parent plan:\n{ctx}" if ctx else node.description
+        )
+        sub_state = ExecutionState(
+            task_id=state.task_id,
+            user_request=sub_request,
+            plan=node.subplan,
+        )
+        try:
+            completed = await self.execute(sub_state)
+        except Exception as exc:
+            return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
+
+        if completed.final_output is None:
+            return NodeResult(
+                node_id=node.id,
+                status=NodeStatus.EMPTY,
+                error="Subplan produced no final output",
+            )
+
+        return NodeResult(
+            node_id=node.id,
+            status=NodeStatus.COMPLETED,
+            output=completed.final_output,
+            confidence=1.0,
         )
 
     async def _execute_result(
