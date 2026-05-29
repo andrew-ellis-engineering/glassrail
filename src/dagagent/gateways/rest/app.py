@@ -7,14 +7,24 @@ module-level default for ``uvicorn dagagent.gateways.rest:app``.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from dagagent import __version__
 from dagagent.config import Settings, get_settings
 from dagagent.core import ExecutionState, TaskId, TaskStatus, new_task_id
+from dagagent.events import (
+    TERMINAL_EVENT_TYPES,
+    AwaitingConfirmation,
+    Event,
+    EventBus,
+    TaskCompleted,
+    TaskFailed,
+)
 from dagagent.executor import Executor, Orchestrator
 from dagagent.harness import ToolHarness, register_builtins
 from dagagent.planner import Planner
@@ -29,11 +39,57 @@ class TaskRequest(BaseModel):
     request: str = Field(..., description="Natural language task description")
 
 
+def _sse(event: Event) -> str:
+    """Render one event as a Server-Sent Events ``data:`` frame."""
+    return f"data: {event.model_dump_json()}\n\n"
+
+
+def _terminal_snapshot(state: ExecutionState) -> Event | None:
+    """The event that represents an already-finished task's current state.
+
+    A client that connects after the task has already reached a terminal
+    state would otherwise wait forever for events that have come and gone;
+    we hand it one synthesised event and close the stream.
+    """
+    if state.status is TaskStatus.COMPLETED:
+        return TaskCompleted(task_id=state.task_id, final_output=state.final_output)
+    if state.status is TaskStatus.FAILED:
+        return TaskFailed(task_id=state.task_id, error=state.error or "task failed")
+    if state.status is TaskStatus.AWAITING_CONFIRMATION:
+        node_count = len(state.plan.nodes) if state.plan else 0
+        return AwaitingConfirmation(task_id=state.task_id, node_count=node_count)
+    return None
+
+
+async def _event_stream(
+    store: StateStore,
+    bus: EventBus,
+    task_id: TaskId,
+) -> AsyncIterator[str]:
+    """Yield SSE frames for ``task_id`` until a terminal event."""
+    async with bus.subscribe() as sub:
+        # Subscribe first, then check: if the task is already finished, emit a
+        # snapshot rather than blocking on events that already fired.
+        state = await store.load_task(task_id)
+        if state is not None:
+            snapshot = _terminal_snapshot(state)
+            if snapshot is not None:
+                yield _sse(snapshot)
+                return
+        async for event in sub:
+            if event.task_id != task_id:
+                continue
+            yield _sse(event)
+            if event.type in TERMINAL_EVENT_TYPES:
+                return
+
+
 def create_app(
     *,
     orchestrator: Orchestrator,
     store: StateStore,
     harness: ToolHarness,
+    event_bus: EventBus | None = None,
 ) -> FastAPI:
     """Build the FastAPI app from explicit collaborators."""
     api = FastAPI(title="dagagent", version=__version__)
@@ -86,6 +142,18 @@ def create_app(
             ],
         }
 
+    @api.get("/task/{task_id}/events")
+    async def task_events(task_id: str) -> StreamingResponse:
+        if event_bus is None:
+            raise HTTPException(status_code=503, detail="Event stream not configured")
+        tid = TaskId(task_id)
+        if await store.load_task(tid) is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return StreamingResponse(
+            _event_stream(store, event_bus, tid),
+            media_type="text/event-stream",
+        )
+
     @api.get("/tools")
     async def list_tools() -> dict[str, Any]:
         return {"tools": harness.all_schemas()}
@@ -101,20 +169,22 @@ def create_default_app(settings: Settings | None = None) -> FastAPI:
     """Build the app with the default in-memory wiring from :class:`Settings`."""
     settings = settings or get_settings()
 
+    bus = EventBus()
     harness = ToolHarness()
     register_builtins(harness)
     router = router_from_settings(settings)
     validator = PlanValidator(harness=harness, settings=settings)
     planner = Planner(router=router, harness=harness, validator=validator)
-    executor = Executor(router=router, harness=harness, settings=settings)
+    executor = Executor(router=router, harness=harness, settings=settings, event_bus=bus)
     store = InMemoryStateStore()
     orchestrator = Orchestrator(
         planner=planner,
         executor=executor,
         state_store=store,
         settings=settings,
+        event_bus=bus,
     )
-    return create_app(orchestrator=orchestrator, store=store, harness=harness)
+    return create_app(orchestrator=orchestrator, store=store, harness=harness, event_bus=bus)
 
 
 # Module-level app for `uvicorn dagagent.gateways.rest:app`.

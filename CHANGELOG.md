@@ -45,8 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   12 nodes per subplan (both configurable via settings).
 - Orchestrator wrapping planning, optional HITL gate, execution, and
   persistence handoffs.
+- Typed event stream: Pydantic events for every plan, node, branch, and
+  task transition on an in-process `EventBus`; the executor and
+  orchestrator emit them, and gateways subscribe via an async iterator.
 - FastAPI gateway: `/task`, `/task/{id}`, `/task/{id}/resume`,
-  `/task/{id}/branch-log`, `/tools`, `/health`.
+  `/task/{id}/branch-log`, `/task/{id}/events` (SSE), `/tools`, `/health`.
 - Typer CLI entry point.
 - Tooling: uv, ruff, pyright strict, pytest + hypothesis, pre-commit,
   MkDocs + Material. CI on Linux + macOS for Python 3.12 + 3.13.

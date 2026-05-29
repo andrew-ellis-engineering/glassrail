@@ -6,7 +6,7 @@
 
 Single-file FastAPI prototype. Validated DAG planning + tier routing + audit logging end to end. Now superseded by the package.
 
-## Phase 0.5 — OSS Foundation (in progress)
+## Phase 0.5 — OSS Foundation (complete)
 
 - Package restructure (src-layout, subpackages) ✓
 - Pluggable LLM provider interface (`Protocol`, streaming) ✓
@@ -15,10 +15,11 @@ Single-file FastAPI prototype. Validated DAG planning + tier routing + audit log
 - State persistence (SQLite) ✓
 - Extended node types: `think`, `summary`, `result`, `subplan` ✓
 - Property tests for the fresh-context invariant ✓
+- Typed event stream + SSE endpoint ✓
 
 ## Phase 1 — Reliability & Eval
 
-Docker production image, eval harness, OpenTelemetry GenAI spans, event stream (SSE/WebSocket), TUI.
+Docker production image, eval harness, OpenTelemetry GenAI spans, WebSocket event transport, TUI.
 
 ## Phase 2 — Foundation Assistant
 

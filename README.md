@@ -6,12 +6,13 @@ A DAG-planning agent with deterministic tier routing, fresh context per node, an
 
 ## Status
 
-Early development. The package ships the core engine end-to-end: planner,
-validator, tier-routed LLM provider abstraction with token-by-token SSE
-streaming, in-memory and SQLite state stores, the full node taxonomy
-(`tool`, `decision`, `synthesis`, `think`, `summary`, `result`,
-`subplan`), a DAG executor with HITL gate, and a FastAPI surface. The
-event stream is next.
+Early development, but the Phase 0.5 foundation is complete: the package
+ships the core engine end-to-end — planner, validator, tier-routed LLM
+provider abstraction with token-by-token SSE streaming, in-memory and
+SQLite state stores, the full node taxonomy (`tool`, `decision`,
+`synthesis`, `think`, `summary`, `result`, `subplan`), a DAG executor
+with HITL gate, a typed event stream, and a FastAPI surface (including an
+SSE events endpoint).
 
 ## Design
 
