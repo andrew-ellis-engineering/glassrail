@@ -56,6 +56,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that submits a task to a running gateway and renders its live SSE event
   stream (plan → per-node progress → final output). Built from a thin event
   client and a pure, testable view model.
+- Eval suite (`tests/eval/`, `pytest -m eval`): a provider-agnostic scorer
+  that grades planner + executor runs against declarative fixtures across a
+  planning and an execution dimension, and prints an aggregate score summary.
+  Deterministic scenarios run offline from a scripted provider; the same
+  scenarios grade live providers when `DAGAGENT_EVAL_LIVE=1`. Run in a
+  non-blocking CI job and excluded from the default test sweep.
 - OpenTelemetry tracing (`dagagent.telemetry`): the planner, router, and
   executor emit a span tree (task → plan / node → LLM call) with GenAI
   semantic-convention attributes (system, model, tokens) and `dagagent.*`

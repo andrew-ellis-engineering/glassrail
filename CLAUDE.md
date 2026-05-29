@@ -92,7 +92,9 @@ Layout under `tests/`:
 - `contract/` — shared suites every plugin impl must pass (add a backend to the
   parametrisation, get the whole suite for free).
 - `property/` — hypothesis invariants (e.g. fresh-context).
-- `eval/` — eval harness (skeleton).
+- `eval/` — the eval harness: scores planner + executor runs against fixtures
+  and prints a summary. Excluded from the default sweep; run it on its own with
+  `uv run pytest -m eval`. See `docs/evals.md`.
 
 Fake LLM providers in tests are scripted: they pop canned responses in order.
 Grep existing tests for `_Scripted` for the pattern.

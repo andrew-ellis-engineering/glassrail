@@ -33,11 +33,13 @@ SSE events endpoint).
 ```bash
 uv sync --all-extras --group dev
 uv run pre-commit install
-uv run pytest
+uv run pytest          # default sweep
+uv run pytest -m eval  # eval suite — scores planning + execution, prints a summary
 ```
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full check sweep and PR
-guidelines, and [CLAUDE.md](./CLAUDE.md) for project conventions.
+guidelines, [docs/evals.md](./docs/evals.md) for the eval harness, and
+[CLAUDE.md](./CLAUDE.md) for project conventions.
 
 ## Layout
 

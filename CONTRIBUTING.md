@@ -38,7 +38,9 @@ errors and no warnings). `pre-commit` enforces ruff + pyright on commit.
   new `StateStore` (or other plugin) backend means adding it to the
   parametrisation; the whole contract suite then runs against it.
 - `property/` — hypothesis invariants.
-- `eval/` — eval harness (run with `-m eval`).
+- `eval/` — the eval harness: scores planner + executor runs against fixtures
+  and prints a summary table. Excluded from the default sweep; run it with
+  `uv run pytest -m eval`. See [docs/evals.md](./docs/evals.md).
 
 New behaviour should come with tests. A new plugin backend should pass the
 relevant contract suite rather than ship its own bespoke tests.

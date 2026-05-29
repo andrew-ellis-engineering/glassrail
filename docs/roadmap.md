@@ -23,11 +23,12 @@ Make the engine observable, measurable, and shippable. Suggested order:
 eval harness first (it gates everything else and the PyPI publish), then
 observability, then the operational surfaces.
 
-- **Eval harness** — fill in `tests/eval/` with a runnable suite that scores
-  planning + execution against fixtures, behind the existing `eval` marker.
-  *Done when:* `uv run pytest -m eval` produces pass/fail + a score summary,
-  and CI can run it (gated/optional so external-service flakiness doesn't
-  block PRs).
+- **Eval harness** ✓ — `tests/eval/` is a runnable suite that scores planning
+  + execution against fixtures, behind the `eval` marker. `uv run pytest -m
+  eval` prints pass/fail + a score summary; CI runs it in a non-blocking job,
+  and live runs (`DAGAGENT_EVAL_LIVE=1`) are opt-in so provider flakiness
+  doesn't block PRs. See [Evals](evals.md). The release gate below — tightening
+  live scores to an agreed bar — is still open.
 - **OpenTelemetry GenAI spans** ✓ — the planner, router, and executor emit a
   span tree (task → plan / node → LLM call) with GenAI semantic-convention
   attributes (model, tier, tokens) plus `dagagent.*` ones. Tracing is a no-op

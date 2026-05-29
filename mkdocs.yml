@@ -58,6 +58,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Architecture: architecture.md
+  - Evals: evals.md
   - Observability: observability.md
   - Streaming events: streaming.md
   - Deployment: deployment.md

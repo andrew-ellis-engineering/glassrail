@@ -72,6 +72,27 @@ jobs:
           name: coverage
           path: coverage.xml
 
+  eval:
+    name: Eval suite (non-blocking)
+    runs-on: ubuntu-latest
+    # Optional gate. The deterministic scenarios run offline here; the live
+    # scenarios (DAGAGENT_EVAL_LIVE=1) hit external providers and are
+    # non-deterministic, so the whole job is allowed to fail without blocking
+    # the PR. `build` deliberately does not depend on it.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install deps
+        run: uv sync --all-extras --group dev
+      - name: pytest -m eval
+        run: uv run pytest -m eval
+
   build:
     name: Build distribution
     runs-on: ubuntu-latest
