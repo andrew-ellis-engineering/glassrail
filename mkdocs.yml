@@ -61,4 +61,5 @@ nav:
   - Observability: observability.md
   - Streaming events: streaming.md
   - Deployment: deployment.md
+  - Terminal UI: tui.md
   - Roadmap: roadmap.md

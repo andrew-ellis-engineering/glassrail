@@ -30,6 +30,9 @@ dependencies = [
     # safe in hot paths (executor/router/planner). The SDK + exporter that
     # actually emit traces live in the optional `otel` extra.
     "opentelemetry-api>=1.27",
+    # Used directly by the TUI client (already pulled in by Typer, but we
+    # depend on it explicitly rather than relying on that transitively).
+    "rich>=13.8",
 ]
 
 [project.optional-dependencies]

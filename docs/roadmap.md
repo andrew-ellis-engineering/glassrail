@@ -42,9 +42,10 @@ observability, then the operational surfaces.
   gateway from a slim (~60 MB), non-root `python:3.12-slim` image with a
   built-in health check. CI builds and smoke-tests it on every change. See
   [Deployment](deployment.md).
-- **TUI** — a terminal client that submits a task and renders the live event
-  stream. *Done when:* it shows plan → per-node progress → final output from
-  a running server.
+- **TUI** ✓ — `dagagent tui "<request>"` submits a task to a running gateway
+  and renders the live SSE stream with Rich: plan → per-node progress → final
+  output (a terminal snapshot if it connects after the task finished). See
+  [Terminal UI](tui.md).
 
 Exit gate: eval scores meet an agreed bar — this is the gate that unlocks the
 first PyPI publish.
