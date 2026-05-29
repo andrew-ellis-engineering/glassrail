@@ -11,7 +11,7 @@ import json
 import logging
 import time
 from datetime import UTC, datetime
-from typing import cast
+from typing import NamedTuple, cast
 
 from dagagent.config import Settings
 from dagagent.core import (
@@ -74,6 +74,26 @@ You produce the final user-facing answer for a task. Use the provided context to
 Respond ONLY with valid JSON: {"output": "<final answer>", "confidence": <0.0-1.0>}
 """  # noqa: E501
 # fmt: on
+
+
+class _LLMNodeSpec(NamedTuple):
+    """Per-node-type knobs for the shared single-LLM-call node executor."""
+
+    system: str
+    context_label: str
+    output_key: str
+    default_confidence: float
+
+
+# The synthesis / think / summary / result node types are all one LLM call
+# that reads a single field out of a JSON response; only these few values
+# differ. Keeping them in a table lets one method serve all four.
+_LLM_NODE_SPECS: dict[NodeType, _LLMNodeSpec] = {
+    NodeType.SYNTHESIS: _LLMNodeSpec(SYNTHESIS_SYSTEM, "Context from prior nodes:", "output", 0.9),
+    NodeType.THINK: _LLMNodeSpec(THINK_SYSTEM, "Context from prior nodes:", "reasoning", 0.7),
+    NodeType.SUMMARY: _LLMNodeSpec(SUMMARY_SYSTEM, "Context to summarise:", "summary", 0.9),
+    NodeType.RESULT: _LLMNodeSpec(RESULT_SYSTEM, "Context from prior nodes:", "output", 0.9),
+}
 
 
 class Executor:
@@ -170,7 +190,7 @@ class Executor:
         await self._emit(bus, TaskCompleted(task_id=state.task_id, final_output=state.final_output))
         return state
 
-    async def _dispatch_node(  # noqa: PLR0911 — one return per node type is the clearest form
+    async def _dispatch_node(
         self,
         node: Node,
         state: ExecutionState,
@@ -183,16 +203,11 @@ class Executor:
             result = await self._execute_decision(node, state, tier)
             self._record_branch_decision(state, node, result, skipped)
             return result
-        if node.type is NodeType.SYNTHESIS:
-            return await self._execute_synthesis(node, state, tier)
-        if node.type is NodeType.THINK:
-            return await self._execute_think(node, state, tier)
-        if node.type is NodeType.SUMMARY:
-            return await self._execute_summary(node, state, tier)
-        if node.type is NodeType.RESULT:
-            return await self._execute_result(node, state, tier)
         if node.type is NodeType.SUBPLAN:
             return await self._execute_subplan(node, state)
+        spec = _LLM_NODE_SPECS.get(node.type)
+        if spec is not None:
+            return await self._execute_llm_node(node, state, tier, spec=spec)
         return NodeResult(
             node_id=node.id,
             status=NodeStatus.FAILED,
@@ -315,18 +330,26 @@ class Executor:
             tokens_used=tokens,
         )
 
-    async def _execute_think(
+    async def _execute_llm_node(
         self,
         node: Node,
         state: ExecutionState,
         tier: int,
+        *,
+        spec: _LLMNodeSpec,
     ) -> NodeResult:
+        """Run a single-LLM-call node (synthesis / think / summary / result).
+
+        These node types differ only in their system prompt, the label they
+        give the upstream context, which JSON field carries their output, and
+        their default confidence — all supplied by ``spec``.
+        """
         ctx = assemble_context(node, state.results)
         messages: list[Message] = [
-            {"role": "system", "content": THINK_SYSTEM},
+            {"role": "system", "content": spec.system},
             {
                 "role": "user",
-                "content": f"Task: {node.description}\n\nContext from prior nodes:\n{ctx}",
+                "content": f"Task: {node.description}\n\n{spec.context_label}\n{ctx}",
             },
         ]
         try:
@@ -339,52 +362,15 @@ class Executor:
                 )
             )
             data = json.loads(raw)
-            reasoning = data.get("reasoning", raw)
-            confidence = float(data.get("confidence", 0.7))
+            output = data.get(spec.output_key, raw)
+            confidence = float(data.get("confidence", spec.default_confidence))
         except Exception as exc:
             return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
 
         return NodeResult(
             node_id=node.id,
             status=NodeStatus.COMPLETED,
-            output=reasoning,
-            confidence=confidence,
-            tokens_used=tokens,
-        )
-
-    async def _execute_summary(
-        self,
-        node: Node,
-        state: ExecutionState,
-        tier: int,
-    ) -> NodeResult:
-        ctx = assemble_context(node, state.results)
-        messages: list[Message] = [
-            {"role": "system", "content": SUMMARY_SYSTEM},
-            {
-                "role": "user",
-                "content": f"Task: {node.description}\n\nContext to summarise:\n{ctx}",
-            },
-        ]
-        try:
-            raw, tokens = await collect(
-                self._router.complete(
-                    messages,
-                    min_tier=tier,
-                    json_mode=True,
-                    max_tokens=self._settings.max_node_output_tokens,
-                )
-            )
-            data = json.loads(raw)
-            summary = data.get("summary", raw)
-            confidence = float(data.get("confidence", 0.9))
-        except Exception as exc:
-            return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
-
-        return NodeResult(
-            node_id=node.id,
-            status=NodeStatus.COMPLETED,
-            output=summary,
+            output=output,
             confidence=confidence,
             tokens_used=tokens,
         )
@@ -431,80 +417,6 @@ class Executor:
             status=NodeStatus.COMPLETED,
             output=completed.final_output,
             confidence=1.0,
-        )
-
-    async def _execute_result(
-        self,
-        node: Node,
-        state: ExecutionState,
-        tier: int,
-    ) -> NodeResult:
-        ctx = assemble_context(node, state.results)
-        messages: list[Message] = [
-            {"role": "system", "content": RESULT_SYSTEM},
-            {
-                "role": "user",
-                "content": f"Task: {node.description}\n\nContext from prior nodes:\n{ctx}",
-            },
-        ]
-        try:
-            raw, tokens = await collect(
-                self._router.complete(
-                    messages,
-                    min_tier=tier,
-                    json_mode=True,
-                    max_tokens=self._settings.max_node_output_tokens,
-                )
-            )
-            data = json.loads(raw)
-            output = data.get("output", raw)
-            confidence = float(data.get("confidence", 0.9))
-        except Exception as exc:
-            return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
-
-        return NodeResult(
-            node_id=node.id,
-            status=NodeStatus.COMPLETED,
-            output=output,
-            confidence=confidence,
-            tokens_used=tokens,
-        )
-
-    async def _execute_synthesis(
-        self,
-        node: Node,
-        state: ExecutionState,
-        tier: int,
-    ) -> NodeResult:
-        ctx = assemble_context(node, state.results)
-        messages: list[Message] = [
-            {"role": "system", "content": SYNTHESIS_SYSTEM},
-            {
-                "role": "user",
-                "content": f"Task: {node.description}\n\nContext from prior nodes:\n{ctx}",
-            },
-        ]
-        try:
-            raw, tokens = await collect(
-                self._router.complete(
-                    messages,
-                    min_tier=tier,
-                    json_mode=True,
-                    max_tokens=self._settings.max_node_output_tokens,
-                )
-            )
-            data = json.loads(raw)
-            output = data.get("output", raw)
-            confidence = float(data.get("confidence", 0.9))
-        except Exception as exc:
-            return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
-
-        return NodeResult(
-            node_id=node.id,
-            status=NodeStatus.COMPLETED,
-            output=output,
-            confidence=confidence,
-            tokens_used=tokens,
         )
 
     # ── Helpers ───────────────────────────────────────────────────────────
