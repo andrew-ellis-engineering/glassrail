@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`dagagent.tools` group), and built-in tool stubs.
 - LLM provider abstraction: streaming `LLMProvider` Protocol,
   `TierRouter` with `ProviderUnavailableError`-driven fallthrough,
-  OpenAI-compatible concrete provider.
+  OpenAI-compatible concrete provider that parses the SSE stream
+  token-by-token (content deltas, tool-call accumulation, usage).
 - StateStore Protocol with in-memory and SQLite (aiosqlite) backends,
   and a shared contract test suite every backend must pass.
 - Plan validator: topological sort, cycle detection, tool name checks,
