@@ -3,7 +3,7 @@ control_for = "hello-known"
 tags = ["calibration"]
 type = "capability"
 difficulty = 1
-model = "sonnet"
+# model omitted → inherits the suite default (haiku). Override per-run with --model.
 max_turns = 3
 timeout_s = 60
 

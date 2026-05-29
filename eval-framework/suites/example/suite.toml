@@ -1,7 +1,7 @@
 [suite]
 name = "example"
 description = "Calibration pair: a known fact vs an unknowable one."
-default_model = "sonnet"
-default_grader_model = "sonnet"
+default_model = "haiku"        # cheap by default; override per-run with --model
+default_grader_model = "haiku"
 default_timeout_s = 180
 promotion_threshold = 5  # consecutive clean runs to qualify for regression

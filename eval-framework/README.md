@@ -25,6 +25,38 @@ python3 run.py suite suites/example --trials 3 --timeout 60
 python3 run.py score results/<run>/hello-known
 ```
 
+## Cost & limits
+
+Every trial is one `claude -p` call, so the model usage of a run is roughly:
+
+```
+tasks × trials × (1 generation  +  #llm-judge criteria)
+```
+
+How that's billed depends on how `claude` is authenticated:
+
+- **Logged in with a Claude subscription (claude.ai OAuth):** runs draw down
+  your plan's **usage limits** (rolling window + weekly caps), not a dollar
+  balance. The `total_cost_usd` each run prints is an *equivalent-API-cost
+  estimate* for reference — it is not a charge.
+- **API key (Anthropic Console):** `total_cost_usd` is a real, pay-as-you-go
+  charge. Set spend limits / alerts in the Console.
+
+Keep runs cheap:
+
+- **Model is the big lever** — haiku ≪ sonnet < opus. The example suite
+  defaults to `haiku`; bump to sonnet/opus only for a real measurement
+  (`--model sonnet`). Set a suite's floor in `suite.toml` (`default_model`).
+- **Trials scale linearly** — `--trials 1` while iterating, `3` for a result.
+- **Grading is mostly free** — deterministic and trajectory checks make **no**
+  model calls. Only `grader = "llm"` criteria cost (one call each, on
+  `--grader-model`), and they're skipped automatically when every
+  deterministic criterion already failed. Prefer deterministic criteria
+  (principle 1) and a cheap `--grader-model`.
+- **`score` is free** — re-grade archived trials to calibrate criteria instead
+  of re-running the suite. **`--dry-run`** validates wiring with zero calls.
+- **`max_turns`** bounds the worst case — a looping agent burns the most.
+
 ## Principles (enforced by architecture, not convention)
 
 1. Deterministic graders first; LLM judges last resort.
