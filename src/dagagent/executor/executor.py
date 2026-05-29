@@ -13,6 +13,8 @@ import time
 from datetime import UTC, datetime
 from typing import NamedTuple, cast
 
+from opentelemetry.trace import Status, StatusCode
+
 from dagagent.config import Settings
 from dagagent.core import (
     BranchLogEntry,
@@ -36,6 +38,15 @@ from dagagent.events import (
 from dagagent.executor.context import assemble_context
 from dagagent.harness import ToolHarness
 from dagagent.providers import Message, TierRouter, collect
+from dagagent.telemetry import (
+    ATTR_NODE_CONFIDENCE,
+    ATTR_NODE_ID,
+    ATTR_NODE_STATUS,
+    ATTR_NODE_TYPE,
+    ATTR_TIER,
+    SPAN_NODE,
+    get_tracer,
+)
 
 log = logging.getLogger(__name__)
 
@@ -143,46 +154,56 @@ class Executor:
                 continue
 
             tier = self._select_tier(node)
-            await self._emit(
-                bus,
-                NodeStarted(
-                    task_id=state.task_id,
-                    node_id=node_id,
-                    node_type=node.type,
-                    tier=tier,
-                ),
-            )
-            t0 = time.monotonic()
-            result = await self._dispatch_node(node, state, tier, skipped)
-            result.execution_time_s = time.monotonic() - t0
-            result.tier_used = tier
+            with get_tracer().start_as_current_span(SPAN_NODE) as span:
+                span.set_attribute(ATTR_NODE_ID, node_id)
+                span.set_attribute(ATTR_NODE_TYPE, node.type.value)
+                span.set_attribute(ATTR_TIER, tier)
 
-            if (
-                result.status is NodeStatus.COMPLETED
-                and result.confidence < self._settings.confidence_threshold
-            ):
-                result.flagged = True
-                log.warning(
-                    "Node %d flagged: confidence %.2f below threshold",
-                    node_id,
-                    result.confidence,
-                )
-
-            state.results[node_id] = result
-            state.completed_nodes.append(node_id)
-            state.touch()
-
-            if node.type is NodeType.DECISION:
                 await self._emit(
                     bus,
-                    BranchDecided(
+                    NodeStarted(
                         task_id=state.task_id,
                         node_id=node_id,
-                        branch_taken=result.branch_taken,
-                        confidence=result.confidence,
+                        node_type=node.type,
+                        tier=tier,
                     ),
                 )
-            await self._emit(bus, self._finished_event(state, result))
+                t0 = time.monotonic()
+                result = await self._dispatch_node(node, state, tier, skipped)
+                result.execution_time_s = time.monotonic() - t0
+                result.tier_used = tier
+
+                if (
+                    result.status is NodeStatus.COMPLETED
+                    and result.confidence < self._settings.confidence_threshold
+                ):
+                    result.flagged = True
+                    log.warning(
+                        "Node %d flagged: confidence %.2f below threshold",
+                        node_id,
+                        result.confidence,
+                    )
+
+                span.set_attribute(ATTR_NODE_STATUS, result.status.value)
+                span.set_attribute(ATTR_NODE_CONFIDENCE, result.confidence)
+                if result.status is NodeStatus.FAILED:
+                    span.set_status(Status(StatusCode.ERROR, result.error or "node failed"))
+
+                state.results[node_id] = result
+                state.completed_nodes.append(node_id)
+                state.touch()
+
+                if node.type is NodeType.DECISION:
+                    await self._emit(
+                        bus,
+                        BranchDecided(
+                            task_id=state.task_id,
+                            node_id=node_id,
+                            branch_taken=result.branch_taken,
+                            confidence=result.confidence,
+                        ),
+                    )
+                await self._emit(bus, self._finished_event(state, result))
 
         state.final_output = self._extract_final_output(state, plan)
         state.status = TaskStatus.COMPLETED

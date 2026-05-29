@@ -34,8 +34,10 @@ once with `uv run pre-commit install`.
   **CLI:** Typer. **Logging:** stdlib `logging` + `structlog`.
 - **License:** Apache-2.0. **Versioning:** SemVer 0.x. **No PyPI publish** until
   after the Phase 1 eval gates — GitHub releases only.
-- **Docs:** MkDocs + Material (`mkdocs.yml`). **Observability:** structured logs
-  in 0.5; OpenTelemetry arrives in Phase 1.
+- **Docs:** MkDocs + Material (`mkdocs.yml`). **Observability:** structured
+  logs plus OpenTelemetry tracing (`dagagent.telemetry`) — a no-op until
+  configured; SDK + OTLP exporter in the optional `otel` extra. See
+  `docs/observability.md`.
 
 ## Architectural primitives
 
@@ -72,6 +74,7 @@ src/dagagent/
 ├── executor/   topological execution, branch logic, HITL, Orchestrator
 ├── channels/   chat / task / job (design only)
 ├── gateways/   rest (FastAPI); later telegram, tui
+├── telemetry/  OpenTelemetry tracing (setup + span vocabulary)
 └── cli/        Typer entry point
 ```
 

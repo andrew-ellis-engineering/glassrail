@@ -99,6 +99,16 @@ class Settings(BaseSettings):
     # ── HITL ─────────────────────────────────────────────────────────────
     confirm_plans: bool = False
 
+    # ── Observability ────────────────────────────────────────────────────
+    # Tracing is a no-op unless turned on here. Setting an OTLP endpoint
+    # implies enabling it. See dagagent.telemetry.configure_tracing.
+    otel_enabled: bool = False
+    otel_endpoint: str | None = None
+    """OTLP/HTTP traces endpoint, e.g. http://localhost:4318/v1/traces."""
+    otel_service_name: str = "dagagent"
+    otel_console_export: bool = False
+    """Also print spans to stdout — handy for local debugging."""
+
     @property
     def tiers(self) -> list[TierConfig]:
         """Ordered list of configured tiers — index matches tier number."""

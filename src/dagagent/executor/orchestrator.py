@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import logging
 
+from opentelemetry.trace import Status, StatusCode
+
 from dagagent.config import Settings
 from dagagent.core import (
     ExecutionState,
@@ -30,6 +32,7 @@ from dagagent.events import (
 from dagagent.executor.executor import Executor
 from dagagent.planner import Planner
 from dagagent.state import StateStore
+from dagagent.telemetry import ATTR_TASK_ID, ATTR_TASK_STATUS, SPAN_TASK, get_tracer
 
 log = logging.getLogger(__name__)
 
@@ -53,68 +56,82 @@ class Orchestrator:
         self._bus = event_bus
 
     async def run(self, task_id: TaskId) -> None:
-        state = await self._store.load_task(task_id)
-        if state is None:
-            log.warning("Orchestrator.run: task %s not found", task_id)
-            return
-
-        await self._emit(PlanningStarted(task_id=task_id))
-        try:
-            plan = await self._plan_with_retry(state)
-            if plan is None:
-                await self._emit(
-                    PlanFailed(task_id=task_id, error=state.error or "planning failed")
-                )
-                await self._store.save_task(state)
+        with get_tracer().start_as_current_span(SPAN_TASK) as span:
+            span.set_attribute(ATTR_TASK_ID, str(task_id))
+            state = await self._store.load_task(task_id)
+            if state is None:
+                log.warning("Orchestrator.run: task %s not found", task_id)
                 return
 
-            state.plan = plan
-            log.info("[%s] Plan validated: %d nodes", task_id, len(plan.nodes))
-            await self._emit(PlanReady(task_id=task_id, node_count=len(plan.nodes)))
+            await self._emit(PlanningStarted(task_id=task_id))
+            try:
+                plan = await self._plan_with_retry(state)
+                if plan is None:
+                    await self._emit(
+                        PlanFailed(task_id=task_id, error=state.error or "planning failed")
+                    )
+                    await self._store.save_task(state)
+                    return
 
-            if self._settings.confirm_plans:
-                state.status = TaskStatus.AWAITING_CONFIRMATION
+                state.plan = plan
+                log.info("[%s] Plan validated: %d nodes", task_id, len(plan.nodes))
+                await self._emit(PlanReady(task_id=task_id, node_count=len(plan.nodes)))
+
+                if self._settings.confirm_plans:
+                    state.status = TaskStatus.AWAITING_CONFIRMATION
+                    state.touch()
+                    await self._store.save_task(state)
+                    await self._emit(
+                        AwaitingConfirmation(task_id=task_id, node_count=len(plan.nodes))
+                    )
+                    log.info(
+                        "[%s] Plan summary (awaiting confirmation):\n%s", task_id, _summary(plan)
+                    )
+                    return
+
+                await self._executor.execute(state)
+                log.info("[%s] Completed", task_id)
+            except Exception as exc:
+                log.exception("[%s] Unhandled error: %s", task_id, exc)
+                state.status = TaskStatus.FAILED
+                state.error = str(exc)
                 state.touch()
+                await self._emit(TaskFailed(task_id=task_id, error=str(exc)))
+            finally:
                 await self._store.save_task(state)
-                await self._emit(AwaitingConfirmation(task_id=task_id, node_count=len(plan.nodes)))
-                log.info("[%s] Plan summary (awaiting confirmation):\n%s", task_id, _summary(plan))
-                return
-
-            await self._executor.execute(state)
-            log.info("[%s] Completed", task_id)
-        except Exception as exc:
-            log.exception("[%s] Unhandled error: %s", task_id, exc)
-            state.status = TaskStatus.FAILED
-            state.error = str(exc)
-            state.touch()
-            await self._emit(TaskFailed(task_id=task_id, error=str(exc)))
-        finally:
-            await self._store.save_task(state)
+                span.set_attribute(ATTR_TASK_STATUS, state.status.value)
+                if state.status is TaskStatus.FAILED:
+                    span.set_status(Status(StatusCode.ERROR, state.error or "task failed"))
 
     async def resume(self, task_id: TaskId) -> None:
         """Resume a task paused at confirmation or mid-execution."""
-        state = await self._store.load_task(task_id)
-        if state is None:
-            log.warning("Orchestrator.resume: task %s not found", task_id)
-            return
-        if state.status not in (TaskStatus.AWAITING_CONFIRMATION, TaskStatus.PAUSED):
-            log.warning(
-                "Orchestrator.resume: task %s is in status %s, not resumable",
-                task_id,
-                state.status,
-            )
-            return
+        with get_tracer().start_as_current_span(SPAN_TASK) as span:
+            span.set_attribute(ATTR_TASK_ID, str(task_id))
+            state = await self._store.load_task(task_id)
+            if state is None:
+                log.warning("Orchestrator.resume: task %s not found", task_id)
+                return
+            if state.status not in (TaskStatus.AWAITING_CONFIRMATION, TaskStatus.PAUSED):
+                log.warning(
+                    "Orchestrator.resume: task %s is in status %s, not resumable",
+                    task_id,
+                    state.status,
+                )
+                return
 
-        try:
-            await self._executor.execute(state)
-        except Exception as exc:
-            log.exception("[%s] Resume failed: %s", task_id, exc)
-            state.status = TaskStatus.FAILED
-            state.error = str(exc)
-            state.touch()
-            await self._emit(TaskFailed(task_id=task_id, error=str(exc)))
-        finally:
-            await self._store.save_task(state)
+            try:
+                await self._executor.execute(state)
+            except Exception as exc:
+                log.exception("[%s] Resume failed: %s", task_id, exc)
+                state.status = TaskStatus.FAILED
+                state.error = str(exc)
+                state.touch()
+                await self._emit(TaskFailed(task_id=task_id, error=str(exc)))
+            finally:
+                await self._store.save_task(state)
+                span.set_attribute(ATTR_TASK_STATUS, state.status.value)
+                if state.status is TaskStatus.FAILED:
+                    span.set_status(Status(StatusCode.ERROR, state.error or "task failed"))
 
     # ── Helpers ───────────────────────────────────────────────────────────
 

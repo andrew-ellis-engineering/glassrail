@@ -30,6 +30,7 @@ from dagagent.harness import ToolHarness, register_builtins
 from dagagent.planner import Planner
 from dagagent.providers import router_from_settings
 from dagagent.state import InMemoryStateStore, StateStore
+from dagagent.telemetry import configure_tracing
 from dagagent.validator import PlanValidator
 
 
@@ -168,6 +169,7 @@ def create_app(
 def create_default_app(settings: Settings | None = None) -> FastAPI:
     """Build the app with the default in-memory wiring from :class:`Settings`."""
     settings = settings or get_settings()
+    configure_tracing(settings)
 
     bus = EventBus()
     harness = ToolHarness()

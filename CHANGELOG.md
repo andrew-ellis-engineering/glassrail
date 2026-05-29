@@ -51,6 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - FastAPI gateway: `/task`, `/task/{id}`, `/task/{id}/resume`,
   `/task/{id}/branch-log`, `/task/{id}/events` (SSE), `/tools`, `/health`.
 - Typer CLI entry point.
+- OpenTelemetry tracing (`dagagent.telemetry`): the planner, router, and
+  executor emit a span tree (task → plan / node → LLM call) with GenAI
+  semantic-convention attributes (system, model, tokens) and `dagagent.*`
+  attributes (tier, node type/status, task status). Tracing is a no-op until
+  configured via settings; the SDK and OTLP/HTTP exporter ship in the optional
+  `otel` extra. The REST gateway configures it at startup.
 - Tooling: uv, ruff, pyright strict, pytest + hypothesis, pre-commit,
   MkDocs + Material. CI on Linux + macOS for Python 3.12 + 3.13.
 - Apache-2.0 license.

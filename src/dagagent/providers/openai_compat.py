@@ -62,6 +62,10 @@ class OpenAICompatProvider:
     def tier(self) -> int:
         return self._tier
 
+    @property
+    def model(self) -> str:
+        return self._model
+
     async def complete(
         self,
         messages: list[Message],

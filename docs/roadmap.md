@@ -28,10 +28,11 @@ observability, then the operational surfaces.
   *Done when:* `uv run pytest -m eval` produces pass/fail + a score summary,
   and CI can run it (gated/optional so external-service flakiness doesn't
   block PRs).
-- **OpenTelemetry GenAI spans** — instrument planner, router, and executor
-  with spans following the GenAI semantic conventions (model, tier, tokens,
-  latency). *Done when:* a run emits a trace tree (task → node → LLM call)
-  to an OTLP endpoint, with tracing a no-op when unconfigured.
+- **OpenTelemetry GenAI spans** ✓ — the planner, router, and executor emit a
+  span tree (task → plan / node → LLM call) with GenAI semantic-convention
+  attributes (model, tier, tokens) plus `dagagent.*` ones. Tracing is a no-op
+  until configured; the SDK + OTLP exporter live in the optional `otel` extra.
+  See [Observability](observability.md).
 - **WebSocket event transport** — a second consumer of the existing
   `EventBus` alongside SSE. *Done when:* a `WS /task/{id}/events` endpoint
   streams the same typed events and closes on a terminal event; producers
