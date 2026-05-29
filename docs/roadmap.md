@@ -38,9 +38,10 @@ observability, then the operational surfaces.
   events and closes on a terminal event, sharing one transport-agnostic event
   source. Producers (executor/orchestrator) are unchanged. See
   [Streaming events](streaming.md).
-- **Docker production image** — a real `Dockerfile` (compose is dev-only
-  today). *Done when:* `docker run` serves the REST gateway from a slim,
-  non-root image built in CI.
+- **Docker production image** ✓ — a multi-stage `Dockerfile` serves the REST
+  gateway from a slim (~60 MB), non-root `python:3.12-slim` image with a
+  built-in health check. CI builds and smoke-tests it on every change. See
+  [Deployment](deployment.md).
 - **TUI** — a terminal client that submits a task and renders the live event
   stream. *Done when:* it shows plan → per-node progress → final output from
   a running server.

@@ -60,4 +60,5 @@ nav:
   - Architecture: architecture.md
   - Observability: observability.md
   - Streaming events: streaming.md
+  - Deployment: deployment.md
   - Roadmap: roadmap.md

@@ -89,3 +89,26 @@ jobs:
         with:
           name: dist
           path: dist/
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t dagagent:ci .
+      - name: Smoke test (health, tools, non-root)
+        run: |
+          docker run -d --name dagagent -p 8000:8000 dagagent:ci
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:8000/health && ok=1 && break
+            sleep 1
+          done
+          if [ "$ok" != "1" ]; then docker logs dagagent; exit 1; fi
+          curl -fsS http://localhost:8000/tools > /dev/null
+          uid=$(docker exec dagagent id -u)
+          if [ "$uid" != "10001" ]; then
+            echo "expected non-root uid 10001, got $uid"; exit 1
+          fi
+          docker rm -f dagagent

@@ -59,6 +59,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attributes (tier, node type/status, task status). Tracing is a no-op until
   configured via settings; the SDK and OTLP/HTTP exporter ship in the optional
   `otel` extra. The REST gateway configures it at startup.
+- Production `Dockerfile`: multi-stage uv build serving the REST gateway from
+  a slim, non-root `python:3.12-slim` image (~60 MB) with a built-in health
+  check. CI builds and smoke-tests the image on every change.
 - Tooling: uv, ruff, pyright strict, pytest + hypothesis, pre-commit,
   MkDocs + Material. CI on Linux + macOS for Python 3.12 + 3.13.
 - Apache-2.0 license.

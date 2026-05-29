@@ -1,0 +1,26 @@
+# Keep the build context small and the image clean. The Dockerfile only
+# copies pyproject.toml, uv.lock, README.md, and src/ — everything else is
+# noise that would only bust the build cache.
+.git
+.github
+.venv
+.uv-cache
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+htmlcov
+.coverage
+.coverage.*
+coverage.xml
+dist
+build
+site
+tests
+docs
+*.sqlite
+.env
+docker-compose.yml
+Dockerfile
+.dockerignore
