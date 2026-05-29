@@ -36,6 +36,9 @@ uv run pre-commit install
 uv run pytest
 ```
 
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full check sweep and PR
+guidelines, and [CLAUDE.md](./CLAUDE.md) for project conventions.
+
 ## Layout
 
 ```

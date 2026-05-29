@@ -19,7 +19,32 @@ Single-file FastAPI prototype. Validated DAG planning + tier routing + audit log
 
 ## Phase 1 — Reliability & Eval
 
-Docker production image, eval harness, OpenTelemetry GenAI spans, WebSocket event transport, TUI.
+Make the engine observable, measurable, and shippable. Suggested order:
+eval harness first (it gates everything else and the PyPI publish), then
+observability, then the operational surfaces.
+
+- **Eval harness** — fill in `tests/eval/` with a runnable suite that scores
+  planning + execution against fixtures, behind the existing `eval` marker.
+  *Done when:* `uv run pytest -m eval` produces pass/fail + a score summary,
+  and CI can run it (gated/optional so external-service flakiness doesn't
+  block PRs).
+- **OpenTelemetry GenAI spans** — instrument planner, router, and executor
+  with spans following the GenAI semantic conventions (model, tier, tokens,
+  latency). *Done when:* a run emits a trace tree (task → node → LLM call)
+  to an OTLP endpoint, with tracing a no-op when unconfigured.
+- **WebSocket event transport** — a second consumer of the existing
+  `EventBus` alongside SSE. *Done when:* a `WS /task/{id}/events` endpoint
+  streams the same typed events and closes on a terminal event; producers
+  (executor/orchestrator) are unchanged.
+- **Docker production image** — a real `Dockerfile` (compose is dev-only
+  today). *Done when:* `docker run` serves the REST gateway from a slim,
+  non-root image built in CI.
+- **TUI** — a terminal client that submits a task and renders the live event
+  stream. *Done when:* it shows plan → per-node progress → final output from
+  a running server.
+
+Exit gate: eval scores meet an agreed bar — this is the gate that unlocks the
+first PyPI publish.
 
 ## Phase 2 — Foundation Assistant
 
