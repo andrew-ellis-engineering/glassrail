@@ -25,7 +25,7 @@
 
 ## Node types
 
-- `tool_call` — invoke a registered tool
+- `tool` — invoke a registered tool
 - `decision` — binary branch on output
 - `think` — reasoning-only, no tool dependency
 - `summary` — N→1 context compression

@@ -17,4 +17,7 @@ Most agents loop: think, act, observe, think again. That works, but it's hard to
 
 ## Status
 
-Phase 0.5. See [Roadmap](./roadmap.md) for what's landed and what's next.
+Phase 0.5 (OSS foundation) is complete — the engine runs end to end with
+SQLite persistence, the full node taxonomy, a streaming provider, and a
+typed event stream. See [Roadmap](./roadmap.md) for what's landed and
+what's next.
