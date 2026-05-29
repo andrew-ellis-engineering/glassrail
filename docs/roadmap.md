@@ -33,10 +33,11 @@ observability, then the operational surfaces.
   attributes (model, tier, tokens) plus `dagagent.*` ones. Tracing is a no-op
   until configured; the SDK + OTLP exporter live in the optional `otel` extra.
   See [Observability](observability.md).
-- **WebSocket event transport** — a second consumer of the existing
-  `EventBus` alongside SSE. *Done when:* a `WS /task/{id}/events` endpoint
-  streams the same typed events and closes on a terminal event; producers
-  (executor/orchestrator) are unchanged.
+- **WebSocket event transport** ✓ — `WS /task/{id}/events` is a second
+  consumer of the existing `EventBus` alongside SSE: it streams the same typed
+  events and closes on a terminal event, sharing one transport-agnostic event
+  source. Producers (executor/orchestrator) are unchanged. See
+  [Streaming events](streaming.md).
 - **Docker production image** — a real `Dockerfile` (compose is dev-only
   today). *Done when:* `docker run` serves the REST gateway from a slim,
   non-root image built in CI.

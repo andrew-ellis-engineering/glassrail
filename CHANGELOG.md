@@ -49,7 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   task transition on an in-process `EventBus`; the executor and
   orchestrator emit them, and gateways subscribe via an async iterator.
 - FastAPI gateway: `/task`, `/task/{id}`, `/task/{id}/resume`,
-  `/task/{id}/branch-log`, `/task/{id}/events` (SSE), `/tools`, `/health`.
+  `/task/{id}/branch-log`, `/task/{id}/events` (SSE and WebSocket — the
+  WebSocket streams the same typed events and closes on a terminal event),
+  `/tools`, `/health`.
 - Typer CLI entry point.
 - OpenTelemetry tracing (`dagagent.telemetry`): the planner, router, and
   executor emit a span tree (task → plan / node → LLM call) with GenAI

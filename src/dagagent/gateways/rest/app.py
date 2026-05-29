@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -62,27 +62,40 @@ def _terminal_snapshot(state: ExecutionState) -> Event | None:
     return None
 
 
+async def _event_source(
+    store: StateStore,
+    bus: EventBus,
+    task_id: TaskId,
+) -> AsyncIterator[Event]:
+    """Yield typed events for ``task_id`` until a terminal event.
+
+    Transport-agnostic: SSE and WebSocket both consume this. If the task has
+    already finished, it yields a single synthesised snapshot and stops rather
+    than blocking on events that have already fired.
+    """
+    async with bus.subscribe() as sub:
+        state = await store.load_task(task_id)
+        if state is not None:
+            snapshot = _terminal_snapshot(state)
+            if snapshot is not None:
+                yield snapshot
+                return
+        async for event in sub:
+            if event.task_id != task_id:
+                continue
+            yield event
+            if event.type in TERMINAL_EVENT_TYPES:
+                return
+
+
 async def _event_stream(
     store: StateStore,
     bus: EventBus,
     task_id: TaskId,
 ) -> AsyncIterator[str]:
     """Yield SSE frames for ``task_id`` until a terminal event."""
-    async with bus.subscribe() as sub:
-        # Subscribe first, then check: if the task is already finished, emit a
-        # snapshot rather than blocking on events that already fired.
-        state = await store.load_task(task_id)
-        if state is not None:
-            snapshot = _terminal_snapshot(state)
-            if snapshot is not None:
-                yield _sse(snapshot)
-                return
-        async for event in sub:
-            if event.task_id != task_id:
-                continue
-            yield _sse(event)
-            if event.type in TERMINAL_EVENT_TYPES:
-                return
+    async for event in _event_source(store, bus, task_id):
+        yield _sse(event)
 
 
 def create_app(
@@ -154,6 +167,26 @@ def create_app(
             _event_stream(store, event_bus, tid),
             media_type="text/event-stream",
         )
+
+    @api.websocket("/task/{task_id}/events")
+    async def task_events_ws(websocket: WebSocket, task_id: str) -> None:
+        # Reject before accepting so the client sees a close code, not an open
+        # socket that immediately drops. 1011 = internal error, 1008 = policy.
+        if event_bus is None:
+            await websocket.close(code=1011, reason="Event stream not configured")
+            return
+        tid = TaskId(task_id)
+        if await store.load_task(tid) is None:
+            await websocket.close(code=1008, reason="Task not found")
+            return
+
+        await websocket.accept()
+        try:
+            async for event in _event_source(store, event_bus, tid):
+                await websocket.send_text(event.model_dump_json())
+        except WebSocketDisconnect:
+            return  # client hung up mid-stream; nothing to clean up
+        await websocket.close()
 
     @api.get("/tools")
     async def list_tools() -> dict[str, Any]:

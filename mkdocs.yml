@@ -59,4 +59,5 @@ nav:
   - Home: index.md
   - Architecture: architecture.md
   - Observability: observability.md
+  - Streaming events: streaming.md
   - Roadmap: roadmap.md
