@@ -25,6 +25,14 @@ from dagagent.core import (
     TaskStatus,
     ToolExecutionError,
 )
+from dagagent.events import (
+    BranchDecided,
+    Event,
+    EventBus,
+    NodeFinished,
+    NodeStarted,
+    TaskCompleted,
+)
 from dagagent.executor.context import assemble_context
 from dagagent.harness import ToolHarness
 from dagagent.providers import Message, TierRouter, collect
@@ -77,16 +85,26 @@ class Executor:
         router: TierRouter,
         harness: ToolHarness,
         settings: Settings,
+        event_bus: EventBus | None = None,
     ) -> None:
         self._router = router
         self._harness = harness
         self._settings = settings
+        self._bus = event_bus
 
     async def execute(self, state: ExecutionState) -> ExecutionState:
+        """Execute the plan, emitting lifecycle events to the bus."""
+        return await self._run(state, emit=True)
+
+    async def _run(self, state: ExecutionState, *, emit: bool) -> ExecutionState:
         plan = state.plan
         if plan is None:
             raise RuntimeError("Cannot execute: state has no plan")
 
+        # Nested subplan runs reuse this method with emit=False so their
+        # internal nodes (whose ids may collide with the parent's) don't
+        # leak onto the parent task's event stream.
+        bus = self._bus if emit else None
         skipped: set[int] = set()
         node_map = {n.id: n for n in plan.nodes}
 
@@ -97,36 +115,25 @@ class Executor:
             node = node_map[node_id]
 
             if node_id in skipped:
-                state.results[node_id] = NodeResult(node_id=node_id, status=NodeStatus.SKIPPED)
+                result = NodeResult(node_id=node_id, status=NodeStatus.SKIPPED)
+                state.results[node_id] = result
                 state.skipped_nodes.append(node_id)
                 log.info("Node %d skipped (excluded branch)", node_id)
+                await self._emit(bus, self._finished_event(state, result))
                 continue
 
             tier = self._select_tier(node)
-            t0 = time.monotonic()
-
-            if node.type is NodeType.TOOL:
-                result = await self._execute_tool(node, state, tier)
-            elif node.type is NodeType.DECISION:
-                result = await self._execute_decision(node, state, tier)
-                self._record_branch_decision(state, node, result, skipped)
-            elif node.type is NodeType.SYNTHESIS:
-                result = await self._execute_synthesis(node, state, tier)
-            elif node.type is NodeType.THINK:
-                result = await self._execute_think(node, state, tier)
-            elif node.type is NodeType.SUMMARY:
-                result = await self._execute_summary(node, state, tier)
-            elif node.type is NodeType.RESULT:
-                result = await self._execute_result(node, state, tier)
-            elif node.type is NodeType.SUBPLAN:
-                result = await self._execute_subplan(node, state)
-            else:
-                result = NodeResult(
+            await self._emit(
+                bus,
+                NodeStarted(
+                    task_id=state.task_id,
                     node_id=node_id,
-                    status=NodeStatus.FAILED,
-                    error=f"Unknown node type: {node.type}",
-                )
-
+                    node_type=node.type,
+                    tier=tier,
+                ),
+            )
+            t0 = time.monotonic()
+            result = await self._dispatch_node(node, state, tier, skipped)
             result.execution_time_s = time.monotonic() - t0
             result.tier_used = tier
 
@@ -145,10 +152,68 @@ class Executor:
             state.completed_nodes.append(node_id)
             state.touch()
 
+            if node.type is NodeType.DECISION:
+                await self._emit(
+                    bus,
+                    BranchDecided(
+                        task_id=state.task_id,
+                        node_id=node_id,
+                        branch_taken=result.branch_taken,
+                        confidence=result.confidence,
+                    ),
+                )
+            await self._emit(bus, self._finished_event(state, result))
+
         state.final_output = self._extract_final_output(state, plan)
         state.status = TaskStatus.COMPLETED
         state.touch()
+        await self._emit(bus, TaskCompleted(task_id=state.task_id, final_output=state.final_output))
         return state
+
+    async def _dispatch_node(  # noqa: PLR0911 — one return per node type is the clearest form
+        self,
+        node: Node,
+        state: ExecutionState,
+        tier: int,
+        skipped: set[int],
+    ) -> NodeResult:
+        if node.type is NodeType.TOOL:
+            return await self._execute_tool(node, state, tier)
+        if node.type is NodeType.DECISION:
+            result = await self._execute_decision(node, state, tier)
+            self._record_branch_decision(state, node, result, skipped)
+            return result
+        if node.type is NodeType.SYNTHESIS:
+            return await self._execute_synthesis(node, state, tier)
+        if node.type is NodeType.THINK:
+            return await self._execute_think(node, state, tier)
+        if node.type is NodeType.SUMMARY:
+            return await self._execute_summary(node, state, tier)
+        if node.type is NodeType.RESULT:
+            return await self._execute_result(node, state, tier)
+        if node.type is NodeType.SUBPLAN:
+            return await self._execute_subplan(node, state)
+        return NodeResult(
+            node_id=node.id,
+            status=NodeStatus.FAILED,
+            error=f"Unknown node type: {node.type}",
+        )
+
+    @staticmethod
+    async def _emit(bus: EventBus | None, event: Event) -> None:
+        if bus is not None:
+            await bus.publish(event)
+
+    @staticmethod
+    def _finished_event(state: ExecutionState, result: NodeResult) -> NodeFinished:
+        return NodeFinished(
+            task_id=state.task_id,
+            node_id=result.node_id,
+            status=result.status,
+            confidence=result.confidence,
+            flagged=result.flagged,
+            tier_used=result.tier_used,
+        )
 
     # ── Per-node executors ────────────────────────────────────────────────
 
@@ -350,7 +415,7 @@ class Executor:
             plan=node.subplan,
         )
         try:
-            completed = await self.execute(sub_state)
+            completed = await self._run(sub_state, emit=False)
         except Exception as exc:
             return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
 

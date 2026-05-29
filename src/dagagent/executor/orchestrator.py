@@ -18,6 +18,15 @@ from dagagent.core import (
     TaskId,
     TaskStatus,
 )
+from dagagent.events import (
+    AwaitingConfirmation,
+    Event,
+    EventBus,
+    PlanFailed,
+    PlanningStarted,
+    PlanReady,
+    TaskFailed,
+)
 from dagagent.executor.executor import Executor
 from dagagent.planner import Planner
 from dagagent.state import StateStore
@@ -35,11 +44,13 @@ class Orchestrator:
         executor: Executor,
         state_store: StateStore,
         settings: Settings,
+        event_bus: EventBus | None = None,
     ) -> None:
         self._planner = planner
         self._executor = executor
         self._store = state_store
         self._settings = settings
+        self._bus = event_bus
 
     async def run(self, task_id: TaskId) -> None:
         state = await self._store.load_task(task_id)
@@ -47,19 +58,25 @@ class Orchestrator:
             log.warning("Orchestrator.run: task %s not found", task_id)
             return
 
+        await self._emit(PlanningStarted(task_id=task_id))
         try:
             plan = await self._plan_with_retry(state)
             if plan is None:
+                await self._emit(
+                    PlanFailed(task_id=task_id, error=state.error or "planning failed")
+                )
                 await self._store.save_task(state)
                 return
 
             state.plan = plan
             log.info("[%s] Plan validated: %d nodes", task_id, len(plan.nodes))
+            await self._emit(PlanReady(task_id=task_id, node_count=len(plan.nodes)))
 
             if self._settings.confirm_plans:
                 state.status = TaskStatus.AWAITING_CONFIRMATION
                 state.touch()
                 await self._store.save_task(state)
+                await self._emit(AwaitingConfirmation(task_id=task_id, node_count=len(plan.nodes)))
                 log.info("[%s] Plan summary (awaiting confirmation):\n%s", task_id, _summary(plan))
                 return
 
@@ -70,6 +87,7 @@ class Orchestrator:
             state.status = TaskStatus.FAILED
             state.error = str(exc)
             state.touch()
+            await self._emit(TaskFailed(task_id=task_id, error=str(exc)))
         finally:
             await self._store.save_task(state)
 
@@ -94,10 +112,15 @@ class Orchestrator:
             state.status = TaskStatus.FAILED
             state.error = str(exc)
             state.touch()
+            await self._emit(TaskFailed(task_id=task_id, error=str(exc)))
         finally:
             await self._store.save_task(state)
 
     # ── Helpers ───────────────────────────────────────────────────────────
+
+    async def _emit(self, event: Event) -> None:
+        if self._bus is not None:
+            await self._bus.publish(event)
 
     async def _plan_with_retry(self, state: ExecutionState) -> Plan | None:
         state.status = TaskStatus.PLANNING
