@@ -82,6 +82,11 @@ packages = ["src/dagagent"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
+# Vendored, self-contained eval framework — stdlib-only with its own
+# conventions and its own README/DECISIONS. Linted and run on its own terms,
+# not under this package's rule set. (Already outside pyright `include` and
+# pytest `testpaths`.)
+extend-exclude = ["eval-framework"]
 
 [tool.ruff.lint]
 select = [

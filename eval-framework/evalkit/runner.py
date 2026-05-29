@@ -1,0 +1,212 @@
+"""Runner — execute one trial: fixtures, ``claude -p``, evidence capture.
+
+Each trial runs from a clean environment (principle 2). Any path named in
+``fixtures.install`` or ``fixtures.capture`` is backed up to ``<path>.evalbackup``
+before the run and restored in a ``finally`` — and stale backups from a prior
+crash are restored before new fixtures are installed.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from evalkit import config
+from evalkit.claude import invoke_claude
+from evalkit.models import Task, Trial
+
+_BACKUP_SUFFIX = ".evalbackup"
+
+
+def _expand(raw: str) -> Path:
+    return Path(os.path.expanduser(raw))
+
+
+def _backup_path(path: Path) -> Path:
+    return Path(str(path) + _BACKUP_SUFFIX)
+
+
+def _remove(path: Path) -> None:
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    elif path.exists() or path.is_symlink():
+        path.unlink()
+
+
+def _read_content(path: Path) -> str | None:
+    if path.is_file():
+        try:
+            return path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return None
+    return None
+
+
+def _managed_paths(task: Task) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for raw in [*task.fixtures.install.keys(), *task.fixtures.capture]:
+        if raw not in seen:
+            seen.add(raw)
+            ordered.append(raw)
+    return ordered
+
+
+def _restore(path: Path) -> None:
+    """Restore ``path`` from its backup, or delete it if it had none."""
+    backup = _backup_path(path)
+    if backup.exists():
+        _remove(path)
+        shutil.move(str(backup), str(path))
+    else:
+        _remove(path)  # didn't exist before the run; remove if created during it
+
+
+def _backup(path: Path) -> None:
+    backup = _backup_path(path)
+    if backup.exists():
+        _remove(backup)  # stale leftover
+    if path.is_dir() and not path.is_symlink():
+        shutil.copytree(path, backup)
+    elif path.exists():
+        shutil.copy2(path, backup)
+
+
+def _find_fixture_source(task: Task, source: str) -> Path:
+    candidates = [
+        task.path / "fixtures" / source,
+        task.path.parent.parent / "shared-fixtures" / source,
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    raise FileNotFoundError(f"fixture source {source!r} not found in {[str(c) for c in candidates]}")
+
+
+def _install_fixtures(task: Task) -> None:
+    for dest_raw, source in task.fixtures.install.items():
+        dest = _expand(dest_raw)
+        if source is None:
+            _remove(dest)
+            continue
+        src = _find_fixture_source(task, source)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        _remove(dest)
+        if src.is_dir():
+            shutil.copytree(src, dest)
+        else:
+            shutil.copy2(src, dest)
+
+
+def _build_prompt(task: Task) -> str:
+    parts = [task.prompt]
+    if task.context_files:
+        block = ["\n\n## Context files\n"]
+        for name, content in task.context_files.items():
+            block.append(f"\n### {name}\n```\n{content}\n```\n")
+        parts.append("".join(block))
+    return "".join(parts)
+
+
+def _extract_trajectory(envelope: dict[str, Any]) -> list[dict[str, Any]]:
+    """Pull tool_use blocks from messages[].content[], if the envelope has them."""
+    out: list[dict[str, Any]] = []
+    messages = envelope.get("messages")
+    if not isinstance(messages, list):
+        return out
+    for message in messages:
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                out.append({"tool": block.get("name", ""), "input": block.get("input", {})})
+    return out
+
+
+def run_trial(task: Task, run_number: int, *, model: str, timeout_s: int) -> Trial:
+    """Run one trial end to end, always restoring fixtures in ``finally``."""
+    started = datetime.now(UTC)
+    managed = _managed_paths(task)
+    baseline: dict[str, str | None] = {}
+    side_effects: dict[str, str | None] = dict.fromkeys(task.fixtures.capture)
+
+    error: str | None = None
+    success = False
+    result_text = ""
+    trajectory: list[dict[str, Any]] = []
+    envelope: dict[str, Any] = {}
+    stdout = ""
+    stderr = ""
+    cost: float | None = None
+
+    # Recover from any crash that left backups behind, then take fresh ones.
+    for raw in managed:
+        _restore(_expand(raw))
+
+    try:
+        for raw in managed:
+            _backup(_expand(raw))
+        for raw in task.fixtures.capture:
+            baseline[raw] = _read_content(_expand(raw))
+
+        _install_fixtures(task)
+
+        res = invoke_claude(
+            _build_prompt(task),
+            model=model,
+            output_format="json",
+            max_turns=task.max_turns,
+            permission_mode="acceptEdits",
+            timeout_s=timeout_s,
+        )
+        stdout, stderr = res.stdout, res.stderr
+        if res.timed_out:
+            error = "timed out"
+
+        if res.stdout.strip():
+            try:
+                parsed: Any = json.loads(res.stdout)
+                if isinstance(parsed, dict):
+                    envelope = parsed
+            except json.JSONDecodeError as exc:
+                error = error or f"could not parse envelope: {exc}"
+
+        rt = envelope.get("result")
+        result_text = rt if isinstance(rt, str) else ""
+        trajectory = _extract_trajectory(envelope)
+        raw_cost = envelope.get("total_cost_usd")
+        cost = float(raw_cost) if isinstance(raw_cost, (int, float)) else None
+        success = res.returncode == 0 and error is None and envelope.get("is_error") is not True
+
+        side_effects = {raw: _read_content(_expand(raw)) for raw in task.fixtures.capture}
+    except Exception as exc:  # noqa: BLE001 - record any failure into the trial record
+        error = f"{type(exc).__name__}: {exc}"
+    finally:
+        for raw in managed:
+            _restore(_expand(raw))
+
+    completed = datetime.now(UTC)
+    return Trial(
+        task_id=task.id,
+        run_number=run_number,
+        started_at=started,
+        completed_at=completed,
+        success=success,
+        error=error,
+        duration_s=(completed - started).total_seconds(),
+        output_envelope=envelope,
+        result_text=result_text,
+        raw_stdout=stdout,
+        raw_stderr=stderr,
+        trajectory=trajectory,
+        side_effects=side_effects,
+        cost_usd=cost,
+        model=model,
+        harness_version=config.HARNESS_VERSION,
+        baseline=baseline,
+    )

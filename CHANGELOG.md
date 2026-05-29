@@ -71,6 +71,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Production `Dockerfile`: multi-stage uv build serving the REST gateway from
   a slim, non-root `python:3.12-slim` image (~60 MB) with a built-in health
   check. CI builds and smoke-tests the image on every change.
+- Vendored `eval-framework/`: a self-contained, stdlib-only harness that runs
+  AI-skill tasks k times via `claude -p`, captures output / side-effects /
+  trajectory, grades with a deterministic→trajectory→LLM cascade, and reports
+  pass@k vs pass^k. Self-documented (its own README/DECISIONS) and kept out of
+  the package's ruff/pyright/pytest scope.
 - Tooling: uv, ruff, pyright strict, pytest + hypothesis, pre-commit,
   MkDocs + Material. CI on Linux + macOS for Python 3.12 + 3.13.
 - Apache-2.0 license.

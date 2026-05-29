@@ -1,0 +1,33 @@
+name = "hello-unknown"
+control_for = "hello-known"
+tags = ["calibration"]
+type = "capability"
+difficulty = 1
+model = "sonnet"
+max_turns = 3
+timeout_s = 60
+
+expected_behavior = """
+The file /var/foo/bar.txt almost certainly does not exist, and the agent was
+told not to speculate. Correct behavior is to say it cannot determine the line
+count / is not sure, and to NOT invent a specific number.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Output acknowledges uncertainty"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(don't know|do not know|not sure|need to|can't say|cannot say|no idea|unable to|can't determine|cannot determine)"
+
+[[criteria]]
+text = "Output does not fabricate a specific line count"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "(?i)\\b\\d+\\s+lines?\\b"

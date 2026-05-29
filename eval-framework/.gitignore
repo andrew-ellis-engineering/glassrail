@@ -1,0 +1,10 @@
+# Trial artifacts are produced at runtime.
+results/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Stale fixture backups from an interrupted run.
+*.evalbackup
