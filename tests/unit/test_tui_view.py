@@ -65,6 +65,48 @@ def test_view_renders_at_every_stage() -> None:
     assert "dagagent" in buf.getvalue()
 
 
+def test_view_renders_dag_when_plan_present() -> None:
+    buf = io.StringIO()
+    console = Console(file=buf, width=90)
+    view = TaskView(request="research the thing")
+    view.ingest(
+        {
+            "type": "plan_ready",
+            "task_id": "t",
+            "node_count": 2,
+            "plan": {
+                "nodes": [
+                    {"id": 1, "type": "tool", "tool": "web_search", "context_needed": []},
+                    {"id": 2, "type": "result", "context_needed": [1]},
+                ]
+            },
+        }
+    )
+    view.ingest(
+        {"type": "node_started", "task_id": "t", "node_id": 1, "node_type": "tool", "tier": 0}
+    )
+    console.print(view.render())  # must never raise
+    out = buf.getvalue()
+    assert "plan" in out  # the DAG panel title
+    assert "web_search" in out  # a node box was drawn
+
+
+def test_no_dag_omits_the_dag_panel() -> None:
+    buf = io.StringIO()
+    console = Console(file=buf, width=90)
+    view = TaskView(request="x", show_dag=False)
+    view.ingest(
+        {
+            "type": "plan_ready",
+            "task_id": "t",
+            "node_count": 1,
+            "plan": {"nodes": [{"id": 1, "type": "result", "context_needed": []}]},
+        }
+    )
+    console.print(view.render())
+    assert "plan" not in buf.getvalue()  # no DAG panel
+
+
 def test_view_records_branch_and_failure() -> None:
     view = TaskView(request="x")
     view.ingest(

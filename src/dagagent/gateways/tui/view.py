@@ -16,6 +16,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from dagagent.gateways.tui.dag import render_dag
+
 _STATUS_STYLE = {
     "planning": "yellow",
     "executing": "cyan",
@@ -49,6 +51,7 @@ class TaskView:
     """Accumulates task events and renders them as a live progress view."""
 
     request: str
+    show_dag: bool = True
     status: str = "planning"
     node_count: int | None = None
     nodes: dict[int, _NodeRow] = field(default_factory=dict)
@@ -139,7 +142,17 @@ class TaskView:
                 "" if row.confidence is None else f"{row.confidence:.2f}",
             )
 
-        body: list[RenderableType] = [header, table]
+        body: list[RenderableType] = [header]
+        if self.show_dag and self.plan is not None:
+            body.append(
+                Panel(
+                    render_dag(self.plan, self.nodes),
+                    title="plan",
+                    border_style="dim",
+                    expand=True,
+                )
+            )
+        body.append(table)
         if self.final_output is not None:
             body.append(Panel(self.final_output, title="result", border_style="green"))
         if self.error is not None:

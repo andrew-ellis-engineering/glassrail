@@ -59,6 +59,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a task to a running gateway and renders its live SSE event stream (plan →
   per-node progress → final output), built from a thin event client and a pure,
   testable view model.
+- Live DAG view in the TUI: once the plan arrives, the viewer draws it as boxes
+  connected by routed edges — nodes grouped into topological layers (same layer
+  = runs in parallel), edges split with pass-through vertices so they never
+  cross a box — above the existing node table. Each box shows the node's
+  id/type and a short summary (its planner `description`); the border is
+  recoloured as the node starts, completes, or fails, and decisions show the
+  branch they took. Pure render over the plan plus accumulated node statuses,
+  onto a character grid that falls back to a compact list when the terminal is
+  too narrow; `dagagent tui --no-dag` shows only the table.
 - Shared runtime composition root (`dagagent.runtime.build_runtime`) that wires
   the harness, router, planner, validator, executor, store, and orchestrator
   from settings; the REST gateway and the CLI both build from it.

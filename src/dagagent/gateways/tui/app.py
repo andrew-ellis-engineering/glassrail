@@ -19,11 +19,12 @@ async def run_tui(
     request: str,
     *,
     base_url: str = DEFAULT_BASE_URL,
+    show_dag: bool = True,
     console: Console | None = None,
     client: httpx.AsyncClient | None = None,
 ) -> TaskView:
     """Submit ``request`` and render its live event stream. Returns the final view."""
-    view = TaskView(request=request)
+    view = TaskView(request=request, show_dag=show_dag)
     console = console or Console()
     with Live(view.render(), console=console, refresh_per_second=8) as live:
         async for event in stream_task_events(request, base_url=base_url, client=client):

@@ -79,8 +79,13 @@ eval artefacts.
 
 ```bash
 uv run uvicorn dagagent.gateways.rest:app      # serves on :8000
-uv run dagagent tui "<task>"                   # POSTs the task, renders the live stream
+uv run dagagent tui "<task>"                   # POSTs the task, renders the live DAG + stream
 ```
+
+The viewer draws the plan as colour-coded node boxes connected by edges
+(grouped into parallel layers, each box showing a short summary, recoloured as
+they run) above a per-node table; `--no-dag` shows the table alone. See
+[docs/tui.md](./docs/tui.md).
 
 **REST API directly** — `POST /task` returns a `task_id`; follow it over
 Server-Sent Events or a WebSocket at `/task/{id}/events`, or poll

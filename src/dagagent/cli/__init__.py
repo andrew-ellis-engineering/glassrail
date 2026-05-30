@@ -41,9 +41,10 @@ def version() -> None:
 def tui(
     request: str = typer.Argument(..., help="The task to submit."),
     url: str = typer.Option(DEFAULT_BASE_URL, help="Base URL of a running gateway."),
+    dag: bool = typer.Option(True, help="Show the live DAG view above the node table."),
 ) -> None:
     """Submit a task to a running gateway and watch it run in the terminal."""
-    asyncio.run(run_tui(request, base_url=url))
+    asyncio.run(run_tui(request, base_url=url, show_dag=dag))
 
 
 @app.command()
