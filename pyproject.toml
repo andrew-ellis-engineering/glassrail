@@ -41,6 +41,9 @@ otel = [
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp-proto-http>=1.27",
 ]
+# Web integration (web_fetch / web_search): trafilatura does main-content
+# extraction and pulls in lxml. Optional so the base install stays lean.
+web = ["trafilatura>=1.8"]
 
 [project.scripts]
 dagagent = "dagagent.cli:app"

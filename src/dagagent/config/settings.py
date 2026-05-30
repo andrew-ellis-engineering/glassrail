@@ -97,6 +97,36 @@ class NodePrompts(BaseModel):
     """Tool-output gate — must request {matches_expectation, issue}."""
 
 
+class WebToolConfig(BaseModel):
+    """The web integration: page fetch + search, both opt-in.
+
+    These tools need the ``web`` extra (``pip install dagagent[web]``); enabling
+    one without it raises a clear error at registration. Off by default — the
+    base install stays lean and makes no outbound requests.
+    """
+
+    fetch: bool = False
+    """Register ``web_fetch(url)`` — GET a page and extract its main text."""
+    search: str = "none"
+    """Search provider: ``none`` (disabled), ``duckduckgo``, or ``searxng``."""
+    searxng_url: str = "http://localhost:8888"
+    """Base URL of a self-hosted SearXNG instance (when ``search='searxng'``)."""
+    timeout_s: float = 20.0
+    """Per-request HTTP timeout for fetch and search."""
+    max_results: int = 5
+    """Number of search results to return."""
+
+
+class ToolsSettings(BaseModel):
+    """First-party tool integrations, each bundled and toggled by config.
+
+    Distinct from third-party ``dagagent.tools`` entry-point plugins (gated by
+    ``load_tool_plugins``): these ship in-tree and carry their own config.
+    """
+
+    web: WebToolConfig = WebToolConfig()
+
+
 _DEFAULT_TIER0 = TierConfig(
     base_url="http://localhost:8080/v1",
     model="qwen3.6-35b-moe",
@@ -161,9 +191,11 @@ class Settings(BaseSettings):
     prompts: NodePrompts = NodePrompts()
 
     # ── Tools ────────────────────────────────────────────────────────────
-    # Built-in tools always register. Third-party tools advertised through the
-    # ``dagagent.tools`` entry-point group are opt-in: discovering whatever is
-    # installed is a deliberate choice, not a default.
+    # Built-in tools always register. First-party integrations (web, later
+    # obsidian/calendar) are bundled and toggled under ``tools``. Third-party
+    # tools advertised through the ``dagagent.tools`` entry-point group are a
+    # separate opt-in: discovering whatever is installed is a deliberate choice.
+    tools: ToolsSettings = ToolsSettings()
     load_tool_plugins: bool = False
 
     # ── HITL ─────────────────────────────────────────────────────────────

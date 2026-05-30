@@ -135,10 +135,25 @@ prompt must still ask for `{"summary": ..., "confidence": ...}`).
 Built-in tools (`file_read`, plus `calendar_get` / `memory_search` /
 `web_search` stubs) always register. Add a first-party tool by decorating a
 function with `@harness.tool(name=..., description=..., parameters=<JSON
-Schema>)`. Third-party tools advertised through the `dagagent.tools`
-entry-point group are opt-in: set `DAGAGENT_LOAD_TOOL_PLUGINS=true` (or
-`load_tool_plugins = true` in `config.toml`) and the runtime discovers and
-registers them at startup.
+Schema>)`.
+
+**First-party integrations** are bundled but opt-in, configured under
+`[tools.*]`. The **web** integration adds `web_fetch(url)` (fetch a page and
+extract its main text — for reading or summarising webpages); it needs the
+`web` extra and is off by default:
+
+```bash
+uv sync --extra web                      # installs trafilatura
+```
+```toml
+[tools.web]
+fetch = true
+```
+
+**Third-party plugins** advertised through the `dagagent.tools` entry-point
+group are a separate opt-in: set `DAGAGENT_LOAD_TOOL_PLUGINS=true` (or
+`load_tool_plugins = true`) and the runtime discovers and registers them at
+startup.
 
 ## Evals
 

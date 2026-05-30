@@ -9,9 +9,24 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from dagagent.config.settings import NodeBudgets, NodePrompts, Settings, TierConfig
+from dagagent.config.settings import (
+    NodeBudgets,
+    NodePrompts,
+    Settings,
+    TierConfig,
+    ToolsSettings,
+    WebToolConfig,
+)
 
-__all__ = ["NodeBudgets", "NodePrompts", "Settings", "TierConfig", "get_settings"]
+__all__ = [
+    "NodeBudgets",
+    "NodePrompts",
+    "Settings",
+    "TierConfig",
+    "ToolsSettings",
+    "WebToolConfig",
+    "get_settings",
+]
 
 
 @lru_cache(maxsize=1)

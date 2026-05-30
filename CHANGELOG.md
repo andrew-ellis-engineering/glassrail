@@ -93,6 +93,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of hard-coding it, so prompts can be tuned without editing source.
   Defaults live in `dagagent.config.prompts`; override under `[prompts]` in
   `config.toml` or `DAGAGENT_PROMPTS__<FIELD>`.
+- First-party tool integrations layer (`settings.tools`): bundled, opt-in tools
+  configured under `[tools.*]` and registered by `build_runtime`, distinct from
+  third-party entry-point plugins. First integration: **web** — `web_fetch(url)`
+  fetches a page and extracts its main text via trafilatura (boilerplate
+  removed), for reading and high-fidelity summarisation of webpages. Off by
+  default; needs the optional `web` extra (`pip install dagagent[web]`) and
+  `tools.web.fetch = true`.
 - Opt-in third-party tool plugins: with `load_tool_plugins = true`
   (`DAGAGENT_LOAD_TOOL_PLUGINS`), `build_runtime` discovers and registers tools
   advertised through the `dagagent.tools` entry-point group. The harness has

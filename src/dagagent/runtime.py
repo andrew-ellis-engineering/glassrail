@@ -14,6 +14,7 @@ from dagagent.config import Settings, get_settings
 from dagagent.events import EventBus
 from dagagent.executor import Executor, Orchestrator
 from dagagent.harness import ToolHarness, register_builtins
+from dagagent.harness.integrations import register_integrations
 from dagagent.planner import Planner
 from dagagent.providers import router_from_settings
 from dagagent.state import InMemoryStateStore, StateStore
@@ -42,6 +43,7 @@ def build_runtime(settings: Settings | None = None, *, store: StateStore | None 
     bus = EventBus()
     harness = ToolHarness()
     register_builtins(harness)
+    register_integrations(harness, settings)
     if settings.load_tool_plugins:
         loaded = harness.load_entry_points()
         log.info("Loaded %d tool plugin(s) from the dagagent.tools entry-point group", loaded)
