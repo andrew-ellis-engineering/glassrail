@@ -52,6 +52,12 @@ def _terminal_snapshot(state: ExecutionState) -> Event | None:
     if state.status is TaskStatus.COMPLETED:
         return TaskCompleted(task_id=state.task_id, final_output=state.final_output)
     if state.status is TaskStatus.FAILED:
+        if state.plan is None and state.planning_attempts:
+            return TaskFailed(
+                task_id=state.task_id,
+                error=state.error or "task failed",
+                attempts=[a.model_dump(mode="json") for a in state.planning_attempts],
+            )
         return TaskFailed(task_id=state.task_id, error=state.error or "task failed")
     if state.status is TaskStatus.AWAITING_CONFIRMATION:
         node_count = len(state.plan.nodes) if state.plan else 0

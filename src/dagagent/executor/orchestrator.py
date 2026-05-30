@@ -68,14 +68,24 @@ class Orchestrator:
                 plan = await self._plan_with_retry(state)
                 if plan is None:
                     await self._emit(
-                        PlanFailed(task_id=task_id, error=state.error or "planning failed")
+                        PlanFailed(
+                            task_id=task_id,
+                            error=state.error or "planning failed",
+                            attempts=[a.model_dump(mode="json") for a in state.planning_attempts],
+                        )
                     )
                     await self._store.save_task(state)
                     return
 
                 state.plan = plan
                 log.info("[%s] Plan validated: %d nodes", task_id, len(plan.nodes))
-                await self._emit(PlanReady(task_id=task_id, node_count=len(plan.nodes)))
+                await self._emit(
+                    PlanReady(
+                        task_id=task_id,
+                        node_count=len(plan.nodes),
+                        plan=plan.model_dump(mode="json"),
+                    )
+                )
 
                 if self._settings.confirm_plans:
                     state.status = TaskStatus.AWAITING_CONFIRMATION
@@ -96,7 +106,13 @@ class Orchestrator:
                 state.status = TaskStatus.FAILED
                 state.error = str(exc)
                 state.touch()
-                await self._emit(TaskFailed(task_id=task_id, error=str(exc)))
+                await self._emit(
+                    TaskFailed(
+                        task_id=task_id,
+                        error=str(exc),
+                        attempts=[a.model_dump(mode="json") for a in state.planning_attempts],
+                    )
+                )
             finally:
                 await self._store.save_task(state)
                 span.set_attribute(ATTR_TASK_STATUS, state.status.value)
@@ -126,7 +142,13 @@ class Orchestrator:
                 state.status = TaskStatus.FAILED
                 state.error = str(exc)
                 state.touch()
-                await self._emit(TaskFailed(task_id=task_id, error=str(exc)))
+                await self._emit(
+                    TaskFailed(
+                        task_id=task_id,
+                        error=str(exc),
+                        attempts=[a.model_dump(mode="json") for a in state.planning_attempts],
+                    )
+                )
             finally:
                 await self._store.save_task(state)
                 span.set_attribute(ATTR_TASK_STATUS, state.status.value)
@@ -149,9 +171,23 @@ class Orchestrator:
 
         for attempt in range(attempts):
             try:
-                plan = await self._planner.plan(state.user_request)
+                plan_attempt = await self._planner.plan_attempt(
+                    state.user_request,
+                    attempt=attempt,
+                )
                 state.replan_count = attempt
-                return plan
+                state.planning_attempts.append(plan_attempt)
+                state.touch()
+                await self._store.save_task(state)
+                if plan_attempt.plan is not None:
+                    return plan_attempt.plan
+                last_error = plan_attempt.error
+                log.warning(
+                    "[%s] Plan invalid (attempt %d): %s",
+                    state.task_id,
+                    attempt,
+                    plan_attempt.error,
+                )
             except (PlanValidationError, ValueError) as exc:
                 last_error = str(exc)
                 log.warning(

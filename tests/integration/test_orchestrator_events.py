@@ -14,7 +14,7 @@ from collections.abc import Sequence as _Sequence
 
 from dagagent.config import Settings
 from dagagent.core import ExecutionState, new_task_id
-from dagagent.events import Event, EventBus, Subscription, TaskCompleted
+from dagagent.events import Event, EventBus, PlanFailed, Subscription, TaskCompleted
 from dagagent.executor import Executor, Orchestrator
 from dagagent.harness import ToolHarness, register_builtins
 from dagagent.planner import Planner
@@ -152,6 +152,9 @@ async def test_failed_planning_emits_plan_failed_and_no_completion() -> None:
 
     types = [e.type for e in events]
     assert types == ["planning_started", "plan_failed"]
+    failed = events[-1]
+    assert isinstance(failed, PlanFailed)
+    assert failed.attempts != []
 
 
 async def test_confirm_gate_emits_awaiting_then_completes_on_resume() -> None:

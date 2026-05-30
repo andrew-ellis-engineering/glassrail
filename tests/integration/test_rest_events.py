@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from collections.abc import Sequence as _Sequence
+from typing import cast
 
 from fastapi.testclient import TestClient
 
@@ -131,3 +132,6 @@ def test_events_snapshot_for_failed_task() -> None:
     # (the live stream would have carried the original plan_failed event).
     assert len(events) == 1
     assert events[0]["type"] == "task_failed"
+    attempts = events[0]["attempts"]
+    assert isinstance(attempts, list)
+    assert len(cast("list[object]", attempts)) == 2

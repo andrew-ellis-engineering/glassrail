@@ -104,6 +104,12 @@ async def _run_task(
             await rt.orchestrator.run(state.task_id)
     except TimeoutError:
         run_error = "timed out"
+        latest = await rt.store.load_task(state.task_id)
+        timed_out = latest or state
+        timed_out.status = TaskStatus.FAILED
+        timed_out.error = run_error
+        timed_out.touch()
+        await rt.store.save_task(timed_out)
 
     final = await rt.store.load_task(state.task_id) or state
     return _envelope(final, error=run_error)
@@ -166,6 +172,10 @@ def _envelope(state: ExecutionState, *, error: str | None = None) -> dict[str, o
         "total_tokens": total_tokens,
         "task_id": str(state.task_id),
         "replan_count": state.replan_count,
+        "plan": state.plan.model_dump(mode="json") if state.plan is not None else None,
+        "planning_attempts": [
+            attempt.model_dump(mode="json") for attempt in state.planning_attempts
+        ],
         "branch_log": [e.model_dump(mode="json") for e in state.branch_log],
         "flagged_nodes": [r.node_id for r in state.results.values() if r.flagged],
     }

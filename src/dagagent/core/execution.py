@@ -17,6 +17,10 @@ from dagagent.core.ids import TaskId
 from dagagent.core.plan import Plan
 
 
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
 class NodeStatus(StrEnum):
     """Per-node lifecycle."""
 
@@ -56,6 +60,24 @@ class BranchLogEntry(BaseModel):
     timestamp: datetime
 
 
+class PlanningAttempt(BaseModel):
+    """One planner attempt, retained for debugging failed or flaky plans."""
+
+    attempt: int
+    raw_output: str
+    parsed: dict[str, Any] | None = None
+    plan: Plan | None = None
+    error: str | None = None
+    error_type: str | None = None
+    tokens_used: int = 0
+    created_at: datetime = Field(default_factory=_utcnow)
+
+    @property
+    def valid(self) -> bool:
+        """Whether this attempt produced a validated plan."""
+        return self.plan is not None and self.error is None
+
+
 class TaskStatus(StrEnum):
     """Top-level lifecycle of a task."""
 
@@ -69,10 +91,6 @@ class TaskStatus(StrEnum):
     """Mid-execution pause for resume."""
 
 
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
-
-
 class ExecutionState(BaseModel):
     """Serialisable state for a single task."""
 
@@ -84,6 +102,7 @@ class ExecutionState(BaseModel):
     completed_nodes: list[int] = Field(default_factory=list)
     skipped_nodes: list[int] = Field(default_factory=list)
     branch_log: list[BranchLogEntry] = Field(default_factory=list)
+    planning_attempts: list[PlanningAttempt] = Field(default_factory=list)
 
     status: TaskStatus = TaskStatus.PLANNING
     replan_count: int = 0

@@ -70,6 +70,11 @@ uv run dagagent run "<task>" --model <name>    # override tier 0's model
 uv run dagagent run "<task>" --timeout 120     # wall-clock budget in seconds
 ```
 
+The `--json` envelope includes the accepted `plan` when planning succeeds and
+`planning_attempts` for every planner try, including raw model output plus parse
+or validation errors. This makes failed plans inspectable from headless runs and
+eval artefacts.
+
 **Gateway + live viewer** — start the REST gateway, then watch a task stream:
 
 ```bash

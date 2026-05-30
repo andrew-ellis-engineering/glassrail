@@ -12,6 +12,11 @@ serialised as JSON with a `type` discriminator and a `task_id`. The stream
 ends after the first terminal event (`task_completed`, `task_failed`, or
 `awaiting_confirmation`).
 
+Planning and node events carry the debugging payload needed to inspect bad
+runs: `plan_ready` includes the accepted plan, `plan_failed` / `task_failed`
+include `planning_attempts` when planning never produced a valid plan, and
+`node_finished` includes an `error` field for failed or flagged nodes.
+
 If you connect *after* the task already finished, you don't miss out: the
 server synthesises a single snapshot event for the terminal state and closes.
 

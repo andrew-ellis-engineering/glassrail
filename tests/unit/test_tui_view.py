@@ -87,6 +87,26 @@ def test_view_records_branch_and_failure() -> None:
     assert view.done is True
 
 
+def test_view_records_failed_planning_attempts() -> None:
+    view = TaskView(request="x")
+    view.ingest(
+        {
+            "type": "plan_failed",
+            "task_id": "t",
+            "error": "planning failed",
+            "attempts": [
+                {
+                    "attempt": 0,
+                    "raw_output": "not json",
+                    "error": "Planner returned invalid JSON",
+                }
+            ],
+        }
+    )
+    assert view.status == "failed"
+    assert view.planning_attempts[0]["raw_output"] == "not json"
+
+
 def test_view_ignores_unknown_event() -> None:
     view = TaskView(request="x")
     view.ingest({"type": "mystery"})

@@ -1,6 +1,6 @@
 # Working in this repo
 
-Always keep this file in sync with AGENTS.md if you make changes
+Always keep this file in sync with CLAUDE.md if you make changes
 
 `dagagent` is a DAG-planning agent: every task becomes a validated graph of
 nodes, each node runs with fresh context, and tier routing is deterministic.
@@ -58,7 +58,7 @@ rather than duplicating across files.
 
 - `README.md` — user-facing front door: what it is, Quickstart, ways to run it,
   configuration basics, links out. Keep current (see the rule above).
-- `CLAUDE.md` (this file) — operating manual for working in the repo:
+- `AGENTS.md` (this file) — operating manual for working in the repo:
   conventions, primitives, package map, test layout, commit rules.
 - `CHANGELOG.md` — the running inventory of what has landed. The README's Status
   section points here instead of listing components.
@@ -68,7 +68,7 @@ rather than duplicating across files.
   (currently a stub being ported from the design vault).
 - `docs/roadmap.md` — phases and what's next.
 - `docs/evals.md` — the eval framework: pass@k vs pass^k, grading cascade, how
-  to run it. (Framework internals live in `eval-framework/CLAUDE.md`.)
+  to run it. (Framework internals live in `eval-framework/AGENTS.md`.)
 - `docs/streaming.md` — the task event stream (SSE and WebSocket transports).
 - `docs/observability.md` — OpenTelemetry span tree and how to enable tracing.
 - `docs/deployment.md` — the production `Dockerfile` and how to serve the gateway.
@@ -134,7 +134,7 @@ Grep existing tests for `_Scripted` for the pattern.
 Model-quality **evals** (planner/executor behaviour, multi-trial pass@k vs
 pass^k) are not pytest — they live in the standalone `eval-framework/` and run
 the real agent over its tier routing via `dagagent run --json`. See
-`docs/evals.md` and `eval-framework/CLAUDE.md`.
+`docs/evals.md` and `eval-framework/AGENTS.md`.
 
 ## Commits
 

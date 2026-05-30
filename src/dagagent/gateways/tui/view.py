@@ -9,7 +9,7 @@ testable without a terminal.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeGuard
 
 from rich.console import Group, RenderableType
 from rich.panel import Panel
@@ -52,6 +52,8 @@ class TaskView:
     status: str = "planning"
     node_count: int | None = None
     nodes: dict[int, _NodeRow] = field(default_factory=dict)
+    plan: dict[str, Any] | None = None
+    planning_attempts: list[dict[str, Any]] = field(default_factory=list)
     final_output: str | None = None
     error: str | None = None
     done: bool = False
@@ -64,6 +66,8 @@ class TaskView:
         elif etype == "plan_ready":
             self.status = "executing"
             self.node_count = _as_int(event.get("node_count"))
+            plan = event.get("plan")
+            self.plan = plan if isinstance(plan, dict) else None
         elif etype == "node_started":
             row = self._row(event)
             row.node_type = str(event.get("node_type", row.node_type))
@@ -75,6 +79,9 @@ class TaskView:
             row.confidence = _as_float(event.get("confidence"))
             row.flagged = bool(event.get("flagged", False))
             row.tier = _as_int(event.get("tier_used")) or row.tier
+            error = event.get("error")
+            if isinstance(error, str) and error:
+                row.status = f"{row.status}: {error}"
         elif etype == "branch_decided":
             row = self._row(event)
             branch = event.get("branch_taken")
@@ -86,6 +93,8 @@ class TaskView:
         elif etype in ("task_failed", "plan_failed"):
             self.status = "failed"
             self.error = _as_str(event.get("error"))
+            attempts = event.get("attempts")
+            self.planning_attempts = attempts if _is_attempt_list(attempts) else []
             self.done = True
         elif etype == "awaiting_confirmation":
             self.status = "awaiting_confirmation"
@@ -135,6 +144,14 @@ class TaskView:
             body.append(Panel(self.final_output, title="result", border_style="green"))
         if self.error is not None:
             body.append(Panel(self.error, title="error", border_style="red"))
+        if self.planning_attempts:
+            body.append(
+                Panel(
+                    _format_attempts(self.planning_attempts),
+                    title="planning attempts",
+                    border_style="red",
+                )
+            )
 
         return Panel(Group(*body), title="dagagent", border_style=style)
 
@@ -149,3 +166,20 @@ def _as_float(value: Any) -> float | None:
 
 def _as_str(value: Any) -> str | None:
     return value if isinstance(value, str) else None
+
+
+def _is_attempt_list(value: Any) -> TypeGuard[list[dict[str, Any]]]:
+    return isinstance(value, list) and all(isinstance(item, dict) for item in value)
+
+
+def _format_attempts(attempts: list[dict[str, Any]]) -> str:
+    lines: list[str] = []
+    for attempt in attempts:
+        number = attempt.get("attempt", "?")
+        error = attempt.get("error") or "valid"
+        raw = str(attempt.get("raw_output", ""))
+        snippet = raw.replace("\n", " ")[:240]
+        lines.append(f"{number}: {error}")
+        if snippet:
+            lines.append(f"raw: {snippet}")
+    return "\n".join(lines)

@@ -34,6 +34,7 @@ def test_execution_state_defaults() -> None:
     assert state.completed_nodes == []
     assert state.skipped_nodes == []
     assert state.branch_log == []
+    assert state.planning_attempts == []
     assert state.final_output is None
     assert state.error is None
     assert state.created_at.tzinfo is UTC

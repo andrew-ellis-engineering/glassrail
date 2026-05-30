@@ -9,7 +9,7 @@ them through :class:`dagagent.events.bus.EventBus`.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -34,11 +34,13 @@ class PlanningStarted(_BaseEvent):
 class PlanReady(_BaseEvent):
     type: Literal["plan_ready"] = "plan_ready"
     node_count: int
+    plan: dict[str, Any] | None = None
 
 
 class PlanFailed(_BaseEvent):
     type: Literal["plan_failed"] = "plan_failed"
     error: str
+    attempts: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class AwaitingConfirmation(_BaseEvent):
@@ -60,6 +62,7 @@ class NodeFinished(_BaseEvent):
     confidence: float
     flagged: bool
     tier_used: int | None = None
+    error: str | None = None
 
 
 class BranchDecided(_BaseEvent):
@@ -77,6 +80,7 @@ class TaskCompleted(_BaseEvent):
 class TaskFailed(_BaseEvent):
     type: Literal["task_failed"] = "task_failed"
     error: str
+    attempts: list[dict[str, Any]] = Field(default_factory=list)
 
 
 Event = (

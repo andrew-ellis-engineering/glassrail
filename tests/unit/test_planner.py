@@ -134,6 +134,17 @@ async def test_invalid_json_raises_value_error(harness: ToolHarness, settings: S
         await planner.plan("hi")
 
 
+async def test_plan_attempt_captures_invalid_json(harness: ToolHarness, settings: Settings) -> None:
+    planner = _planner_from(_FixedProvider(payload="not json at all"), harness, settings)
+    attempt = await planner.plan_attempt("hi", attempt=2)
+    assert attempt.attempt == 2
+    assert attempt.raw_output == "not json at all"
+    assert attempt.error_type == "json"
+    assert attempt.error is not None
+    assert attempt.plan is None
+    assert attempt.valid is False
+
+
 async def test_plan_validation_errors_propagate(harness: ToolHarness, settings: Settings) -> None:
     payload = json.dumps(
         {
@@ -151,3 +162,27 @@ async def test_plan_validation_errors_propagate(harness: ToolHarness, settings: 
     planner = _planner_from(_FixedProvider(payload=payload), harness, settings)
     with pytest.raises(PlanValidationError, match="unknown tools"):
         await planner.plan("hi")
+
+
+async def test_plan_attempt_captures_validation_error(
+    harness: ToolHarness, settings: Settings
+) -> None:
+    payload = json.dumps(
+        {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "tool",
+                    "description": "use a tool that doesn't exist",
+                    "tool": "totally_bogus",
+                    "context_needed": [],
+                }
+            ]
+        }
+    )
+    planner = _planner_from(_FixedProvider(payload=payload), harness, settings)
+    attempt = await planner.plan_attempt("hi", attempt=0)
+    assert attempt.parsed is not None
+    assert attempt.error_type == "validation"
+    assert attempt.error is not None
+    assert "unknown tools" in attempt.error

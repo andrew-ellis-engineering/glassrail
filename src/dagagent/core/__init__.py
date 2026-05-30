@@ -17,6 +17,7 @@ from dagagent.core.execution import (
     ExecutionState,
     NodeResult,
     NodeStatus,
+    PlanningAttempt,
     TaskStatus,
 )
 from dagagent.core.ids import TaskId, new_task_id
@@ -32,6 +33,7 @@ __all__ = [
     "NodeType",
     "Plan",
     "PlanValidationError",
+    "PlanningAttempt",
     "TaskId",
     "TaskStatus",
     "ToolExecutionError",

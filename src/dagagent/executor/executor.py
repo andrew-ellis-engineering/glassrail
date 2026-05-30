@@ -217,6 +217,7 @@ class Executor:
             confidence=result.confidence,
             flagged=result.flagged,
             tier_used=result.tier_used,
+            error=result.error,
         )
 
     # ── Per-node executors ────────────────────────────────────────────────

@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any, cast
 
 from dagagent.config import Settings
-from dagagent.core import Plan
+from dagagent.core import Plan, PlanningAttempt, PlanValidationError
 from dagagent.harness import ToolHarness
 from dagagent.providers import Message, TierRouter, collect
 from dagagent.telemetry import ATTR_MIN_TIER, ATTR_PLAN_NODE_COUNT, SPAN_PLAN, get_tracer
@@ -38,6 +39,21 @@ class Planner:
 
     async def plan(self, request: str, *, min_tier: int = 0) -> Plan:
         """Generate and validate a plan for ``request``."""
+        attempt = await self.plan_attempt(request, attempt=0, min_tier=min_tier)
+        if attempt.plan is not None:
+            return attempt.plan
+        if attempt.error_type == "validation":
+            raise PlanValidationError(attempt.error or "Plan failed validation")
+        raise ValueError(attempt.error or "Planner failed")
+
+    async def plan_attempt(
+        self,
+        request: str,
+        *,
+        attempt: int,
+        min_tier: int = 0,
+    ) -> PlanningAttempt:
+        """Generate one plan attempt and retain raw output plus validation errors."""
         with get_tracer().start_as_current_span(SPAN_PLAN) as span:
             span.set_attribute(ATTR_MIN_TIER, min_tier)
             tool_schemas_str = json.dumps(self._harness.all_schemas(), indent=2)
@@ -61,9 +77,50 @@ class Planner:
             try:
                 data = json.loads(raw)
             except json.JSONDecodeError as exc:
-                raise ValueError(f"Planner returned invalid JSON: {exc}\nRaw: {raw[:500]}") from exc
+                return PlanningAttempt(
+                    attempt=attempt,
+                    raw_output=raw,
+                    error=f"Planner returned invalid JSON: {exc}",
+                    error_type="json",
+                    tokens_used=tokens,
+                )
 
-            plan = Plan.model_validate(data)
-            self._validator.validate(plan)
+            if not isinstance(data, dict):
+                return PlanningAttempt(
+                    attempt=attempt,
+                    raw_output=raw,
+                    error=f"Planner returned {type(data).__name__}, expected JSON object",
+                    error_type="schema",
+                    tokens_used=tokens,
+                )
+            parsed = cast("dict[str, Any]", data)
+
+            try:
+                plan = Plan.model_validate(parsed)
+                self._validator.validate(plan)
+            except PlanValidationError as exc:
+                return PlanningAttempt(
+                    attempt=attempt,
+                    raw_output=raw,
+                    parsed=parsed,
+                    error=str(exc),
+                    error_type="validation",
+                    tokens_used=tokens,
+                )
+            except ValueError as exc:
+                return PlanningAttempt(
+                    attempt=attempt,
+                    raw_output=raw,
+                    parsed=parsed,
+                    error=str(exc),
+                    error_type="schema",
+                    tokens_used=tokens,
+                )
             span.set_attribute(ATTR_PLAN_NODE_COUNT, len(plan.nodes))
-            return plan
+            return PlanningAttempt(
+                attempt=attempt,
+                raw_output=raw,
+                parsed=parsed,
+                plan=plan,
+                tokens_used=tokens,
+            )

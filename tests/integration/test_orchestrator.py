@@ -146,6 +146,9 @@ async def test_failed_planning_marks_task_failed() -> None:
     assert failed.status is TaskStatus.FAILED
     assert failed.error is not None
     assert "Planning failed" in failed.error
+    assert len(failed.planning_attempts) == 2
+    assert failed.planning_attempts[0].raw_output == "this isn't even close to JSON"
+    assert failed.planning_attempts[0].error_type == "json"
 
 
 async def test_resume_on_non_paused_task_is_noop() -> None:
