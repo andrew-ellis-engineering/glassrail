@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 
-from dagagent.core import ToolRegistrationError
+from dagagent.core import ToolExecutionError, ToolRegistrationError
 
 if TYPE_CHECKING:
     from dagagent.config import WebToolConfig
@@ -173,7 +173,14 @@ class DuckDuckGoProvider:
         else:
             async with httpx.AsyncClient(follow_redirects=True, timeout=timeout_s) as owned:
                 resp = await owned.post(self._URL, data=data, headers=headers)
-        resp.raise_for_status()
+        # DuckDuckGo serves an anti-bot challenge as HTTP 202 (a 2xx, so
+        # raise_for_status() stays silent). Treat anything but 200 as a block
+        # rather than parsing the challenge page into an empty result set.
+        if resp.status_code != 200:
+            raise ToolExecutionError(
+                f"DuckDuckGo returned HTTP {resp.status_code} (likely an anti-bot "
+                "challenge), not search results. Consider the 'searxng' provider."
+            )
         return parse_ddg_html(resp.text, max_results=max_results)
 
 
@@ -239,7 +246,7 @@ async def web_search(
         results = await provider.search(
             query, max_results=max_results, timeout_s=timeout_s, client=client
         )
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, ToolExecutionError) as exc:
         return {"query": query, "provider": provider.name, "error": f"{type(exc).__name__}: {exc}"}
     return {"query": query, "provider": provider.name, "results": results}
 

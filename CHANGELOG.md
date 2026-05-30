@@ -101,8 +101,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default; needs the optional `web` extra (`pip install dagagent[web]`) and
   `tools.web.fetch = true`. Adds `web_search(query)` behind a pluggable
   provider — `duckduckgo` (HTML scrape, no setup) or `searxng` (self-hosted
-  JSON API); switching is a config flip (`tools.web.search`). The old
-  `web_search` built-in stub is removed in favour of this real implementation.
+  JSON API); switching is a config flip (`tools.web.search`). A non-200 from
+  DuckDuckGo (e.g. its HTTP 202 anti-bot challenge) is surfaced as an error
+  rather than a silently empty result set. The old `web_search` built-in stub
+  is removed in favour of this real implementation.
 - Opt-in third-party tool plugins: with `load_tool_plugins = true`
   (`DAGAGENT_LOAD_TOOL_PLUGINS`), `build_runtime` discovers and registers tools
   advertised through the `dagagent.tools` entry-point group. The harness has

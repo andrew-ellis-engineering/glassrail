@@ -159,6 +159,19 @@ async def test_web_search_http_error_returns_error() -> None:
     assert "results" not in result
 
 
+async def test_web_search_ddg_block_surfaces_as_error() -> None:
+    """A 202 anti-bot challenge is reported, not silently parsed to 0 results."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, html="<html><body>anomaly challenge</body></html>")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await web_search("x", provider=DuckDuckGoProvider(), client=client)
+
+    assert "results" not in result
+    assert "202" in result["error"]
+
+
 def test_register_web_registers_search_when_enabled() -> None:
     harness = ToolHarness()
     register_web(harness, WebToolConfig(search="duckduckgo"))
