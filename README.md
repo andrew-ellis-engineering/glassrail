@@ -132,22 +132,25 @@ prompt must still ask for `{"summary": ..., "confidence": ...}`).
 
 ### Tools
 
-Built-in tools (`file_read`, plus `calendar_get` / `memory_search` /
-`web_search` stubs) always register. Add a first-party tool by decorating a
-function with `@harness.tool(name=..., description=..., parameters=<JSON
-Schema>)`.
+Built-in tools (`file_read`, plus `calendar_get` / `memory_search` stubs)
+always register. Add a first-party tool by decorating a function with
+`@harness.tool(name=..., description=..., parameters=<JSON Schema>)`.
 
 **First-party integrations** are bundled but opt-in, configured under
-`[tools.*]`. The **web** integration adds `web_fetch(url)` (fetch a page and
-extract its main text — for reading or summarising webpages); it needs the
-`web` extra and is off by default:
+`[tools.*]`. The **web** integration needs the `web` extra and is off by
+default:
+- `web_fetch(url)` — fetch a page and extract its main text (for reading or
+  summarising webpages).
+- `web_search(query)` — search the web behind a pluggable provider:
+  `duckduckgo` (no setup) or `searxng` (point at a self-hosted instance).
 
 ```bash
-uv sync --extra web                      # installs trafilatura
+uv sync --extra web                      # installs trafilatura + lxml
 ```
 ```toml
 [tools.web]
 fetch = true
+search = "duckduckgo"                    # or "searxng" (+ searxng_url)
 ```
 
 **Third-party plugins** advertised through the `dagagent.tools` entry-point

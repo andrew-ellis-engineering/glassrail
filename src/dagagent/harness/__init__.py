@@ -7,7 +7,6 @@ from dagagent.harness.builtin import (
     file_read,
     memory_search,
     register_builtins,
-    web_search,
 )
 from dagagent.harness.registry import ToolFunc, ToolHarness, ToolSchema
 
@@ -19,5 +18,4 @@ __all__ = [
     "file_read",
     "memory_search",
     "register_builtins",
-    "web_search",
 ]

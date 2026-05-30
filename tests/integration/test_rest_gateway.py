@@ -72,7 +72,7 @@ def test_tools_lists_builtins(wired: tuple[TestClient, InMemoryStateStore]) -> N
     resp = client.get("/tools")
     assert resp.status_code == 200
     names = {t["function"]["name"] for t in resp.json()["tools"]}
-    assert names == {"calendar_get", "memory_search", "web_search", "file_read"}
+    assert names == {"calendar_get", "memory_search", "file_read"}
 
 
 def test_submit_task_returns_id_and_status(

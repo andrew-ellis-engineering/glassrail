@@ -95,7 +95,7 @@ def test_unknown_names_filters_none_and_known(harness: ToolHarness) -> None:
 
 async def test_register_builtins(harness: ToolHarness) -> None:
     register_builtins(harness)
-    assert harness.all_names() == {"calendar_get", "memory_search", "web_search", "file_read"}
+    assert harness.all_names() == {"calendar_get", "memory_search", "file_read"}
     result: dict[str, Any] = await harness.execute("calendar_get", {"date": "2026-05-27"})
     assert result["date"] == "2026-05-27"
     assert result["events"] == []

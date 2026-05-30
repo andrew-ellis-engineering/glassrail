@@ -1,9 +1,10 @@
 """Built-in tools registered by default.
 
-``calendar_get``, ``memory_search``, and ``web_search`` are placeholders that
-return empty results — they exist so the planner has a non-empty toolset to
-plan around. Replace them with real implementations (or remove from the
-registry) for production use.
+``calendar_get`` and ``memory_search`` are placeholders that return empty
+results — they exist so the planner has a non-empty toolset to plan around.
+Replace them with real implementations (or remove from the registry) for
+production use. Web search is no longer a stub here: it lives in the opt-in
+web integration (``dagagent.harness.integrations.web``).
 
 ``file_read`` is a real implementation, intentionally simple.
 """
@@ -25,11 +26,6 @@ async def calendar_get(date: str) -> dict[str, Any]:
 async def memory_search(query: str, limit: int = 5) -> dict[str, Any]:
     """Search the agent's long-term memory store (stub)."""
     return {"query": query, "limit": limit, "results": [], "source": "stub"}
-
-
-async def web_search(query: str) -> dict[str, Any]:
-    """Search the web for current information (stub)."""
-    return {"query": query, "results": [], "source": "stub"}
 
 
 async def file_read(path: str) -> dict[str, Any]:
@@ -67,18 +63,6 @@ def register_builtins(harness: ToolHarness) -> None:
             "required": ["query"],
         },
     )(memory_search)
-
-    harness.tool(
-        name="web_search",
-        description="Search the web for current information (stub).",
-        parameters={
-            "type": "object",
-            "properties": {
-                "query": {"type": "string"},
-            },
-            "required": ["query"],
-        },
-    )(web_search)
 
     harness.tool(
         name="file_read",
