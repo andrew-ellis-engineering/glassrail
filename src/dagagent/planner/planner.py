@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 
+from dagagent.config import Settings
 from dagagent.core import Plan
 from dagagent.harness import ToolHarness
 from dagagent.providers import Message, TierRouter, collect
@@ -76,10 +77,12 @@ class Planner:
         router: TierRouter,
         harness: ToolHarness,
         validator: PlanValidator,
+        settings: Settings,
     ) -> None:
         self._router = router
         self._harness = harness
         self._validator = validator
+        self._settings = settings
 
     async def plan(self, request: str, *, min_tier: int = 0) -> Plan:
         """Generate and validate a plan for ``request``."""
@@ -98,7 +101,7 @@ class Planner:
                 messages,
                 min_tier=min_tier,
                 json_mode=True,
-                max_tokens=2048,
+                max_tokens=self._settings.budgets.planner,
             )
             raw, tokens = await collect(stream)
             log.info("Plan generated (%d tokens)", tokens)

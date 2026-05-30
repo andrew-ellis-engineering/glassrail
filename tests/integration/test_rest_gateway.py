@@ -52,7 +52,7 @@ def wired() -> tuple[TestClient, InMemoryStateStore]:
     register_builtins(harness)
     router = TierRouter([_Scripted([])])
     validator = PlanValidator(harness=harness, settings=settings)
-    planner = Planner(router=router, harness=harness, validator=validator)
+    planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
     executor = Executor(router=router, harness=harness, settings=settings)
     store = InMemoryStateStore()
     orch = Orchestrator(planner=planner, executor=executor, state_store=store, settings=settings)

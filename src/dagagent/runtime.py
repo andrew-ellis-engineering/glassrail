@@ -41,7 +41,7 @@ def build_runtime(settings: Settings | None = None, *, store: StateStore | None 
     register_builtins(harness)
     router = router_from_settings(settings)
     validator = PlanValidator(harness=harness, settings=settings)
-    planner = Planner(router=router, harness=harness, validator=validator)
+    planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
     executor = Executor(router=router, harness=harness, settings=settings, event_bus=bus)
     store = store or InMemoryStateStore()
     orchestrator = Orchestrator(

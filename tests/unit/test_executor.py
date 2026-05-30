@@ -8,7 +8,7 @@ from collections.abc import Sequence as _Sequence
 
 import pytest
 
-from dagagent.config import Settings
+from dagagent.config import NodeBudgets, Settings
 from dagagent.core import (
     ExecutionState,
     Node,
@@ -329,3 +329,72 @@ async def test_empty_tool_result_bypasses_shape_check(empty_tool_executor: Execu
 
     result = await empty_tool_executor.execute(state)
     assert result.results[1].status is NodeStatus.EMPTY
+
+
+class _CapturingProvider:
+    """Fake provider that records the ``max_tokens`` of each call."""
+
+    def __init__(self, responses: _Sequence[str], *, tier: int = 0) -> None:
+        self._responses: list[str] = list(responses)
+        self._tier = tier
+        self.max_tokens_seen: list[int] = []
+
+    @property
+    def name(self) -> str:
+        return "capturing"
+
+    @property
+    def tier(self) -> int:
+        return self._tier
+
+    async def complete(
+        self,
+        messages: list[Message],
+        *,
+        json_mode: bool = False,
+        max_tokens: int = 1024,
+        timeout_s: float | None = None,
+    ) -> AsyncIterator[Chunk]:
+        del messages, json_mode, timeout_s
+        self.max_tokens_seen.append(max_tokens)
+        yield Chunk(text=self._responses.pop(0), tokens_used=1)
+
+
+async def test_content_node_uses_its_configured_budget() -> None:
+    """A SUMMARY node's LLM call is capped at the configured summary budget."""
+    settings = Settings(budgets=NodeBudgets(summary=7777))
+    provider = _CapturingProvider([json.dumps({"summary": "x", "confidence": 0.9})])
+    executor = Executor(
+        router=TierRouter([provider]),
+        harness=ToolHarness(),
+        settings=settings,
+    )
+    state = _state(Plan(nodes=[Node(id=1, type=NodeType.SUMMARY, description="condense")]))
+
+    await executor.execute(state)
+    assert provider.max_tokens_seen == [7777]
+
+
+async def test_decision_node_uses_its_configured_budget() -> None:
+    """The decision micro-call is capped at the configured decision budget."""
+    settings = Settings(budgets=NodeBudgets(decision=42))
+    provider = _CapturingProvider([json.dumps({"branch": "no", "confidence": 0.9})])
+    executor = Executor(
+        router=TierRouter([provider]),
+        harness=ToolHarness(),
+        settings=settings,
+    )
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.DECISION,
+                description="branch",
+                condition="?",
+                branches={"yes": [], "no": []},
+                default_branch="no",
+            )
+        ]
+    )
+    await executor.execute(_state(plan))
+    assert provider.max_tokens_seen == [42]

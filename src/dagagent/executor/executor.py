@@ -76,8 +76,8 @@ Respond ONLY with valid JSON: {"reasoning": "<your step-by-step reasoning>", "co
 """  # noqa: E501
 
 SUMMARY_SYSTEM = """\
-You are a summarisation engine. Condense the provided context into the shortest form that preserves the facts a downstream node needs. Drop boilerplate, redundancy, and formatting.
-Respond ONLY with valid JSON: {"summary": "<condensed text>", "confidence": <0.0-1.0>}
+You are a summarisation engine. Produce a high-fidelity summary of the provided context: preserve every fact, figure, name, date, and claim a downstream node might need. Compress language, not information — drop only boilerplate, redundancy, and formatting, never substance.
+Respond ONLY with valid JSON: {"summary": "<faithful summary>", "confidence": <0.0-1.0>}
 """  # noqa: E501
 
 RESULT_SYSTEM = """\
@@ -324,7 +324,7 @@ class Executor:
                     messages,
                     min_tier=tier,
                     json_mode=True,
-                    max_tokens=256,
+                    max_tokens=self._settings.budgets.decision,
                 )
             )
             data = json.loads(raw)
@@ -379,7 +379,7 @@ class Executor:
                     messages,
                     min_tier=tier,
                     json_mode=True,
-                    max_tokens=self._settings.max_node_output_tokens,
+                    max_tokens=self._node_output_budget(node.type),
                 )
             )
             data = json.loads(raw)
@@ -442,6 +442,21 @@ class Executor:
 
     # ── Helpers ───────────────────────────────────────────────────────────
 
+    def _node_output_budget(self, node_type: NodeType) -> int:
+        """Output ``max_tokens`` for a single-LLM-call content node.
+
+        Maps the four content node types onto their configured budgets; the
+        structured micro-calls (decision, arg extraction, shape check) read
+        their budgets directly off ``settings.budgets``.
+        """
+        budgets = self._settings.budgets
+        return {
+            NodeType.THINK: budgets.think,
+            NodeType.SUMMARY: budgets.summary,
+            NodeType.SYNTHESIS: budgets.synthesis,
+            NodeType.RESULT: budgets.result,
+        }[node_type]
+
     def _select_tier(self, node: Node) -> int:
         """Pick a tier for ``node``. Deterministic — the model never decides."""
         if node.forced_tier is not None:
@@ -475,7 +490,7 @@ class Executor:
                     [{"role": "user", "content": prompt}],
                     min_tier=tier,
                     json_mode=True,
-                    max_tokens=512,
+                    max_tokens=self._settings.budgets.extract_args,
                 )
             )
             data = json.loads(raw)
@@ -508,7 +523,7 @@ class Executor:
                     ],
                     min_tier=0,
                     json_mode=True,
-                    max_tokens=128,
+                    max_tokens=self._settings.budgets.shape_check,
                 )
             )
             data = json.loads(raw)

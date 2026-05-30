@@ -90,10 +90,35 @@ parsed by `pydantic-settings`. Tiers are nested, so use the `__` delimiter:
 |---|---|---|
 | Tier 0 model | `DAGAGENT_TIER0__MODEL` | `qwen3.6-35b-moe` |
 | Tier 0 endpoint | `DAGAGENT_TIER0__BASE_URL` | `http://localhost:8080/v1` |
+| Tier 0 timeout (s) | `DAGAGENT_TIER0__TIMEOUT_S` | `10.0` |
 | Tier 1 API key | `DAGAGENT_TIER1__API_KEY` | *(empty)* |
 | HITL plan gate | `DAGAGENT_CONFIRM_PLANS` | `false` |
 
-Tiers 1–3 default to OpenRouter models; override any field the same way.
+Tiers 1–3 default to OpenRouter models; override any field the same way. With a
+local model as your only tier, raise `DAGAGENT_TIER0__TIMEOUT_S` (e.g. to `120`)
+— a large local model can take longer than the 10 s default, and a timeout is
+treated as the tier being unavailable.
+
+### Per-node token budgets
+
+Each node runs with a fresh context; these cap how many tokens it may *generate*
+(output), so reasoning and summaries get room while structured micro-calls stay
+small. Override any field under `[budgets]` in `config.toml` (or
+`DAGAGENT_BUDGETS__<FIELD>`):
+
+| Budget | Default | Used by |
+|---|---|---|
+| `planner` | 4096 | the full plan JSON |
+| `think` | 8192 | multi-step reasoning |
+| `summary` | 8192 | high-fidelity document/webpage summaries |
+| `synthesis` | 4096 | combining prior outputs |
+| `result` | 4096 | the final answer |
+| `decision` | 256 | a branch label |
+| `extract_args` | 512 | a tool-args object |
+| `shape_check` | 128 | a yes/no output gate |
+
+These are *output* caps. How much a node can *read* is bounded by your served
+model's context window, not by these.
 
 ## Evals
 

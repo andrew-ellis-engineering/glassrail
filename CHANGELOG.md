@@ -81,6 +81,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   calibration fact, and a multistep recommendation). Self-documented (its own
   README/DECISIONS/CLAUDE) and kept out of the package's ruff/pyright/pytest
   scope.
+- Per-node output-token budgets (`settings.budgets`, a `NodeBudgets` table):
+  each LLM call's `max_tokens` is configurable per role — planner, think,
+  summary, synthesis, result, decision, extract_args, shape_check — with
+  generous defaults so reasoning and summaries get room while structured
+  micro-calls stay small. Override under `[budgets]` in `config.toml` or
+  `DAGAGENT_BUDGETS__<FIELD>`. Replaces the single `max_node_output_tokens`
+  setting and the previously hard-coded caps in the planner and executor.
 - Tooling: uv, ruff, pyright strict, pytest + hypothesis, pre-commit,
   MkDocs + Material. CI on Linux + macOS for Python 3.12 + 3.13.
 - Apache-2.0 license.

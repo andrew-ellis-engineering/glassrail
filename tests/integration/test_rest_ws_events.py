@@ -80,7 +80,7 @@ def _wired(responses: list[str], *, with_bus: bool = True) -> TestClient:
     register_builtins(harness)
     router = TierRouter([_Scripted(responses)])
     validator = PlanValidator(harness=harness, settings=settings)
-    planner = Planner(router=router, harness=harness, validator=validator)
+    planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
     executor = Executor(router=router, harness=harness, settings=settings, event_bus=bus)
     store = InMemoryStateStore()
     orch = Orchestrator(

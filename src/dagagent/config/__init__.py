@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from dagagent.config.settings import Settings, TierConfig
+from dagagent.config.settings import NodeBudgets, Settings, TierConfig
 
-__all__ = ["Settings", "TierConfig", "get_settings"]
+__all__ = ["NodeBudgets", "Settings", "TierConfig", "get_settings"]
 
 
 @lru_cache(maxsize=1)

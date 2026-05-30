@@ -38,6 +38,37 @@ class TierConfig(BaseModel):
     timeout_s: float = 60.0
 
 
+class NodeBudgets(BaseModel):
+    """Per-node output-token budgets — the ``max_tokens`` (generation) cap on
+    each LLM call the agent makes.
+
+    These cap *output*, not input. Every node runs with a fresh context, so a
+    budget sets how much room a node has to do its job: reasoning and summaries
+    need real room, while structured micro-calls (a branch label, an args
+    object, a yes/no gate) need very little. The model's *input* capacity is a
+    separate concern, bounded by the served model's context window — not set
+    here. Override any field via ``config.toml`` ``[budgets]`` or
+    ``DAGAGENT_BUDGETS__<FIELD>``.
+    """
+
+    planner: int = 4096
+    """The full plan JSON."""
+    think: int = 8192
+    """Multi-step reasoning over prior context."""
+    summary: int = 8192
+    """High-fidelity summaries of documents and webpages."""
+    synthesis: int = 4096
+    """Combine prior node outputs into a response."""
+    result: int = 4096
+    """The final user-facing answer."""
+    decision: int = 256
+    """A branch label + confidence — structured micro-call."""
+    extract_args: int = 512
+    """A tool-args JSON object — structured micro-call."""
+    shape_check: int = 128
+    """A yes/no output-shape gate — structured micro-call."""
+
+
 _DEFAULT_TIER0 = TierConfig(
     base_url="http://localhost:8080/v1",
     model="qwen3.6-35b-moe",
@@ -90,11 +121,13 @@ class Settings(BaseSettings):
     # ── Plan limits ──────────────────────────────────────────────────────
     max_plan_nodes: int = 12
     max_decision_nesting_depth: int = 2
-    max_node_output_tokens: int = 2000
     max_replan_attempts: int = 1
     confidence_threshold: float = 0.75
     max_subplan_nodes: int = 12
     max_subplans_per_plan: int = 2
+
+    # ── Per-node output-token budgets ────────────────────────────────────
+    budgets: NodeBudgets = NodeBudgets()
 
     # ── HITL ─────────────────────────────────────────────────────────────
     confirm_plans: bool = False
