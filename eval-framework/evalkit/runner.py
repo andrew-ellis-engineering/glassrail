@@ -1,14 +1,17 @@
-"""Runner — execute one trial: fixtures, ``claude -p``, evidence capture.
+"""Runner — execute one trial: fixtures, subject invocation, evidence capture.
 
 Each trial runs from a clean environment (principle 2). Any path named in
 ``fixtures.install`` or ``fixtures.capture`` is backed up to ``<path>.evalbackup``
 before the run and restored in a ``finally`` — and stale backups from a prior
 crash are restored before new fixtures are installed.
+
+The runner is backend-agnostic: it hands a prompt to a :class:`~evalkit.subjects.base.Subject`
+and records the normalized :class:`~evalkit.subjects.base.RunResult` into a
+:class:`~evalkit.models.Trial`. It knows nothing about claude vs dagagent.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 from datetime import UTC, datetime
@@ -16,8 +19,8 @@ from pathlib import Path
 from typing import Any
 
 from evalkit import config
-from evalkit.claude import invoke_claude
 from evalkit.models import Task, Trial
+from evalkit.subjects.base import Subject
 
 _BACKUP_SUFFIX = ".evalbackup"
 
@@ -112,23 +115,7 @@ def _build_prompt(task: Task) -> str:
     return "".join(parts)
 
 
-def _extract_trajectory(envelope: dict[str, Any]) -> list[dict[str, Any]]:
-    """Pull tool_use blocks from messages[].content[], if the envelope has them."""
-    out: list[dict[str, Any]] = []
-    messages = envelope.get("messages")
-    if not isinstance(messages, list):
-        return out
-    for message in messages:
-        content = message.get("content") if isinstance(message, dict) else None
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "tool_use":
-                out.append({"tool": block.get("name", ""), "input": block.get("input", {})})
-    return out
-
-
-def run_trial(task: Task, run_number: int, *, model: str, timeout_s: int) -> Trial:
+def run_trial(task: Task, run_number: int, *, subject: Subject, model: str, timeout_s: int) -> Trial:
     """Run one trial end to end, always restoring fixtures in ``finally``."""
     started = datetime.now(UTC)
     managed = _managed_paths(task)
@@ -156,32 +143,19 @@ def run_trial(task: Task, run_number: int, *, model: str, timeout_s: int) -> Tri
 
         _install_fixtures(task)
 
-        res = invoke_claude(
-            _build_prompt(task),
+        result = subject.run(
+            prompt=_build_prompt(task),
             model=model,
-            output_format="json",
             max_turns=task.max_turns,
-            permission_mode="acceptEdits",
             timeout_s=timeout_s,
         )
-        stdout, stderr = res.stdout, res.stderr
-        if res.timed_out:
-            error = "timed out"
-
-        if res.stdout.strip():
-            try:
-                parsed: Any = json.loads(res.stdout)
-                if isinstance(parsed, dict):
-                    envelope = parsed
-            except json.JSONDecodeError as exc:
-                error = error or f"could not parse envelope: {exc}"
-
-        rt = envelope.get("result")
-        result_text = rt if isinstance(rt, str) else ""
-        trajectory = _extract_trajectory(envelope)
-        raw_cost = envelope.get("total_cost_usd")
-        cost = float(raw_cost) if isinstance(raw_cost, (int, float)) else None
-        success = res.returncode == 0 and error is None and envelope.get("is_error") is not True
+        stdout, stderr = result.raw_stdout, result.raw_stderr
+        envelope = result.raw_envelope
+        result_text = result.result_text
+        trajectory = result.trajectory
+        cost = result.cost_usd
+        success = result.success
+        error = result.error
 
         side_effects = {raw: _read_content(_expand(raw)) for raw in task.fixtures.capture}
     except Exception as exc:  # noqa: BLE001 - record any failure into the trial record

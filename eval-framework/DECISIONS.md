@@ -43,3 +43,23 @@ prompt said to make reasonable choices and record them here rather than ask.
 
 8. **LLM judge fails closed.** Only a leading `PASS` passes; `FAIL`, `UNKNOWN`,
    unparseable output, or an invocation error all count as not-passed.
+
+9. **Subject abstraction (v0.2.0) — the framework no longer assumes `claude -p`.**
+   The system under test is now a pluggable *subject* behind one normalized
+   `RunResult` (`evalkit/subjects/`); `claude -p` is just `claude-cli`, alongside
+   `dagagent-cli`, `dagagent-gateway`, and `openai-compat`. The runner and
+   graders work off `RunResult`/`Trial` evidence only, so they are
+   backend-agnostic. To honor the stdlib-only constraint *and* stay decoupled,
+   every subject reaches its system over a process or HTTP boundary — the
+   framework never imports `dagagent`. The **judge** is likewise decoupled from
+   the subject (`evalkit/judge.py`): you can benchmark a local MLX model while
+   judging with Claude. A suite selects its backend via `default_backend` +
+   an optional `[backend]` config table; `HARNESS_VERSION` was bumped to `0.2.0`
+   (results across that boundary are not comparable).
+
+10. **dagagent trajectory tokens.** The `dagagent-*` backends map an
+    ExecutionState into the trajectory vocabulary: tool nodes → the tool name,
+    every other node → its type. Decision nodes are just `decision` (branch
+    labels are planner-chosen and unstable); the branch taken lives in the
+    step's `branch_taken` field, so branch correctness is graded on the
+    observable result text, not on a fragile token match.

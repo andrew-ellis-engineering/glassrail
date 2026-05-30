@@ -1,105 +1,109 @@
 # Evals
 
-The eval suite scores the planner and executor against a set of fixtures. It
-answers a different question from the unit and integration tests: not "does
-this function behave?" but "given a request, does the agent plan and execute
-it well?"
+Evals answer a different question from the unit and integration tests: not
+"does this function behave?" but "given a request, does the agent plan and
+execute it *well, and reliably*?" They are model-dependent and non-deterministic,
+so they are measured with multiple trials — not asserted once.
+
+Evals live in the vendored [`eval-framework/`](https://github.com/andrewellis/dagagent/tree/main/eval-framework):
+a standalone, stdlib-only harness that runs each task *k* times, captures the
+output / trajectory / side-effects, grades with a deterministic → trajectory →
+LLM cascade, and reports **pass@k** (capability — can it ever?) vs **pass^k**
+(reliability — does it every time?). See `eval-framework/README.md` for the full
+manual and `eval-framework/CLAUDE.md` for its operating constraints.
+
+## Pluggable subjects — benchmark the model you ship
+
+The harness is backend-agnostic. A "subject" is the system under test; every
+backend returns the same normalized result, so the graders never change:
+
+| backend | what it runs | use it to… |
+|---|---|---|
+| `dagagent-cli` | `dagagent run --json` (subprocess) | eval the real planner + executor over **your** tier routing |
+| `dagagent-gateway` | a running REST gateway over HTTP | eval the deployed surface end to end |
+| `openai-compat` | one `/chat/completions` call | baseline the raw model with no agent scaffolding |
+| `claude-cli` | `claude -p` | eval a Claude Code skill (the framework's original target) |
+
+The dagagent backends route through the agent's **own** tier config, so they
+benchmark the model(s) you actually deploy — tier 0 is your local MLX server by
+default. There is no point benchmarking against a model you will not run: point
+your tiers at the shipped model (`config.toml` / `DAGAGENT_TIER*__…` env), or
+pass a tier-0 override via the suite's `default_model`.
 
 ## Running
 
 ```bash
-uv run pytest -m eval
+cd eval-framework
+python3 run.py list suites/dagagent                 # load + summarize
+python3 run.py suite suites/dagagent --dry-run       # zero-cost wiring check
+python3 run.py suite suites/dagagent --trials 5      # the real thing (needs MLX up)
 ```
 
-The suite is excluded from the default `uv run pytest` sweep — it's its own
-gate. Each scenario is one parametrised test (so you get ordinary pass/fail),
-and the run prints an aggregate score table:
+A real run needs the agent reachable: `dagagent` on `PATH` (activate the venv,
+or set the suite's `[backend] command = ["uv", "run", "dagagent", "run"]`) and
+your tier-0 MLX server serving the model. The judge is independent of the
+subject — it defaults to a cheap Claude model so semantic criteria grade
+consistently; point it at MLX instead with `--grader-backend openai-compat`.
 
-```
-========================================================================
-  EVAL SUMMARY (deterministic) — 5 scenarios
-========================================================================
-  scenario                        plan  exec  score   result
-  ------------------------------------------------------------------
-  tool_then_result                1.00  1.00   1.00   PASS
-  reasoned_extraction             1.00  1.00   1.00   PASS
-  decision_branch_no              1.00  1.00   1.00   PASS
-  nested_subplan                  1.00  1.00   1.00   PASS
-  planning_failure                  --  1.00   1.00   PASS
-  ------------------------------------------------------------------
-  5/5 passed   mean score 1.00
-========================================================================
-```
+## The `dagagent run --json` contract
 
-Scores split into a **planning** dimension (was a sensible, valid plan
-produced?) and an **execution** dimension (did running it reach the right
-outcome?).
-
-## Anatomy of a scenario
-
-A `Scenario` (see `tests/eval/scenarios.py`) pairs a request with the canned
-LLM responses that drive a deterministic run and the `Expectations` it's
-graded against:
-
-```python
-Scenario(
-    id="tool_then_result",
-    request="What's on my calendar for May 29th?",
-    script=(_PLAN_CALENDAR, _SHAPE_OK, _CALENDAR_RESULT),
-    expect=Expectations(
-        min_nodes=2,
-        max_nodes=2,
-        node_types=(NodeType.TOOL, NodeType.RESULT),
-        tools=("calendar_get",),
-        final_output_contains=("nothing scheduled",),
-    ),
-)
-```
-
-`Expectations` is declarative: **only the fields you set are scored**. Each
-set field becomes one weighted check, and the scenario's score is the fraction
-of its checks that pass. A scenario passes when its score meets
-`pass_threshold` (default `1.0`).
-
-## Writing the script
-
-The `script` is the list of LLM responses, consumed in the exact order the
-engine makes calls:
-
-```
-planner call
--> for each executed node, in topological order:
-     tool       : (arg-extraction call if it has context and no args) then
-                  an output-shape-check call
-     decision   : one branch call
-     think / summary / synthesis / result : one call
-     subplan    : the nested plan's calls, recursively
-   (skipped branch nodes make no calls)
-```
-
-You don't have to count perfectly by hand: the suite fails a scenario whose
-script leaves responses unused (or asks for one that isn't there), so a script
-that's out of sync with the engine is caught immediately.
-
-## Live mode
-
-The scorer is provider-agnostic. Setting `DAGAGENT_EVAL_LIVE=1` runs the same
-scenarios against the configured tier providers instead of the canned script:
+The `dagagent-cli` backend shells out to a headless run and reads one JSON
+envelope from stdout:
 
 ```bash
-DAGAGENT_EVAL_LIVE=1 uv run pytest -m eval
+dagagent run "Is 246 even or odd?" --json --model qwen3.6-35b-moe
 ```
 
-Live runs grade structure only (plan validity, node count, node types, tools)
-— the exact output wording and branch taken are dropped, since a real model
-phrases things its own way. Live results are **reported, not gated**: model
-output varies, so the live job never blocks a PR. Tightening live scores into
-a release gate is the work that unlocks the first PyPI publish (see the
-[roadmap](roadmap.md)).
+```json
+{
+  "result": "246 is even; half of it is 123.",
+  "trajectory": [{"tool": "decision", "node_type": "decision", "tier_used": 0,
+                  "branch_taken": "even", "confidence": 0.9, ...}, ...],
+  "status": "completed", "is_error": false, "error": null,
+  "total_cost_usd": null, "total_tokens": 412, "task_id": "01J…"
+}
+```
 
-## In CI
+`result` is the task's `final_output`; `trajectory` normalizes the executed plan
+(tool nodes → the tool name, every other node → its type, with tier and branch
+recorded per step) so trajectory criteria work the same across backends. Logs go
+to stderr, so stdout stays a clean envelope.
 
-CI runs `pytest -m eval` in a dedicated, non-blocking job. The deterministic
-scenarios run offline and reliably; the live scenarios are skipped unless
-`DAGAGENT_EVAL_LIVE=1` is set, so external-provider flakiness can never block a
-pull request.
+## Anatomy of a task
+
+A task is a directory under `suites/<name>/tasks/<id>/` with a `prompt.md` (sent
+to the agent — **no grading hints**, the temporal firewall) and a `config.toml`
+declaring criteria:
+
+```toml
+type = "capability"          # start here; the ratchet promotes to "regression"
+difficulty = 2
+control_for = "classify-even" # paired opposite-answer task (concordance check)
+
+[[criteria]]                  # deterministic first — 100% precision, no model
+text = "Identifies 247 as odd"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)\\bodd\\b"
+
+[[criteria]]                  # trajectory — did it use the mechanism?
+text = "Planner used a decision node to branch on the condition"
+grader = "trajectory"
+tool_sequence = ["decision"]
+
+[[criteria]]                  # llm judge — last resort, one dimension per call
+text = "Correctly classifies as odd and gives the next even number as 248"
+grader = "llm"
+```
+
+Branch *labels* are planner-chosen and unstable, so branch correctness is graded
+on the observable result text (or the judge), not on the trajectory token — the
+token for any decision node is simply `decision`.
+
+## Cost discipline
+
+Trials cost real inference. Keep criteria deterministic where possible (only
+`llm` criteria call a model), default the judge to a cheap model, re-grade
+archived trials for free with `run.py score`, and validate wiring with
+`--dry-run` before a broad run. See `eval-framework/README.md`'s cost section.

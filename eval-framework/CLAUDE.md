@@ -1,11 +1,17 @@
 # Working in eval-framework/
 
-A self-contained, multi-trial evaluation harness for AI skills: it runs each
-task k times via `claude -p`, captures output / side-effects / tool trajectory,
-grades with a deterministic → trajectory → LLM cascade, and reports pass@k
-(capability) vs pass^k (reliability). It is **vendored** into this repo but
-stands alone — it does not import from `dagagent` and is excluded from the
-package's ruff / pyright / pytest scope.
+A self-contained, multi-trial evaluation harness for agent workflows: it runs
+each task k times against a pluggable **subject** (the system under test),
+captures output / side-effects / trajectory, grades with a deterministic →
+trajectory → LLM cascade, and reports pass@k (capability) vs pass^k
+(reliability). It is **vendored** into this repo but stands alone — it does
+**not** import from `dagagent` (it reaches the agent over a subprocess / HTTP
+boundary, like it reaches `claude -p`) and is excluded from the package's ruff /
+pyright / pytest scope.
+
+Backends live in `evalkit/subjects/`: `dagagent-cli` and `dagagent-gateway`
+(the real agent), `openai-compat` (a raw model, e.g. MLX), and `claude-cli`. The
+judge (the `llm` grader) is decoupled from the subject — see `evalkit/judge.py`.
 
 Read `README.md` for usage and `DECISIONS.md` for build-time choices before
 changing anything.
@@ -32,24 +38,27 @@ changing anything.
 There is no unit-test suite or lint/type config here; validate by running.
 
 ```bash
-python3 run.py list suites/example                       # loads + summarizes
-python3 run.py task suites/example/tasks/hello-known --dry-run   # zero-cost wiring check
+python3 run.py list suites/dagagent                      # loads + summarizes
+python3 run.py suite suites/dagagent --dry-run           # zero-cost wiring check
 python3 -c "from evalkit.stats import pass_at_k; assert pass_at_k(3,1,3)==1.0"
 python3 -m compileall -q evalkit run.py                  # syntax check
 ```
 
-A live `python3 run.py suite suites/example` needs the `claude` CLI and spends
-model usage — see Cost discipline before running broadly.
+A live `python3 run.py suite suites/dagagent` needs the agent reachable
+(`dagagent` on PATH + your MLX tier up) and spends model usage; the `example`
+suite needs the `claude` CLI. See Cost discipline before running broadly.
 
 ## Cost discipline
 
-Trials are `claude -p` calls; usage ≈ `tasks × trials × (1 + #llm criteria)`.
-On a Claude **subscription** these draw down usage limits (the printed
-`total_cost_usd` is an estimate, not a charge); on an **API key** they are real
-dollars. Keep it cheap: default to `haiku` (the example suite does), keep
-criteria deterministic (graders that aren't `llm` make no model calls), use
-`run.py score` to re-grade archived trials for free, and `--dry-run` to
-validate. Reserve sonnet/opus and higher `--trials` for real measurements.
+Each trial is one subject invocation plus one call per `llm` criterion; usage ≈
+`tasks × trials × (1 + #llm criteria)`. Where it lands depends on the backend:
+`dagagent-*` / `openai-compat` hit your own infra (local MLX = no per-token
+dollars; tokens travel in the envelope); the judge defaults to Claude — on a
+**subscription** it draws down usage limits (printed `total_cost_usd` is an
+estimate, not a charge), on an **API key** it's real dollars. Keep it cheap:
+prefer deterministic criteria (only `llm` calls a model), keep the judge on a
+cheap model (or point it at MLX with `--grader-backend openai-compat`), use
+`run.py score` to re-grade archived trials for free, and `--dry-run` to validate.
 
 ## Layout
 
@@ -58,9 +67,11 @@ run.py            CLI: task · suite · list · score · promote · demote · ca
 evalkit/
   config.py       HARNESS_VERSION, paths, defaults
   models.py       dataclasses (Task, Trial, Score, …)
-  loader.py       TOML → model
-  claude.py       `claude -p` invocation (clean env)
-  runner.py       fixtures backup/install/restore, invocation, evidence capture
+  loader.py       TOML → model (resolves backend + backend_config)
+  subjects/       Subject seam + backends (claude_cli, dagagent_cli,
+                  dagagent_gateway, openai_compat) + build_subject
+  judge.py        the LLM judge (backend-agnostic) + build_judge
+  runner.py       fixtures backup/install/restore, subject invocation, capture
   graders/        deterministic · trajectory · llm  (+ __init__ dispatcher)
   stats.py        pass@k (Chen), pass^k, Wilson CI
   reporter.py     tables + artifact save/load
@@ -75,6 +86,9 @@ results/          trial artifacts (gitignored)
   document its semantics in `README.md`'s check table.
 - **New node of the grading cascade:** keep the det → traj → llm ordering in
   `graders/__init__.py`; LLM stays last and one-dimension-per-call.
+- **New backend (subject):** add a class in `evalkit/subjects/` that returns a
+  `RunResult`, register it in `subjects/__init__.py`. Reach the system over a
+  process / HTTP boundary — never `import dagagent` (the stdlib-only constraint).
 - **New task:** a directory with `config.toml` + `prompt.md`. Start every task
   as `type = "capability"`; promote to `regression` only via the ratchet after
   proven stability. Put no grading hints in `prompt.md`.

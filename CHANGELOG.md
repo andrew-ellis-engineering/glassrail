@@ -52,16 +52,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/task/{id}/branch-log`, `/task/{id}/events` (SSE and WebSocket — the
   WebSocket streams the same typed events and closes on a terminal event),
   `/tools`, `/health`.
-- Typer CLI entry point, with a `dagagent tui` command: a Rich terminal client
-  that submits a task to a running gateway and renders its live SSE event
-  stream (plan → per-node progress → final output). Built from a thin event
-  client and a pure, testable view model.
-- Eval suite (`tests/eval/`, `pytest -m eval`): a provider-agnostic scorer
-  that grades planner + executor runs against declarative fixtures across a
-  planning and an execution dimension, and prints an aggregate score summary.
-  Deterministic scenarios run offline from a scripted provider; the same
-  scenarios grade live providers when `DAGAGENT_EVAL_LIVE=1`. Run in a
-  non-blocking CI job and excluded from the default test sweep.
+- Typer CLI entry point with a `dagagent run` command — a headless run that
+  plans and executes a task in-process and prints a JSON result envelope
+  (final output, normalized trajectory, status, token count) for eval harnesses
+  to consume — and a `dagagent tui` command: a Rich terminal client that submits
+  a task to a running gateway and renders its live SSE event stream (plan →
+  per-node progress → final output), built from a thin event client and a pure,
+  testable view model.
+- Shared runtime composition root (`dagagent.runtime.build_runtime`) that wires
+  the harness, router, planner, validator, executor, store, and orchestrator
+  from settings; the REST gateway and the CLI both build from it.
 - OpenTelemetry tracing (`dagagent.telemetry`): the planner, router, and
   executor emit a span tree (task → plan / node → LLM call) with GenAI
   semantic-convention attributes (system, model, tokens) and `dagagent.*`
@@ -72,10 +72,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a slim, non-root `python:3.12-slim` image (~60 MB) with a built-in health
   check. CI builds and smoke-tests the image on every change.
 - Vendored `eval-framework/`: a self-contained, stdlib-only harness that runs
-  AI-skill tasks k times via `claude -p`, captures output / side-effects /
-  trajectory, grades with a deterministic→trajectory→LLM cascade, and reports
-  pass@k vs pass^k. Self-documented (its own README/DECISIONS) and kept out of
-  the package's ruff/pyright/pytest scope.
+  each task k times against a pluggable subject backend, captures output /
+  side-effects / trajectory, grades with a deterministic→trajectory→LLM cascade
+  (the judge decoupled from the subject), and reports pass@k vs pass^k. Backends:
+  `dagagent-cli` and `dagagent-gateway` (drive the real planner + executor over
+  the agent's own tier routing), `openai-compat` (baseline a raw model), and
+  `claude-cli`. Ships a `dagagent` suite (a decision-branch control pair, a
+  calibration fact, and a multistep recommendation). Self-documented (its own
+  README/DECISIONS/CLAUDE) and kept out of the package's ruff/pyright/pytest
+  scope.
 - Tooling: uv, ruff, pyright strict, pytest + hypothesis, pre-commit,
   MkDocs + Material. CI on Linux + macOS for Python 3.12 + 3.13.
 - Apache-2.0 license.

@@ -53,6 +53,7 @@ def save_task_artifacts(run_dir: Path, result: TaskResult) -> None:
             "path": str(result.task.path),
             "type": result.task.type,
             "difficulty": result.task.difficulty,
+            "backend": result.task.backend,
             "model": result.task.model,
             "control_for": result.task.control_for,
             "tags": result.task.tags,

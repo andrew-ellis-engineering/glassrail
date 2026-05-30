@@ -1,13 +1,30 @@
-# AI Skill Eval Framework
+# Eval Framework
 
-A multi-trial evaluation framework for AI skills (slash commands, agent
-workflows). It runs each task **k times** via `claude -p`, captures three
-evidence channels (output, side-effects, tool trajectory), grades with a
+A multi-trial evaluation framework for agent workflows. It runs each task
+**k times** against a pluggable **subject** (the system under test), captures
+three evidence channels (output, side-effects, trajectory), grades with a
 **deterministic → trajectory → LLM** cascade, and reports **pass@k**
 (capability) vs **pass^k** (reliability).
 
-Python 3.11+ stdlib only — no third-party dependencies. Requires the `claude`
-CLI on `PATH` for live runs.
+Python 3.11+ stdlib only — no third-party dependencies, and it does not import
+the host project: every subject is reached over a process or HTTP boundary.
+
+## Backends (subjects)
+
+A suite names a `backend`; all return the same normalized result, so graders
+never change:
+
+| backend | runs | for |
+|---|---|---|
+| `dagagent-cli` | `dagagent run --json` (subprocess) | the real planner + executor over the agent's own tier routing (your shipped model) |
+| `dagagent-gateway` | a running REST gateway (HTTP) | the deployed surface, end to end |
+| `openai-compat` | one `/chat/completions` call | a raw-model baseline (e.g. the local MLX server) |
+| `claude-cli` | `claude -p` | a Claude Code skill (the original target) |
+
+The **judge** (the `llm` grader) is decoupled from the subject — keep it on a
+cheap Claude model, or point it at MLX with `--grader-backend openai-compat`.
+`claude-cli` backends need the `claude` CLI on `PATH`; `dagagent-*` need the
+agent reachable.
 
 ## Quick start
 
@@ -18,22 +35,32 @@ python3 run.py list suites/example
 # See what a run would do without spending inference
 python3 run.py task suites/example/tasks/hello-known --dry-run --trials 3
 
-# Run a suite for real (needs `claude`); writes results/<run>/…
+# Run the dagagent suite for real (needs the agent + MLX up); writes results/<run>/…
+python3 run.py suite suites/dagagent --trials 5
+
+# Run the claude-skill example suite instead
 python3 run.py suite suites/example --trials 3 --timeout 60
 
 # Re-grade archived trials with current criteria — zero inference cost
-python3 run.py score results/<run>/hello-known
+python3 run.py score results/<run>/classify-even
 ```
 
 ## Cost & limits
 
-Every trial is one `claude -p` call, so the model usage of a run is roughly:
+Each trial is one subject invocation plus one call per `llm` criterion, so the
+model usage of a run is roughly:
 
 ```
 tasks × trials × (1 generation  +  #llm-judge criteria)
 ```
 
-How that's billed depends on how `claude` is authenticated:
+Where that cost lands depends on the backend. The `dagagent-*` and
+`openai-compat` backends hit your own infrastructure (e.g. a local MLX server —
+no per-token dollars, token counts travel in the envelope). The judge is
+separate and, by default, runs on Claude.
+
+For a `claude-cli` subject (or a Claude judge), how it's billed depends on how
+`claude` is authenticated:
 
 - **Logged in with a Claude subscription (claude.ai OAuth):** runs draw down
   your plan's **usage limits** (rolling window + weekly caps), not a dollar
@@ -44,9 +71,9 @@ How that's billed depends on how `claude` is authenticated:
 
 Keep runs cheap:
 
-- **Model is the big lever** — haiku ≪ sonnet < opus. The example suite
-  defaults to `haiku`; bump to sonnet/opus only for a real measurement
-  (`--model sonnet`). Set a suite's floor in `suite.toml` (`default_model`).
+- **Model is the big lever** — for a Claude subject/judge, haiku ≪ sonnet < opus
+  (the `example` suite defaults to `haiku`). For the `dagagent` backend the
+  model is whatever your tiers serve; `default_model` overrides tier 0.
 - **Trials scale linearly** — `--trials 1` while iterating, `3` for a result.
 - **Grading is mostly free** — deterministic and trajectory checks make **no**
   model calls. Only `grader = "llm"` criteria cost (one call each, on
@@ -80,13 +107,16 @@ evalkit/
   config.py            HARNESS_VERSION, paths, defaults
   models.py            dataclasses (Task, Trial, Score, …)
   loader.py            TOML → model
-  claude.py            `claude -p` invocation (clean env)
-  runner.py            fixtures, invocation, evidence capture
+  subjects/            the Subject seam + backends (claude_cli, dagagent_cli,
+                       dagagent_gateway, openai_compat) + build_subject
+  judge.py             the LLM judge (backend-agnostic), build_judge
+  runner.py            fixtures, subject invocation, evidence capture
   graders/             deterministic · trajectory · llm + dispatcher
   stats.py             pass@k (Chen), pass^k, Wilson CI
   reporter.py          tables + artifact save/load
   ratchet.py           promotion-candidate detection + TOML edits
-suites/example/        a paired calibration suite
+suites/dagagent/       end-to-end evals of the agent (dagagent-cli backend)
+suites/example/        a paired claude-skill calibration suite
 results/               trial artifacts (gitignored)
 ```
 
@@ -102,8 +132,8 @@ results/               trial artifacts (gitignored)
 | `demote <task> --reason` | Regression → capability. |
 | `candidates [<suite>]` | Show tasks eligible for promotion. |
 
-Common flags: `--trials N`, `--model`, `--grader-model`, `--timeout S`,
-`--dry-run`, `--skip-grading`, `--run-name`.
+Common flags: `--trials N`, `--backend`, `--model`, `--grader-backend`,
+`--grader-model`, `--timeout S`, `--dry-run`, `--skip-grading`, `--run-name`.
 
 **Exit codes:** `0` success · `1` a regression task scored pass^k = 0 (CI
 gating signal) · `2` framework error.

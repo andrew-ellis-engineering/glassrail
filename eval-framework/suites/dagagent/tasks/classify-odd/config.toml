@@ -1,0 +1,40 @@
+name = "classify-odd"
+control_for = "classify-even"
+tags = ["decision", "control-pair"]
+type = "capability"
+difficulty = 2
+timeout_s = 150
+
+expected_behavior = """
+247 is odd, so the next even number after it (248) should be reported. The
+conditional phrasing warrants a decision node that branches the plan; the odd
+branch should be taken. Control twin of classify-even.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Identifies 247 as odd"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)\\bodd\\b"
+
+[[criteria]]
+text = "Reports the next even number as 248"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b248\\b"
+
+[[criteria]]
+text = "Planner used a decision node to branch on the condition"
+grader = "trajectory"
+tool_sequence = ["decision"]
+
+[[criteria]]
+text = "Correctly classifies as odd and gives the next even number as 248"
+grader = "llm"

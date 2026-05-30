@@ -72,26 +72,30 @@ jobs:
           name: coverage
           path: coverage.xml
 
-  eval:
-    name: Eval suite (non-blocking)
+  eval-framework:
+    name: Eval framework (offline validation)
     runs-on: ubuntu-latest
-    # Optional gate. The deterministic scenarios run offline here; the live
-    # scenarios (DAGAGENT_EVAL_LIVE=1) hit external providers and are
-    # non-deterministic, so the whole job is allowed to fail without blocking
-    # the PR. `build` deliberately does not depend on it.
-    continue-on-error: true
+    # The vendored eval-framework is stdlib-only and lives outside the package's
+    # pytest scope. Running real evals spends model budget, so CI only validates
+    # that it imports, loads its suites, and dry-runs — no model calls.
     steps:
       - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
       - name: Set up Python
-        run: uv python install 3.12
-      - name: Install deps
-        run: uv sync --all-extras --group dev
-      - name: pytest -m eval
-        run: uv run pytest -m eval
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile
+        working-directory: eval-framework
+        run: python -m compileall -q evalkit run.py
+      - name: Load + dry-run suites
+        working-directory: eval-framework
+        run: |
+          python run.py list suites/example
+          python run.py list suites/dagagent
+          python run.py suite suites/dagagent --dry-run
+      - name: Stats smoke
+        working-directory: eval-framework
+        run: python -c "from evalkit.stats import pass_at_k; assert pass_at_k(3,1,3)==1.0"
 
   build:
     name: Build distribution

@@ -143,11 +143,6 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "--showlocals",
-    # The eval suite is its own gate — run it explicitly with `pytest -m eval`.
-    # Excluding it here keeps the default sweep offline and fast; a CLI `-m`
-    # overrides this, so `-m eval` still selects it.
-    "-m",
-    "not eval",
 ]
 testpaths = ["tests"]
 asyncio_mode = "auto"
@@ -156,7 +151,6 @@ markers = [
     "integration: tests touching multiple components",
     "contract: shared test suites every plugin impl must pass",
     "property: hypothesis-driven invariant tests",
-    "eval: eval harness tests (may hit external services)",
     "slow: tests over 1s",
 ]
 

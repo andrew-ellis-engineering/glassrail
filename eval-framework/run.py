@@ -14,8 +14,10 @@ import sys
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 
-from evalkit import config, graders, loader, ratchet, reporter, runner, stats
+from evalkit import config, graders, loader, ratchet, reporter, runner, stats, subjects
+from evalkit.judge import Judge, build_judge
 from evalkit.loader import LoaderError
 from evalkit.models import Score, SuiteResult, Task, TaskResult, Trial
 
@@ -44,27 +46,47 @@ def build_task_result(task: Task, trials: list[Trial], scores: list[Score]) -> T
     )
 
 
+def _make_judge(meta: dict[str, Any], args: argparse.Namespace) -> Judge:
+    """Build the judge callable from CLI flags falling back to suite defaults."""
+    grader_model = (
+        args.grader_model or meta.get("default_grader_model") or config.DEFAULT_GRADER_MODEL
+    )
+    grader_backend = (
+        getattr(args, "grader_backend", None)
+        or meta.get("default_grader_backend")
+        or config.DEFAULT_JUDGE_BACKEND
+    )
+    return build_judge(
+        model=str(grader_model),
+        backend=str(grader_backend),
+        config=meta.get("judge_config") or {},
+    )
+
+
 def run_task(
     task: Task,
     *,
     trials: int,
     model: str | None,
-    grader_model: str,
+    judge: Judge,
     timeout: int | None,
     skip_grading: bool,
+    backend_override: str | None = None,
 ) -> TaskResult:
+    backend = backend_override or task.backend
+    subject = subjects.build_subject(backend, task.backend_config)
     effective_model = model or task.model
     effective_timeout = timeout or task.timeout_s
     trial_records: list[Trial] = []
     score_records: list[Score] = []
     for run_number in range(1, trials + 1):
-        print(f"  · {task.id}: trial {run_number}/{trials} (model={effective_model})…")
+        print(f"  · {task.id}: trial {run_number}/{trials} (backend={backend} model={effective_model})…")
         trial = runner.run_trial(
-            task, run_number, model=effective_model, timeout_s=effective_timeout
+            task, run_number, subject=subject, model=effective_model, timeout_s=effective_timeout
         )
         trial_records.append(trial)
         if not skip_grading:
-            score_records.append(graders.grade(task, trial, grader_model=grader_model))
+            score_records.append(graders.grade(task, trial, judge=judge))
     return build_task_result(task, trial_records, score_records)
 
 
@@ -74,8 +96,8 @@ def _print_task_summary(task: Task) -> None:
         counts[c.grader] = counts.get(c.grader, 0) + 1
     ctrl = f"  control_for={task.control_for}" if task.control_for else ""
     print(
-        f"  {task.id:<26} model={task.model:<7} diff={task.difficulty} {task.type:<11} "
-        f"D/T/L={counts['deterministic']}/{counts['trajectory']}/{counts['llm']}{ctrl}"
+        f"  {task.id:<26} {task.backend:<16} model={task.model:<14} diff={task.difficulty} "
+        f"{task.type:<11} D/T/L={counts['deterministic']}/{counts['trajectory']}/{counts['llm']}{ctrl}"
     )
 
 
@@ -92,14 +114,17 @@ def cmd_list(args: argparse.Namespace) -> int:
 
     meta, tasks = loader.load_suite(Path(args.path))
     print(f"Suite '{meta['name']}' — {meta.get('description', '')}")
-    print(f"  default_model={meta.get('default_model', config.DEFAULT_MODEL)}  tasks={len(tasks)}")
+    print(
+        f"  default_backend={meta.get('default_backend', config.DEFAULT_BACKEND)}"
+        f"  default_model={meta.get('default_model', config.DEFAULT_MODEL)}  tasks={len(tasks)}"
+    )
     for task in tasks:
         _print_task_summary(task)
     return EXIT_OK
 
 
 def cmd_task(args: argparse.Namespace) -> int:
-    _, task = loader.load_task_with_suite(Path(args.path))
+    meta, task = loader.load_task_with_suite(Path(args.path))
     if args.dry_run:
         print(f"[dry-run] would run {args.trials} trial(s):")
         _print_task_summary(task)
@@ -110,9 +135,10 @@ def cmd_task(args: argparse.Namespace) -> int:
         task,
         trials=args.trials,
         model=args.model,
-        grader_model=args.grader_model,
+        judge=_make_judge(meta, args),
         timeout=args.timeout,
         skip_grading=args.skip_grading,
+        backend_override=args.backend,
     )
     reporter.save_task_artifacts(run_dir, result)
     if not args.skip_grading:
@@ -135,6 +161,7 @@ def cmd_suite(args: argparse.Namespace) -> int:
         return EXIT_OK
 
     grader_model = args.grader_model or meta.get("default_grader_model", config.DEFAULT_GRADER_MODEL)
+    judge = _make_judge(meta, args)
     run_name = _run_name(args.run_name)
     run_dir = config.RESULTS_DIR / run_name
     started = datetime.now(UTC)
@@ -152,9 +179,10 @@ def cmd_suite(args: argparse.Namespace) -> int:
                 task,
                 trials=args.trials,
                 model=args.model,
-                grader_model=grader_model,
+                judge=judge,
                 timeout=args.timeout,
                 skip_grading=args.skip_grading,
+                backend_override=args.backend,
             )
         )
 
@@ -195,14 +223,14 @@ def cmd_score(args: argparse.Namespace) -> int:
     import json
 
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    _, task = loader.load_task_with_suite(Path(meta["path"]))
-    grader_model = args.grader_model or config.DEFAULT_GRADER_MODEL
+    suite_meta, task = loader.load_task_with_suite(Path(meta["path"]))
+    judge = _make_judge(suite_meta, args)
 
     trials = reporter.load_archived_trials(task_dir)
     if not trials:
         print(f"No archived trials under {task_dir}", file=sys.stderr)
         return EXIT_ERROR
-    scores = [graders.grade(task, trial, grader_model=grader_model) for trial in trials]
+    scores = [graders.grade(task, trial, judge=judge) for trial in trials]
     result = build_task_result(task, trials, scores)
     print(f"Re-graded {len(trials)} archived trial(s) with current criteria (zero inference):")
     reporter.print_task_result(result)
@@ -299,7 +327,13 @@ def cmd_candidates(args: argparse.Namespace) -> int:
 def _add_run_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--trials", type=int, default=config.DEFAULT_TRIALS)
     p.add_argument("--model", default=None)
+    p.add_argument(
+        "--backend",
+        default=None,
+        help=f"override the subject backend ({', '.join(subjects.available_backends())})",
+    )
     p.add_argument("--grader-model", default=None)
+    p.add_argument("--grader-backend", default=None, help="judge backend (claude-cli | openai-compat)")
     p.add_argument("--timeout", type=int, default=None)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--skip-grading", action="store_true")
@@ -329,6 +363,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_score = sub.add_parser("score", help="re-grade archived trials (zero inference)")
     p_score.add_argument("results_path")
     p_score.add_argument("--grader-model", default=None)
+    p_score.add_argument("--grader-backend", default=None, help="judge backend (claude-cli | openai-compat)")
     p_score.set_defaults(func=cmd_score)
 
     p_promote = sub.add_parser("promote", help="capability → regression")

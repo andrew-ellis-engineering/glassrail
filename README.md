@@ -34,11 +34,14 @@ SSE events endpoint).
 uv sync --all-extras --group dev
 uv run pre-commit install
 uv run pytest          # default sweep
-uv run pytest -m eval  # eval suite — scores planning + execution, prints a summary
 ```
 
+Model-quality evals (multi-trial pass@k vs pass^k against the real agent) live
+in the standalone [`eval-framework/`](./eval-framework); run them with
+`cd eval-framework && python3 run.py suite suites/dagagent`.
+
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full check sweep and PR
-guidelines, [docs/evals.md](./docs/evals.md) for the eval harness, and
+guidelines, [docs/evals.md](./docs/evals.md) for the eval framework, and
 [CLAUDE.md](./CLAUDE.md) for project conventions.
 
 ## Layout

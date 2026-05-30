@@ -92,12 +92,14 @@ Layout under `tests/`:
 - `contract/` — shared suites every plugin impl must pass (add a backend to the
   parametrisation, get the whole suite for free).
 - `property/` — hypothesis invariants (e.g. fresh-context).
-- `eval/` — the eval harness: scores planner + executor runs against fixtures
-  and prints a summary. Excluded from the default sweep; run it on its own with
-  `uv run pytest -m eval`. See `docs/evals.md`.
 
 Fake LLM providers in tests are scripted: they pop canned responses in order.
 Grep existing tests for `_Scripted` for the pattern.
+
+Model-quality **evals** (planner/executor behaviour, multi-trial pass@k vs
+pass^k) are not pytest — they live in the standalone `eval-framework/` and run
+the real agent over its tier routing via `dagagent run --json`. See
+`docs/evals.md` and `eval-framework/CLAUDE.md`.
 
 ## Commits
 

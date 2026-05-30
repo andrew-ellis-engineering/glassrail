@@ -29,11 +29,20 @@ def _read_toml(path: Path) -> dict[str, Any]:
 
 
 def load_suite_meta(suite_dir: Path) -> dict[str, Any]:
-    """Read and lightly validate ``<suite_dir>/suite.toml``'s ``[suite]`` table."""
+    """Read and lightly validate ``<suite_dir>/suite.toml``'s ``[suite]`` table.
+
+    Optional ``[backend]`` and ``[judge]`` tables (subject / judge wiring) are
+    folded into the returned meta dict under ``backend_config`` / ``judge_config``.
+    """
     data = _read_toml(suite_dir / "suite.toml")
-    meta = data.get("suite", {})
-    if not isinstance(meta, dict) or "name" not in meta:
+    raw = data.get("suite", {})
+    if not isinstance(raw, dict) or "name" not in raw:
         raise LoaderError(f"{suite_dir}/suite.toml needs a [suite] table with a name")
+    meta = dict(raw)
+    if isinstance(data.get("backend"), dict):
+        meta["backend_config"] = data["backend"]
+    if isinstance(data.get("judge"), dict):
+        meta["judge_config"] = data["judge"]
     return meta
 
 
@@ -88,6 +97,12 @@ def load_task(task_dir: Path, suite_meta: dict[str, Any], suite_name: str) -> Ta
     criteria = _parse_criteria(cfg.get("criteria", []) or [], task_dir)
     context_files = {str(k): str(v) for k, v in (cfg.get("context_files", {}) or {}).items()}
 
+    backend = str(cfg.get("backend") or suite_meta.get("default_backend") or config.DEFAULT_BACKEND)
+    backend_config: dict[str, Any] = {
+        **(suite_meta.get("backend_config") or {}),
+        **(cfg.get("backend_config") or {}),
+    }
+
     return Task(
         id=task_dir.name,
         name=str(cfg.get("name", task_dir.name)),
@@ -105,6 +120,8 @@ def load_task(task_dir: Path, suite_meta: dict[str, Any], suite_name: str) -> Ta
         criteria=criteria,
         fixtures=fixtures,
         context_files=context_files,
+        backend=backend,
+        backend_config=backend_config,
     )
 
 

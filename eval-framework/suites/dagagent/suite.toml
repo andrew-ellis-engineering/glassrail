@@ -1,0 +1,24 @@
+[suite]
+name = "dagagent"
+description = "End-to-end evals of the dagagent planner + executor over its own tier routing."
+# Drive the agent through its headless CLI (a subprocess, like claude -p). The
+# agent routes through ITS OWN tier config, so this benchmarks the model(s) you
+# actually ship — tier 0 is the local MLX server by default. To benchmark the
+# shipped model, point your tiers at it (config.toml / DAGAGENT_TIER*__ env) or
+# pass default_model below, which overrides tier 0's model per run.
+default_backend = "dagagent-cli"
+default_model = "qwen3.6-35b-moe"   # → `dagagent run --model qwen3.6-35b-moe` (tier-0 override)
+
+# The judge is independent of the subject: keep it on a cheap Claude model so
+# semantic criteria are graded consistently regardless of the model under test.
+# Point it at MLX instead with `--grader-backend openai-compat`.
+default_grader_model = "haiku"
+default_grader_backend = "claude-cli"
+
+default_timeout_s = 180
+promotion_threshold = 5  # consecutive clean runs to qualify for regression
+
+[backend]
+# How to invoke the agent. Ensure `dagagent` is on PATH (activate the venv) or
+# set this to ["uv", "run", "dagagent", "run"] when running from the repo.
+command = ["dagagent", "run"]

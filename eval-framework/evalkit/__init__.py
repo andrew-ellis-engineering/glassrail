@@ -1,7 +1,8 @@
-"""evalkit — a multi-trial evaluation framework for AI skills.
+"""evalkit — a multi-trial evaluation framework for agent workflows.
 
-Runs each task k times via ``claude -p``, captures three evidence channels
-(output, side-effects, tool trajectory), grades with a
+Runs each task k times against a pluggable *subject* (``claude -p``, the
+dagagent CLI / gateway, or a raw OpenAI-compatible endpoint), captures three
+evidence channels (output, side-effects, trajectory), grades with a
 deterministic → trajectory → LLM cascade, and reports pass@k vs pass^k.
 """
 

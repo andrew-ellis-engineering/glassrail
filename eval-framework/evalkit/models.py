@@ -50,6 +50,10 @@ class Task:
     criteria: list[Criterion]
     fixtures: FixtureSpec
     context_files: dict[str, str]   # name → content
+    # Which subject (system under test) runs this task, and its wiring config.
+    # Defaults keep older claude-skill suites working unchanged.
+    backend: str = "claude-cli"     # claude-cli | dagagent-cli | dagagent-gateway | openai-compat
+    backend_config: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -61,11 +65,11 @@ class Trial:
     success: bool
     error: str | None
     duration_s: float
-    output_envelope: dict[str, Any]      # raw claude -p JSON
-    result_text: str                     # final assistant text
+    output_envelope: dict[str, Any]      # raw subject envelope (backend-specific)
+    result_text: str                     # primary output text to grade
     raw_stdout: str
     raw_stderr: str
-    trajectory: list[dict[str, Any]]     # [{tool: str, input: dict}, ...]
+    trajectory: list[dict[str, Any]]     # normalized steps [{tool: str, input: dict, ...}, ...]
     side_effects: dict[str, str | None]  # captured paths → content (post-run)
     cost_usd: float | None
     model: str

@@ -4,14 +4,14 @@ One independent judge call per criterion, reference-guided by the task's
 ``expected_behavior`` (which is NEVER shown to the agent under test). The judge
 evaluates exactly one dimension and returns ``PASS``/``FAIL``/``UNKNOWN`` on
 the first line. Fail-closed: anything that isn't a clear PASS does not pass.
+
+The judge itself is a backend-agnostic callable (see :mod:`evalkit.judge`) —
+it can be Claude, a local MLX model, or anything OpenAI-compatible.
 """
 
 from __future__ import annotations
 
-import json
-from typing import Any
-
-from evalkit.claude import invoke_claude
+from evalkit.judge import Judge
 from evalkit.models import Criterion, CriterionResult, Trial
 
 _JUDGE_TEMPLATE = """\
@@ -54,22 +54,12 @@ def _side_effects_block(trial: Trial) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _extract_result_text(stdout: str) -> str:
-    try:
-        envelope: Any = json.loads(stdout)
-        if isinstance(envelope, dict) and isinstance(envelope.get("result"), str):
-            return envelope["result"]
-    except json.JSONDecodeError:
-        pass
-    return stdout
-
-
 def grade(
     criterion: Criterion,
     trial: Trial,
     *,
     expected_behavior: str,
-    grader_model: str,
+    judge: Judge,
     timeout_s: int = 120,
 ) -> CriterionResult:
     prompt = _JUDGE_TEMPLATE.format(
@@ -78,13 +68,14 @@ def grade(
         output=trial.result_text.strip() or "(empty output)",
         side_effects=_side_effects_block(trial),
     )
-    res = invoke_claude(prompt, model=grader_model, output_format="json", timeout_s=timeout_s)
-    if res.returncode != 0:
-        return _result(criterion, False, f"judge invocation failed (rc={res.returncode}): {res.stderr.strip()[:200]}")
+    verdict_text = judge(prompt, timeout_s=timeout_s)
+    if verdict_text is None:
+        return _result(criterion, False, "judge invocation failed")
 
-    verdict_text = _extract_result_text(res.stdout).strip()
-    first_line = verdict_text.splitlines()[0].strip().upper() if verdict_text else ""
-    rationale = verdict_text.splitlines()[1].strip() if len(verdict_text.splitlines()) > 1 else ""
+    verdict_text = verdict_text.strip()
+    lines = verdict_text.splitlines()
+    first_line = lines[0].strip().upper() if lines else ""
+    rationale = lines[1].strip() if len(lines) > 1 else ""
 
     if first_line.startswith("PASS"):
         return _result(criterion, True, rationale or "judge: PASS")

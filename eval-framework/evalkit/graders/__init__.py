@@ -9,10 +9,11 @@ The returned :class:`Score` preserves the criteria's original order.
 from __future__ import annotations
 
 from evalkit.graders import deterministic, llm, trajectory
+from evalkit.judge import Judge
 from evalkit.models import CriterionResult, Score, Task, Trial
 
 
-def grade(task: Task, trial: Trial, *, grader_model: str, cost_optimize: bool = True) -> Score:
+def grade(task: Task, trial: Trial, *, judge: Judge, cost_optimize: bool = True) -> Score:
     results: dict[int, CriterionResult] = {}
 
     det = [i for i, c in enumerate(task.criteria) if c.grader == "deterministic"]
@@ -41,7 +42,7 @@ def grade(task: Task, trial: Trial, *, grader_model: str, cost_optimize: bool = 
                 task.criteria[i],
                 trial,
                 expected_behavior=task.expected_behavior,
-                grader_model=grader_model,
+                judge=judge,
             )
 
     ordered = [results[i] for i in range(len(task.criteria))]

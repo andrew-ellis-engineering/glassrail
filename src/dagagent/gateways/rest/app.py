@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from dagagent import __version__
-from dagagent.config import Settings, get_settings
+from dagagent.config import Settings
 from dagagent.core import ExecutionState, TaskId, TaskStatus, new_task_id
 from dagagent.events import (
     TERMINAL_EVENT_TYPES,
@@ -25,13 +25,10 @@ from dagagent.events import (
     TaskCompleted,
     TaskFailed,
 )
-from dagagent.executor import Executor, Orchestrator
-from dagagent.harness import ToolHarness, register_builtins
-from dagagent.planner import Planner
-from dagagent.providers import router_from_settings
-from dagagent.state import InMemoryStateStore, StateStore
-from dagagent.telemetry import configure_tracing
-from dagagent.validator import PlanValidator
+from dagagent.executor import Orchestrator
+from dagagent.harness import ToolHarness
+from dagagent.runtime import build_runtime
+from dagagent.state import StateStore
 
 
 class TaskRequest(BaseModel):
@@ -201,25 +198,13 @@ def create_app(
 
 def create_default_app(settings: Settings | None = None) -> FastAPI:
     """Build the app with the default in-memory wiring from :class:`Settings`."""
-    settings = settings or get_settings()
-    configure_tracing(settings)
-
-    bus = EventBus()
-    harness = ToolHarness()
-    register_builtins(harness)
-    router = router_from_settings(settings)
-    validator = PlanValidator(harness=harness, settings=settings)
-    planner = Planner(router=router, harness=harness, validator=validator)
-    executor = Executor(router=router, harness=harness, settings=settings, event_bus=bus)
-    store = InMemoryStateStore()
-    orchestrator = Orchestrator(
-        planner=planner,
-        executor=executor,
-        state_store=store,
-        settings=settings,
-        event_bus=bus,
+    rt = build_runtime(settings)
+    return create_app(
+        orchestrator=rt.orchestrator,
+        store=rt.store,
+        harness=rt.harness,
+        event_bus=rt.event_bus,
     )
-    return create_app(orchestrator=orchestrator, store=store, harness=harness, event_bus=bus)
 
 
 # Module-level app for `uvicorn dagagent.gateways.rest:app`.

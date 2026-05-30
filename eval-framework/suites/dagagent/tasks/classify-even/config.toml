@@ -1,0 +1,40 @@
+name = "classify-even"
+tags = ["decision", "control-pair"]
+type = "capability"
+difficulty = 2
+timeout_s = 150
+
+expected_behavior = """
+246 is even, so its half (123) should be reported. The conditional phrasing
+("if even … if odd …") warrants a decision node that branches the plan; the
+even branch should be taken. Control twin of classify-odd — guards against a
+model that always answers the same way.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Identifies 246 as even"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)\\beven\\b"
+
+[[criteria]]
+text = "Reports half of 246 as 123"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b123\\b"
+
+[[criteria]]
+text = "Planner used a decision node to branch on the condition"
+grader = "trajectory"
+tool_sequence = ["decision"]
+
+[[criteria]]
+text = "Correctly classifies as even and gives half as 123"
+grader = "llm"
