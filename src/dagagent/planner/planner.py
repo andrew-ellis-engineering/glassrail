@@ -46,6 +46,22 @@ class Planner:
             raise PlanValidationError(attempt.error or "Plan failed validation")
         raise ValueError(attempt.error or "Planner failed")
 
+    def _limits_block(self) -> str:
+        """The structural budget the validator enforces, stated for the model.
+
+        Injected per-request (not baked into the system prompt) so it tracks
+        settings and survives a user-overridden ``prompts.planner``. Without
+        this the model never learns the node cap and happily overshoots it.
+        """
+        return (
+            "Plan limits (a plan exceeding these is rejected):\n"
+            f"- At most {self._settings.max_plan_nodes} nodes in this plan.\n"
+            f"- At most {self._settings.max_subplans_per_plan} subplan node(s), "
+            f"each with at most {self._settings.max_subplan_nodes} nodes.\n"
+            "Stay within the node budget: if the task is large, consolidate "
+            "related steps into one node rather than exceeding the limit."
+        )
+
     async def plan_attempt(
         self,
         request: str,
@@ -61,7 +77,11 @@ class Planner:
                 {"role": "system", "content": self._settings.prompts.planner},
                 {
                     "role": "user",
-                    "content": (f"Available tools:\n{tool_schemas_str}\n\nUser request: {request}"),
+                    "content": (
+                        f"{self._limits_block()}\n"
+                        f"Available tools:\n{tool_schemas_str}\n\n"
+                        f"User request: {request}"
+                    ),
                 },
             ]
 

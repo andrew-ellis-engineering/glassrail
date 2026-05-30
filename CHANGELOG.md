@@ -114,6 +114,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   MkDocs + Material. CI on Linux + macOS for Python 3.12 + 3.13.
 - Apache-2.0 license.
 
+### Changed
+- Planner now states the structural budget (max plan nodes, subplan count and
+  size) to the model in each request, derived from settings rather than
+  hard-coded in the prompt. Previously the top-level node cap was never
+  communicated, so the model would overshoot it and the plan would be rejected
+  at validation. Raised the default `max_plan_nodes` from 12 to 24 to fit
+  real fan-out tasks (an "N things × M aspects" research sweep needs N×M tool
+  nodes plus aggregation).
+
 ## [0.1.0] - Unreleased
 
 Initial development release.

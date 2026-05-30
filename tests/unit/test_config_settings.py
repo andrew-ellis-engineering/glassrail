@@ -25,7 +25,7 @@ def test_defaults(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     assert settings.tier0.timeout_s == 10.0
     assert settings.tier1.model == "deepseek/deepseek-v4-flash"
     assert settings.tier3.model == "anthropic/claude-sonnet-4-6"
-    assert settings.max_plan_nodes == 12
+    assert settings.max_plan_nodes == 24
     assert settings.confidence_threshold == 0.75
     assert settings.confirm_plans is False
     assert settings.state_path == Path("./state.sqlite")

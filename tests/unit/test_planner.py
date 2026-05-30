@@ -91,6 +91,7 @@ class _CapturingProvider(_FixedProvider):
         super().__init__(payload=payload)
         self.max_tokens_seen: list[int] = []
         self.system_seen: list[str] = []
+        self.user_seen: list[str] = []
 
     async def complete(
         self,
@@ -102,6 +103,7 @@ class _CapturingProvider(_FixedProvider):
     ) -> AsyncIterator[Chunk]:
         self.max_tokens_seen.append(max_tokens)
         self.system_seen.append(next(m["content"] for m in messages if m["role"] == "system"))
+        self.user_seen.append(next(m["content"] for m in messages if m["role"] == "user"))
         del json_mode, timeout_s
         yield Chunk(text=self._payload, tokens_used=42)
 
@@ -126,6 +128,26 @@ async def test_planner_uses_its_configured_prompt(harness: ToolHarness) -> None:
 
     await planner.plan("anything")
     assert provider.system_seen == ["CUSTOM PLANNER PROMPT"]
+
+
+async def test_planner_tells_model_the_node_limits(harness: ToolHarness) -> None:
+    """The configured plan/subplan caps are injected into the request so the
+    model knows its budget — even when the system prompt is overridden."""
+    payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
+    provider = _CapturingProvider(payload=payload)
+    settings = Settings(
+        max_plan_nodes=24,
+        max_subplans_per_plan=2,
+        max_subplan_nodes=12,
+        prompts=NodePrompts(planner="CUSTOM"),
+    )
+    planner = _planner_from(provider, harness, settings)
+
+    await planner.plan("anything")
+    user_msg = provider.user_seen[0]
+    assert "At most 24 nodes" in user_msg
+    assert "At most 2 subplan node(s)" in user_msg
+    assert "at most 12 nodes" in user_msg
 
 
 async def test_invalid_json_raises_value_error(harness: ToolHarness, settings: Settings) -> None:

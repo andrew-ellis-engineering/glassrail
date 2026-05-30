@@ -36,8 +36,8 @@ Rules:
   use synthesis for intermediate combination steps
 - Use type=subplan sparingly — only when a self-contained sub-task is
   best expressed as its own DAG. Set "subplan" to a nested plan object
-  with the same shape as this top-level plan. At most 2 subplans per
-  plan, at most 12 nodes per subplan
+  with the same shape as this top-level plan. Respect the node and
+  subplan limits stated in the request
 - reasoning_required=true only for nodes needing genuine multi-step logic
   beyond what type=think already implies
 
@@ -60,17 +60,23 @@ Output ONLY valid JSON matching this schema (no markdown, no explanation):
     }
   ]
 }
+
+/no_think
 """
 
 DEFAULT_DECISION_SYSTEM = """\
 You evaluate a binary condition based on provided context.
 Respond ONLY with valid JSON: {"branch": "yes"|"no", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}
+
+/no_think
 """  # noqa: E501
 
 DEFAULT_SYNTHESIS_SYSTEM = """\
 You are a synthesis engine. Use the provided context to produce a clear, concise response.
 Always include a confidence score.
 Respond ONLY with valid JSON: {"output": "<your response>", "confidence": <0.0-1.0>}
+
+/no_think
 """
 
 DEFAULT_THINK_SYSTEM = """\
@@ -82,15 +88,21 @@ Respond ONLY with valid JSON: {"reasoning": "<your step-by-step reasoning>", "co
 DEFAULT_SUMMARY_SYSTEM = """\
 You are a summarisation engine. Produce a high-fidelity summary of the provided context: preserve every fact, figure, name, date, and claim a downstream node might need. Compress language, not information — drop only boilerplate, redundancy, and formatting, never substance.
 Respond ONLY with valid JSON: {"summary": "<faithful summary>", "confidence": <0.0-1.0>}
+
+/no_think
 """  # noqa: E501
 
 DEFAULT_RESULT_SYSTEM = """\
 You produce the final user-facing answer for a task. Use the provided context to compose a clean, direct response — no preamble, no meta-commentary, no scaffolding.
 Respond ONLY with valid JSON: {"output": "<final answer>", "confidence": <0.0-1.0>}
+
+/no_think
 """  # noqa: E501
 
 DEFAULT_SHAPE_CHECK_SYSTEM = """\
 You check whether a tool result matches its expected type.
 Respond ONLY with valid JSON: {"matches_expectation": true|false, "issue": "<brief description or null>"}
+
+/no_think
 """  # noqa: E501
 # fmt: on

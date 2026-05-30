@@ -53,8 +53,12 @@ class NodeBudgets(BaseModel):
     ``DAGAGENT_BUDGETS__<FIELD>``.
     """
 
-    planner: int = 4096
-    """The full plan JSON."""
+    planner: int = 16384
+    """The full plan JSON. Sized generously because plan generation is the
+    single most critical call: a truncated plan fails the whole task. Local
+    serving stacks (e.g. rapid-mlx) typically allow far larger generations,
+    and structured-output prompts include the Qwen-3 ``/no_think`` soft switch
+    so this budget is spent on the JSON itself, not on internal reasoning."""
     think: int = 8192
     """Multi-step reasoning over prior context."""
     summary: int = 8192
@@ -177,7 +181,11 @@ class Settings(BaseSettings):
     tier3: TierConfig = _DEFAULT_TIER3
 
     # ── Plan limits ──────────────────────────────────────────────────────
-    max_plan_nodes: int = 12
+    # Sized for real fan-out: a "for each of N things, do M things" research
+    # task needs N*M tool nodes plus aggregation (a 3x3 sweep is already 14).
+    # The planner is told this budget (it's injected into the prompt), so the
+    # cap is a backstop against runaway plans, not the model's working limit.
+    max_plan_nodes: int = 24
     max_decision_nesting_depth: int = 2
     max_replan_attempts: int = 1
     confidence_threshold: float = 0.75
