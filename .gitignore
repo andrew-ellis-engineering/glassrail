@@ -71,3 +71,7 @@ logs/
 .env
 .env.*
 !.env.example
+
+# Local runtime config & state
+config.toml
+state.sqlite

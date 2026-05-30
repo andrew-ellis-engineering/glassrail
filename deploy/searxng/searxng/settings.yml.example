@@ -1,0 +1,51 @@
+# SearXNG settings for dag-agent local deployment — TEMPLATE.
+#
+# First-time setup:
+#   cp settings.yml.example settings.yml
+#   # then set secret_key below to the output of:  openssl rand -hex 32
+#
+# settings.yml is gitignored so your real secret_key never lands in version
+# control. The JSON API is enabled below — required for the SearxngProvider.
+
+use_default_settings: true
+
+server:
+  # Replace before first run:  openssl rand -hex 32
+  secret_key: "CHANGE_ME"
+  bind_address: "0.0.0.0"
+  base_url: "http://localhost:8888/"
+  limiter: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  # JSON format is disabled by default in SearXNG; must be listed here
+  # or all &format=json requests return HTTP 403.
+  formats:
+    - html
+    - json
+
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+  - name: bing
+    engine: bing
+    shortcut: b
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: d
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: w
+
+ui:
+  static_use_hash: true
+  default_locale: "en"
+  query_in_title: false
+  infinite_scroll: false
+  center_alignment: false
+  results_on_new_tab: false
+  theme_args:
+    simple_style: auto

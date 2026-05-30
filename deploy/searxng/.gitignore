@@ -1,0 +1,3 @@
+# The live settings.yml holds a real secret_key — keep it local.
+# Track settings.yml.example instead (copy it on first run).
+searxng/settings.yml
