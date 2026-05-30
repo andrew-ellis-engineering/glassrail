@@ -93,6 +93,7 @@ parsed by `pydantic-settings`. Tiers are nested, so use the `__` delimiter:
 | Tier 0 timeout (s) | `DAGAGENT_TIER0__TIMEOUT_S` | `10.0` |
 | Tier 1 API key | `DAGAGENT_TIER1__API_KEY` | *(empty)* |
 | HITL plan gate | `DAGAGENT_CONFIRM_PLANS` | `false` |
+| Load tool plugins | `DAGAGENT_LOAD_TOOL_PLUGINS` | `false` |
 
 Tiers 1–3 default to OpenRouter models; override any field the same way. With a
 local model as your only tier, raise `DAGAGENT_TIER0__TIMEOUT_S` (e.g. to `120`)
@@ -128,6 +129,16 @@ source — under `[prompts]` in `config.toml` or `DAGAGENT_PROMPTS__<FIELD>`. Th
 defaults live in `dagagent.config.prompts`. A custom prompt must keep
 instructing the model to emit the JSON shape its node expects (e.g. a summary
 prompt must still ask for `{"summary": ..., "confidence": ...}`).
+
+### Tools
+
+Built-in tools (`file_read`, plus `calendar_get` / `memory_search` /
+`web_search` stubs) always register. Add a first-party tool by decorating a
+function with `@harness.tool(name=..., description=..., parameters=<JSON
+Schema>)`. Third-party tools advertised through the `dagagent.tools`
+entry-point group are opt-in: set `DAGAGENT_LOAD_TOOL_PLUGINS=true` (or
+`load_tool_plugins = true` in `config.toml`) and the runtime discovers and
+registers them at startup.
 
 ## Evals
 

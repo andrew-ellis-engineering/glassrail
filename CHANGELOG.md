@@ -93,6 +93,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of hard-coding it, so prompts can be tuned without editing source.
   Defaults live in `dagagent.config.prompts`; override under `[prompts]` in
   `config.toml` or `DAGAGENT_PROMPTS__<FIELD>`.
+- Opt-in third-party tool plugins: with `load_tool_plugins = true`
+  (`DAGAGENT_LOAD_TOOL_PLUGINS`), `build_runtime` discovers and registers tools
+  advertised through the `dagagent.tools` entry-point group. The harness has
+  supported entry-point discovery all along; the composition root now invokes
+  it. Off by default — loading whatever is installed is a deliberate choice.
 - Tooling: uv, ruff, pyright strict, pytest + hypothesis, pre-commit,
   MkDocs + Material. CI on Linux + macOS for Python 3.12 + 3.13.
 - Apache-2.0 license.

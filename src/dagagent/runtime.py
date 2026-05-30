@@ -7,6 +7,7 @@ here, so the wiring never drifts between entry points.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from dagagent.config import Settings, get_settings
@@ -18,6 +19,8 @@ from dagagent.providers import router_from_settings
 from dagagent.state import InMemoryStateStore, StateStore
 from dagagent.telemetry import configure_tracing
 from dagagent.validator import PlanValidator
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -39,6 +42,9 @@ def build_runtime(settings: Settings | None = None, *, store: StateStore | None 
     bus = EventBus()
     harness = ToolHarness()
     register_builtins(harness)
+    if settings.load_tool_plugins:
+        loaded = harness.load_entry_points()
+        log.info("Loaded %d tool plugin(s) from the dagagent.tools entry-point group", loaded)
     router = router_from_settings(settings)
     validator = PlanValidator(harness=harness, settings=settings)
     planner = Planner(router=router, harness=harness, validator=validator, settings=settings)

@@ -160,6 +160,12 @@ class Settings(BaseSettings):
     # ── Per-node system prompts ──────────────────────────────────────────
     prompts: NodePrompts = NodePrompts()
 
+    # ── Tools ────────────────────────────────────────────────────────────
+    # Built-in tools always register. Third-party tools advertised through the
+    # ``dagagent.tools`` entry-point group are opt-in: discovering whatever is
+    # installed is a deliberate choice, not a default.
+    load_tool_plugins: bool = False
+
     # ── HITL ─────────────────────────────────────────────────────────────
     confirm_plans: bool = False
 
