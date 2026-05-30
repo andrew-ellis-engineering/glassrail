@@ -19,54 +19,6 @@ from dagagent.validator import PlanValidator
 
 log = logging.getLogger(__name__)
 
-PLANNER_SYSTEM = """\
-You are a task planning engine. Given a user request and a set of available tools,
-produce a structured execution plan as JSON.
-
-Rules:
-- Decompose the task into sequential nodes
-- Each node has exactly one clear action
-- Identify points where the next action depends on what a previous node returned
-- At those points, insert a DECISION node with a specific BINARY condition
-- Decision branches list node IDs to execute in each case
-- Decision nesting must not exceed 2 levels
-- context_needed lists node IDs whose output is required — keep this minimal
-- If a node needs a tool, set type=tool and tool=<name>
-- If a node synthesises previous outputs, set type=synthesis
-- If a node performs explicit multi-step reasoning over prior context
-  (with no tool call and no final synthesis), set type=think
-- If a node condenses noisy upstream output for a downstream consumer,
-  set type=summary
-- The final node whose output is the user's answer should be type=result;
-  use synthesis for intermediate combination steps
-- Use type=subplan sparingly — only when a self-contained sub-task is
-  best expressed as its own DAG. Set "subplan" to a nested plan object
-  with the same shape as this top-level plan. At most 2 subplans per
-  plan, at most 12 nodes per subplan
-- reasoning_required=true only for nodes needing genuine multi-step logic
-  beyond what type=think already implies
-
-Output ONLY valid JSON matching this schema (no markdown, no explanation):
-{
-  "nodes": [
-    {
-      "id": <int>,
-      "type": "tool" | "decision" | "synthesis" | "think" | "summary" | "result" | "subplan",
-      "description": "<what this node does>",
-      "tool": "<tool_name or null>",
-      "args_template": {<static args dict or null>},
-      "context_needed": [<node ids>],
-      "condition": "<binary question for decision nodes, null otherwise>",
-      "branches": {"yes": [<node ids>], "no": [<node ids>]} | null,
-      "default_branch": "yes" | "no" | null,
-      "reasoning_required": true | false,
-      "forced_tier": null,
-      "subplan": null | {"nodes": [<nested nodes>]}
-    }
-  ]
-}
-"""
-
 
 class Planner:
     """Generates plans by calling an LLM and validating the result."""
@@ -90,7 +42,7 @@ class Planner:
             span.set_attribute(ATTR_MIN_TIER, min_tier)
             tool_schemas_str = json.dumps(self._harness.all_schemas(), indent=2)
             messages: list[Message] = [
-                {"role": "system", "content": PLANNER_SYSTEM},
+                {"role": "system", "content": self._settings.prompts.planner},
                 {
                     "role": "user",
                     "content": (f"Available tools:\n{tool_schemas_str}\n\nUser request: {request}"),

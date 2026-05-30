@@ -24,6 +24,8 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
+from dagagent.config import prompts as _prompts
+
 
 class TierConfig(BaseModel):
     """Configuration for a single LLM tier.
@@ -67,6 +69,32 @@ class NodeBudgets(BaseModel):
     """A tool-args JSON object — structured micro-call."""
     shape_check: int = 128
     """A yes/no output-shape gate — structured micro-call."""
+
+
+class NodePrompts(BaseModel):
+    """System prompts for each node role.
+
+    The planner and executor read these instead of hard-coding prompt text, so
+    you can tune a node's behaviour without editing source. Defaults live in
+    :mod:`dagagent.config.prompts`. Override any field under ``[prompts]`` in
+    ``config.toml`` or ``DAGAGENT_PROMPTS__<FIELD>``. Each prompt must keep
+    instructing the model to emit the JSON shape its node expects.
+    """
+
+    planner: str = _prompts.DEFAULT_PLANNER_SYSTEM
+    """Plan generation — must request the plan JSON schema."""
+    decision: str = _prompts.DEFAULT_DECISION_SYSTEM
+    """Binary branch evaluation — must request {branch, confidence}."""
+    think: str = _prompts.DEFAULT_THINK_SYSTEM
+    """Multi-step reasoning — must request {reasoning, confidence}."""
+    synthesis: str = _prompts.DEFAULT_SYNTHESIS_SYSTEM
+    """Combine prior outputs — must request {output, confidence}."""
+    summary: str = _prompts.DEFAULT_SUMMARY_SYSTEM
+    """Condense upstream context — must request {summary, confidence}."""
+    result: str = _prompts.DEFAULT_RESULT_SYSTEM
+    """The final answer — must request {output, confidence}."""
+    shape_check: str = _prompts.DEFAULT_SHAPE_CHECK_SYSTEM
+    """Tool-output gate — must request {matches_expectation, issue}."""
 
 
 _DEFAULT_TIER0 = TierConfig(
@@ -128,6 +156,9 @@ class Settings(BaseSettings):
 
     # ── Per-node output-token budgets ────────────────────────────────────
     budgets: NodeBudgets = NodeBudgets()
+
+    # ── Per-node system prompts ──────────────────────────────────────────
+    prompts: NodePrompts = NodePrompts()
 
     # ── HITL ─────────────────────────────────────────────────────────────
     confirm_plans: bool = False

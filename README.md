@@ -120,6 +120,15 @@ small. Override any field under `[budgets]` in `config.toml` (or
 These are *output* caps. How much a node can *read* is bounded by your served
 model's context window, not by these.
 
+### Node prompts
+
+Each node role (planner, decision, think, synthesis, summary, result, and the
+tool-output shape check) has a system prompt you can override without editing
+source — under `[prompts]` in `config.toml` or `DAGAGENT_PROMPTS__<FIELD>`. The
+defaults live in `dagagent.config.prompts`. A custom prompt must keep
+instructing the model to emit the JSON shape its node expects (e.g. a summary
+prompt must still ask for `{"summary": ..., "confidence": ...}`).
+
 ## Evals
 
 Model-quality evals (multi-trial **pass@k** capability vs **pass^k** reliability

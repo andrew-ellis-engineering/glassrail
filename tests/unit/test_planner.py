@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from dagagent.config import NodeBudgets, Settings
+from dagagent.config import NodeBudgets, NodePrompts, Settings
 from dagagent.core import NodeType, PlanValidationError
 from dagagent.harness import ToolHarness, register_builtins
 from dagagent.planner import Planner
@@ -85,11 +85,12 @@ async def test_plan_round_trips_simple_payload(harness: ToolHarness, settings: S
 
 
 class _CapturingProvider(_FixedProvider):
-    """Records the ``max_tokens`` of each call alongside the fixed payload."""
+    """Records the ``max_tokens`` and messages of each call."""
 
     def __init__(self, *, payload: str) -> None:
         super().__init__(payload=payload)
         self.max_tokens_seen: list[int] = []
+        self.system_seen: list[str] = []
 
     async def complete(
         self,
@@ -100,7 +101,8 @@ class _CapturingProvider(_FixedProvider):
         timeout_s: float | None = None,
     ) -> AsyncIterator[Chunk]:
         self.max_tokens_seen.append(max_tokens)
-        del messages, json_mode, timeout_s
+        self.system_seen.append(next(m["content"] for m in messages if m["role"] == "system"))
+        del json_mode, timeout_s
         yield Chunk(text=self._payload, tokens_used=42)
 
 
@@ -113,6 +115,17 @@ async def test_planner_uses_its_configured_budget(harness: ToolHarness) -> None:
 
     await planner.plan("anything")
     assert provider.max_tokens_seen == [5005]
+
+
+async def test_planner_uses_its_configured_prompt(harness: ToolHarness) -> None:
+    """A custom planner prompt is sent as the system message."""
+    payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
+    provider = _CapturingProvider(payload=payload)
+    settings = Settings(prompts=NodePrompts(planner="CUSTOM PLANNER PROMPT"))
+    planner = _planner_from(provider, harness, settings)
+
+    await planner.plan("anything")
+    assert provider.system_seen == ["CUSTOM PLANNER PROMPT"]
 
 
 async def test_invalid_json_raises_value_error(harness: ToolHarness, settings: Settings) -> None:

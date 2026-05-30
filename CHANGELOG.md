@@ -88,6 +88,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   micro-calls stay small. Override under `[budgets]` in `config.toml` or
   `DAGAGENT_BUDGETS__<FIELD>`. Replaces the single `max_node_output_tokens`
   setting and the previously hard-coded caps in the planner and executor.
+- Configurable per-node system prompts (`settings.prompts`, a `NodePrompts`
+  table): the planner and executor read each role's prompt from settings
+  instead of hard-coding it, so prompts can be tuned without editing source.
+  Defaults live in `dagagent.config.prompts`; override under `[prompts]` in
+  `config.toml` or `DAGAGENT_PROMPTS__<FIELD>`.
 - Tooling: uv, ruff, pyright strict, pytest + hypothesis, pre-commit,
   MkDocs + Material. CI on Linux + macOS for Python 3.12 + 3.13.
 - Apache-2.0 license.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
-from dagagent.planner.planner import PLANNER_SYSTEM, Planner
+from dagagent.config.prompts import DEFAULT_PLANNER_SYSTEM as PLANNER_SYSTEM
+from dagagent.planner.planner import Planner
 
 __all__ = ["PLANNER_SYSTEM", "Planner"]

@@ -8,7 +8,7 @@ from collections.abc import Sequence as _Sequence
 
 import pytest
 
-from dagagent.config import NodeBudgets, Settings
+from dagagent.config import NodeBudgets, NodePrompts, Settings
 from dagagent.core import (
     ExecutionState,
     Node,
@@ -338,6 +338,7 @@ class _CapturingProvider:
         self._responses: list[str] = list(responses)
         self._tier = tier
         self.max_tokens_seen: list[int] = []
+        self.system_seen: list[str] = []
 
     @property
     def name(self) -> str:
@@ -355,8 +356,9 @@ class _CapturingProvider:
         max_tokens: int = 1024,
         timeout_s: float | None = None,
     ) -> AsyncIterator[Chunk]:
-        del messages, json_mode, timeout_s
+        del json_mode, timeout_s
         self.max_tokens_seen.append(max_tokens)
+        self.system_seen.append(next(m["content"] for m in messages if m["role"] == "system"))
         yield Chunk(text=self._responses.pop(0), tokens_used=1)
 
 
@@ -398,3 +400,18 @@ async def test_decision_node_uses_its_configured_budget() -> None:
     )
     await executor.execute(_state(plan))
     assert provider.max_tokens_seen == [42]
+
+
+async def test_content_node_uses_configured_prompt() -> None:
+    """A custom summary prompt is sent as the SUMMARY node's system message."""
+    settings = Settings(prompts=NodePrompts(summary="CUSTOM SUMMARY PROMPT"))
+    provider = _CapturingProvider([json.dumps({"summary": "x", "confidence": 0.9})])
+    executor = Executor(
+        router=TierRouter([provider]),
+        harness=ToolHarness(),
+        settings=settings,
+    )
+    state = _state(Plan(nodes=[Node(id=1, type=NodeType.SUMMARY, description="condense")]))
+
+    await executor.execute(state)
+    assert provider.system_seen == ["CUSTOM SUMMARY PROMPT"]

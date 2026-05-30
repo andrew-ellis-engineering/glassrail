@@ -51,46 +51,14 @@ from dagagent.telemetry import (
 log = logging.getLogger(__name__)
 
 
-# Prompts are kept verbatim; some lines exceed the 100-char lint limit.
-# fmt: off
-DECISION_SYSTEM = """\
-You evaluate a binary condition based on provided context.
-Respond ONLY with valid JSON: {"branch": "yes"|"no", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}
-"""  # noqa: E501
-
-SYNTHESIS_SYSTEM = """\
-You are a synthesis engine. Use the provided context to produce a clear, concise response.
-Always include a confidence score.
-Respond ONLY with valid JSON: {"output": "<your response>", "confidence": <0.0-1.0>}
-"""
-
-UNEXPECTED_RESULT_SYSTEM = """\
-You check whether a tool result matches its expected type.
-Respond ONLY with valid JSON: {"matches_expectation": true|false, "issue": "<brief description or null>"}
-"""  # noqa: E501
-
-THINK_SYSTEM = """\
-You are a reasoning engine. Work through the task step by step using the provided context.
-Produce a concise chain of reasoning, then a confidence score for that reasoning.
-Respond ONLY with valid JSON: {"reasoning": "<your step-by-step reasoning>", "confidence": <0.0-1.0>}
-"""  # noqa: E501
-
-SUMMARY_SYSTEM = """\
-You are a summarisation engine. Produce a high-fidelity summary of the provided context: preserve every fact, figure, name, date, and claim a downstream node might need. Compress language, not information — drop only boilerplate, redundancy, and formatting, never substance.
-Respond ONLY with valid JSON: {"summary": "<faithful summary>", "confidence": <0.0-1.0>}
-"""  # noqa: E501
-
-RESULT_SYSTEM = """\
-You produce the final user-facing answer for a task. Use the provided context to compose a clean, direct response — no preamble, no meta-commentary, no scaffolding.
-Respond ONLY with valid JSON: {"output": "<final answer>", "confidence": <0.0-1.0>}
-"""  # noqa: E501
-# fmt: on
-
-
 class _LLMNodeSpec(NamedTuple):
-    """Per-node-type knobs for the shared single-LLM-call node executor."""
+    """Per-node-type knobs for the shared single-LLM-call node executor.
 
-    system: str
+    The system prompt is *not* here — it is read from ``settings.prompts`` so it
+    can be tuned without code changes. This table holds only the parsing knobs
+    that must stay in lockstep with that prompt's JSON shape.
+    """
+
     context_label: str
     output_key: str
     default_confidence: float
@@ -100,10 +68,10 @@ class _LLMNodeSpec(NamedTuple):
 # that reads a single field out of a JSON response; only these few values
 # differ. Keeping them in a table lets one method serve all four.
 _LLM_NODE_SPECS: dict[NodeType, _LLMNodeSpec] = {
-    NodeType.SYNTHESIS: _LLMNodeSpec(SYNTHESIS_SYSTEM, "Context from prior nodes:", "output", 0.9),
-    NodeType.THINK: _LLMNodeSpec(THINK_SYSTEM, "Context from prior nodes:", "reasoning", 0.7),
-    NodeType.SUMMARY: _LLMNodeSpec(SUMMARY_SYSTEM, "Context to summarise:", "summary", 0.9),
-    NodeType.RESULT: _LLMNodeSpec(RESULT_SYSTEM, "Context from prior nodes:", "output", 0.9),
+    NodeType.SYNTHESIS: _LLMNodeSpec("Context from prior nodes:", "output", 0.9),
+    NodeType.THINK: _LLMNodeSpec("Context from prior nodes:", "reasoning", 0.7),
+    NodeType.SUMMARY: _LLMNodeSpec("Context to summarise:", "summary", 0.9),
+    NodeType.RESULT: _LLMNodeSpec("Context from prior nodes:", "output", 0.9),
 }
 
 
@@ -308,7 +276,7 @@ class Executor:
     ) -> NodeResult:
         ctx = assemble_context(node, state.results)
         messages: list[Message] = [
-            {"role": "system", "content": DECISION_SYSTEM},
+            {"role": "system", "content": self._settings.prompts.decision},
             {
                 "role": "user",
                 "content": (
@@ -367,7 +335,7 @@ class Executor:
         """
         ctx = assemble_context(node, state.results)
         messages: list[Message] = [
-            {"role": "system", "content": spec.system},
+            {"role": "system", "content": self._node_system_prompt(node.type)},
             {
                 "role": "user",
                 "content": f"Task: {node.description}\n\n{spec.context_label}\n{ctx}",
@@ -457,6 +425,16 @@ class Executor:
             NodeType.RESULT: budgets.result,
         }[node_type]
 
+    def _node_system_prompt(self, node_type: NodeType) -> str:
+        """System prompt for a single-LLM-call content node, from settings."""
+        prompts = self._settings.prompts
+        return {
+            NodeType.THINK: prompts.think,
+            NodeType.SUMMARY: prompts.summary,
+            NodeType.SYNTHESIS: prompts.synthesis,
+            NodeType.RESULT: prompts.result,
+        }[node_type]
+
     def _select_tier(self, node: Node) -> int:
         """Pick a tier for ``node``. Deterministic — the model never decides."""
         if node.forced_tier is not None:
@@ -518,7 +496,7 @@ class Executor:
             raw, _ = await collect(
                 self._router.complete(
                     [
-                        {"role": "system", "content": UNEXPECTED_RESULT_SYSTEM},
+                        {"role": "system", "content": self._settings.prompts.shape_check},
                         {"role": "user", "content": prompt},
                     ],
                     min_tier=0,

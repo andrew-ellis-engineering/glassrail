@@ -7,13 +7,17 @@
 
 from __future__ import annotations
 
-from dagagent.executor.context import assemble_context
-from dagagent.executor.executor import (
-    DECISION_SYSTEM,
-    SYNTHESIS_SYSTEM,
-    UNEXPECTED_RESULT_SYSTEM,
-    Executor,
+from dagagent.config.prompts import (
+    DEFAULT_DECISION_SYSTEM as DECISION_SYSTEM,
 )
+from dagagent.config.prompts import (
+    DEFAULT_SHAPE_CHECK_SYSTEM as UNEXPECTED_RESULT_SYSTEM,
+)
+from dagagent.config.prompts import (
+    DEFAULT_SYNTHESIS_SYSTEM as SYNTHESIS_SYSTEM,
+)
+from dagagent.executor.context import assemble_context
+from dagagent.executor.executor import Executor
 from dagagent.executor.orchestrator import Orchestrator
 
 __all__ = [
