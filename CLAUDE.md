@@ -6,6 +6,15 @@ This file is the operating manual for working in the repo. For *what's built*
 and *what's next*, see `CHANGELOG.md` and `docs/roadmap.md` — don't duplicate
 them here.
 
+**Keep `README.md` current.** When a change alters how someone *runs or
+configures* the agent — a new/renamed CLI command or flag, a changed default,
+a new config key, a new way to invoke it — update the README's Quickstart /
+Ways to run it / Configuration sections in the same change. The README is the
+user-facing front door (what it is, how to run it, where to go next); it must
+not drift from the actual surface. It is **not** the changelog, the
+architecture doc, or the contributor manual — link out to those rather than
+inlining their content.
+
 ## Check sweep — must be green before every commit
 
 Run all four. The bar is zero failures, zero lint findings, and a clean
@@ -34,10 +43,34 @@ once with `uv run pre-commit install`.
   **CLI:** Typer. **Logging:** stdlib `logging` + `structlog`.
 - **License:** Apache-2.0. **Versioning:** SemVer 0.x. **No PyPI publish** until
   after the Phase 1 eval gates — GitHub releases only.
-- **Docs:** MkDocs + Material (`mkdocs.yml`). **Observability:** structured
-  logs plus OpenTelemetry tracing (`dagagent.telemetry`) — a no-op until
-  configured; SDK + OTLP exporter in the optional `otel` extra. See
+- **Docs:** MkDocs + Material (`mkdocs.yml`); the `nav` there is the source of
+  truth for the published site, so add new pages to it. **Observability:**
+  structured logs plus OpenTelemetry tracing (`dagagent.telemetry`) — a no-op
+  until configured; SDK + OTLP exporter in the optional `otel` extra. See
   `docs/observability.md`.
+
+## Documentation map — which file owns what
+
+Keep these single-purpose; put new content in the file that owns the topic
+rather than duplicating across files.
+
+- `README.md` — user-facing front door: what it is, Quickstart, ways to run it,
+  configuration basics, links out. Keep current (see the rule above).
+- `CLAUDE.md` (this file) — operating manual for working in the repo:
+  conventions, primitives, package map, test layout, commit rules.
+- `CHANGELOG.md` — the running inventory of what has landed. The README's Status
+  section points here instead of listing components.
+- `CONTRIBUTING.md` — the full check sweep and PR guidelines for contributors.
+- `docs/index.md` — published-site landing page (the "why DAG planning?" intro).
+- `docs/architecture.md` — the layered architecture and how the pieces fit
+  (currently a stub being ported from the design vault).
+- `docs/roadmap.md` — phases and what's next.
+- `docs/evals.md` — the eval framework: pass@k vs pass^k, grading cascade, how
+  to run it. (Framework internals live in `eval-framework/CLAUDE.md`.)
+- `docs/streaming.md` — the task event stream (SSE and WebSocket transports).
+- `docs/observability.md` — OpenTelemetry span tree and how to enable tracing.
+- `docs/deployment.md` — the production `Dockerfile` and how to serve the gateway.
+- `docs/tui.md` — the `dagagent tui` live viewer (read-only SSE client).
 
 ## Architectural primitives
 
