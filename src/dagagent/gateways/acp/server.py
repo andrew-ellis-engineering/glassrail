@@ -278,6 +278,7 @@ class AcpServer:
         if isinstance(event, PlanReady) and event.plan is not None:
             tracker.load(event.plan)
             await self._update(session, {"sessionUpdate": "plan", "entries": tracker.entries()})
+            await self._update(session, _plan_graph(event.plan))
         elif isinstance(event, NodeStarted):
             tracker.start(event.node_id)
             await self._update(session, {"sessionUpdate": "plan", "entries": tracker.entries()})
@@ -371,6 +372,33 @@ class AcpServer:
             session,
             {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": text}},
         )
+
+
+def _plan_graph(plan: dict[str, Any]) -> dict[str, Any]:
+    """A dagagent extension carrying the plan's graph topology.
+
+    ACP's ``plan`` update is a flat entry list with no edges; the TUI's DAG view
+    needs the dependency structure, so we send node types and ``context_needed``
+    edges once per plan. Generic ACP clients ignore the unknown update kind.
+    """
+    nodes: list[dict[str, Any]] = plan.get("nodes") or []
+    order: list[int] = plan.get("sorted_node_ids") or [n["id"] for n in nodes]
+    by_id: dict[int, dict[str, Any]] = {n["id"]: n for n in nodes}
+    out: list[dict[str, Any]] = []
+    for node_id in order:
+        node = by_id.get(node_id)
+        if node is None:
+            continue
+        deps = [d for d in (node.get("context_needed") or []) if d in by_id]
+        out.append(
+            {
+                "id": node_id,
+                "nodeType": node.get("type", "node"),
+                "description": node.get("description", ""),
+                "deps": deps,
+            }
+        )
+    return {"sessionUpdate": "plan_graph", "nodes": out}
 
 
 def _prompt_text(prompt: Any) -> str:

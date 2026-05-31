@@ -62,6 +62,24 @@ pub enum SessionUpdate {
         #[serde(default)]
         flagged: bool,
     },
+    /// A dagagent extension: the plan's graph topology (ACP's flat plan omits
+    /// edges), used to render the DAG view. Sent once per plan.
+    PlanGraph {
+        #[serde(default)]
+        nodes: Vec<GraphNode>,
+    },
+}
+
+/// One node of the plan graph, as sent on the wire.
+#[derive(Debug, Clone, Deserialize)]
+pub struct GraphNode {
+    pub id: i64,
+    #[serde(default, rename = "nodeType")]
+    pub node_type: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub deps: Vec<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

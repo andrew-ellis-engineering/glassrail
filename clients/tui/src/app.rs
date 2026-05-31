@@ -10,6 +10,7 @@ use tokio::sync::mpsc;
 
 use crate::acp::messages::{PermOption, PlanEntry, SessionUpdate};
 use crate::acp::{Outbound, ServerMessage};
+use crate::graph::{self, GraphNode};
 use crate::transcript::Cell;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,6 +40,10 @@ pub struct App<O: Outbound> {
 
     pub transcript: Vec<Cell>,
     pub plan: Vec<PlanEntry>,
+    /// The plan's graph topology for the DAG view (empty until plan_graph).
+    pub graph: Vec<GraphNode>,
+    /// Whether the DAG view is open (toggled with Tab).
+    pub show_dag: bool,
     pub composer: String,
     /// Cursor position in the composer, as a character index.
     pub cursor: usize,
@@ -74,6 +79,8 @@ impl<O: Outbound> App<O> {
                 "Type a task and press Enter. Esc or Ctrl-C to quit.".into(),
             )],
             plan: Vec::new(),
+            graph: Vec::new(),
+            show_dag: false,
             composer: String::new(),
             cursor: 0,
             status: Status::Ready,
@@ -163,6 +170,7 @@ impl<O: Outbound> App<O> {
             KeyCode::Down => self.scroll(false, 1),
             KeyCode::PageUp => self.scroll(true, 10),
             KeyCode::PageDown => self.scroll(false, 10),
+            KeyCode::Tab => self.show_dag = !self.show_dag,
             _ => {}
         }
     }
@@ -310,7 +318,15 @@ impl<O: Outbound> App<O> {
 
     fn on_update(&mut self, update: SessionUpdate) {
         match update {
-            SessionUpdate::Plan { entries } => self.plan = entries,
+            SessionUpdate::Plan { entries } => {
+                // Plan entries and graph nodes share the topological order, so
+                // sync the graph's per-node status by position.
+                for (node, entry) in self.graph.iter_mut().zip(&entries) {
+                    node.status = entry.status.clone();
+                }
+                self.plan = entries;
+            }
+            SessionUpdate::PlanGraph { nodes } => self.graph = graph::build(nodes),
             SessionUpdate::ToolCall {
                 tool_call_id,
                 title,
@@ -375,6 +391,7 @@ impl<O: Outbound> App<O> {
         self.history_pos = None;
         self.transcript.push(Cell::Prompt(prompt.clone()));
         self.plan.clear();
+        self.graph.clear();
         self.tool_idx.clear();
         self.scrollback = 0; // jump back to the tail for the new turn
         self.working = true;
@@ -803,6 +820,60 @@ mod tests {
         assert_eq!(app.composer, "second");
         app.on_key(ctrl(KeyCode::Char('n'))).await;
         assert_eq!(app.composer, "");
+    }
+
+    #[tokio::test]
+    async fn tab_toggles_the_dag_view() {
+        let (mut app, _client, _rx) = app();
+        assert!(!app.show_dag);
+        app.on_key(key(KeyCode::Tab)).await;
+        assert!(app.show_dag);
+        app.on_key(key(KeyCode::Tab)).await;
+        assert!(!app.show_dag);
+    }
+
+    #[tokio::test]
+    async fn plan_graph_builds_layers_and_plan_updates_sync_status() {
+        use crate::acp::messages::{GraphNode as WireNode, PlanEntry};
+        let (mut app, _client, _rx) = app();
+        app.on_server(ServerMessage::Update(SessionUpdate::PlanGraph {
+            nodes: vec![
+                WireNode {
+                    id: 1,
+                    node_type: "tool".into(),
+                    description: "read".into(),
+                    deps: vec![],
+                },
+                WireNode {
+                    id: 2,
+                    node_type: "result".into(),
+                    description: "answer".into(),
+                    deps: vec![1],
+                },
+            ],
+        }))
+        .await;
+        assert_eq!(app.graph.len(), 2);
+        assert_eq!(app.graph[0].layer, 0);
+        assert_eq!(app.graph[1].layer, 1);
+        assert!(app.graph.iter().all(|n| n.status == "pending"));
+
+        // A plan update syncs status onto the graph by position.
+        app.on_server(ServerMessage::Update(SessionUpdate::Plan {
+            entries: vec![
+                PlanEntry {
+                    content: "[tool] read".into(),
+                    status: "completed".into(),
+                },
+                PlanEntry {
+                    content: "[result] answer".into(),
+                    status: "in_progress".into(),
+                },
+            ],
+        }))
+        .await;
+        assert_eq!(app.graph[0].status, "completed");
+        assert_eq!(app.graph[1].status, "in_progress");
     }
 
     #[tokio::test]

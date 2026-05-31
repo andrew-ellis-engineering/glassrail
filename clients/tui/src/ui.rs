@@ -10,6 +10,7 @@ use ratatui::Frame;
 use crate::acp::messages::{PermOption, PlanEntry};
 use crate::acp::Outbound;
 use crate::app::{App, Mode, Status, SPINNER};
+use crate::graph::GraphNode;
 use crate::transcript::Cell;
 
 pub fn render<O: Outbound>(frame: &mut Frame, app: &App<O>) {
@@ -23,7 +24,11 @@ pub fn render<O: Outbound>(frame: &mut Frame, app: &App<O>) {
     let spinner = SPINNER[app.spinner % SPINNER.len()];
     let elapsed = app.turn_start.map(|t| t.elapsed().as_secs());
     render_status(frame, chunks[0], app.status, spinner, elapsed);
-    render_body(frame, chunks[1], &app.plan, &app.transcript, app.scrollback);
+    if app.show_dag {
+        render_dag(frame, chunks[1], &app.graph);
+    } else {
+        render_body(frame, chunks[1], &app.plan, &app.transcript, app.scrollback);
+    }
     render_composer(frame, chunks[2], &app.composer, app.cursor);
 
     match &app.mode {
@@ -89,16 +94,66 @@ fn render_plan(frame: &mut Frame, area: Rect, plan: &[PlanEntry]) {
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 
-fn plan_line(entry: &PlanEntry) -> Line<'static> {
-    let (glyph, color) = match entry.status.as_str() {
+fn status_glyph(status: &str) -> (&'static str, Color) {
+    match status {
         "completed" => ("✔", Color::Green),
         "in_progress" => ("▶", Color::Yellow),
+        "failed" => ("✗", Color::Red),
         _ => ("·", Color::DarkGray),
-    };
+    }
+}
+
+fn plan_line(entry: &PlanEntry) -> Line<'static> {
+    let (glyph, color) = status_glyph(&entry.status);
     Line::from(vec![
         Span::styled(format!("{glyph} "), Style::default().fg(color)),
         Span::raw(entry.content.clone()),
     ])
+}
+
+/// The DAG view: nodes grouped into topological layers (parallel cohorts),
+/// each coloured by live status. Edges/connectors are not drawn yet.
+fn render_dag(frame: &mut Frame, area: Rect, graph: &[GraphNode]) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" graph — Tab to close ");
+    let mut lines: Vec<Line> = Vec::new();
+    if graph.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "no plan yet — submit a task",
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::ITALIC),
+        )));
+    } else {
+        for layer in 0..=crate::graph::max_layer(graph) {
+            lines.push(Line::from(Span::styled(
+                format!("layer {layer}"),
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
+            )));
+            for node in graph.iter().filter(|n| n.layer == layer) {
+                let (glyph, color) = status_glyph(&node.status);
+                lines.push(Line::from(vec![
+                    Span::raw("   "),
+                    Span::styled(format!("{glyph} "), Style::default().fg(color)),
+                    Span::styled(
+                        format!("#{} [{}] ", node.id, node.node_type),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                    Span::raw(node.description.clone()),
+                ]));
+            }
+            lines.push(Line::raw(""));
+        }
+    }
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false }),
+        area,
+    );
 }
 
 fn render_transcript(frame: &mut Frame, area: Rect, transcript: &[Cell], scrollback: u16) {

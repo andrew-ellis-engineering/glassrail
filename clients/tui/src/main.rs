@@ -6,6 +6,7 @@
 
 mod acp;
 mod app;
+mod graph;
 mod transcript;
 mod ui;
 

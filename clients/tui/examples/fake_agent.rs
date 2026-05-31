@@ -73,8 +73,19 @@ fn read_msg(reader: &mut impl BufRead) -> Option<Value> {
 
 /// Run one prompt turn: gate, then stream to a result (or stop on rejection).
 fn handle_prompt(session: &str, reply_id: &Value, reader: &mut impl BufRead) {
-    // Announce the plan and ask for approval.
+    // Announce the plan (flat) plus its graph topology, then ask for approval.
     update(session, plan(["pending", "pending", "pending"]));
+    update(
+        session,
+        json!({
+            "sessionUpdate": "plan_graph",
+            "nodes": [
+                {"id": 1, "nodeType": "tool", "description": "read the brief", "deps": []},
+                {"id": 2, "nodeType": "synthesis", "description": "analyse the options", "deps": [1]},
+                {"id": 3, "nodeType": "result", "description": "write the answer", "deps": [2]},
+            ],
+        }),
+    );
     send(&json!({
         "jsonrpc": "2.0",
         "id": 9001,

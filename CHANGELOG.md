@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- TUI DAG view (`Tab`): a collapsible panel showing the plan's nodes grouped
+  into dependency layers (parallel cohorts), recoloured live by status. The
+  adapter sends the graph topology as a `plan_graph` extension update, since
+  ACP's flat plan omits edges. Edge/connector drawing between nodes is not yet
+  implemented.
 - TUI composer editing: in-place cursor movement (`←`/`→`, `Home`/`End`,
   `Backspace`/`Del`) with a visible cursor, and submitted-task history recall via
   `Ctrl-P`/`Ctrl-N`. (Multi-line entry is not yet supported.)

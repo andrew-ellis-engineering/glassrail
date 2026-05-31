@@ -343,6 +343,14 @@ async def test_prompt_streams_plan_nodes_and_result() -> None:
     assert all("tier" in m and "confidence" in m for m in metas)
     assert {m["nodeType"] for m in metas} == {"tool", "result"}
 
+    # The graph topology is streamed once as the plan_graph extension.
+    graphs = conn.updates_of("plan_graph")
+    assert len(graphs) == 1
+    nodes = graphs[0]["nodes"]
+    assert [n["id"] for n in nodes] == [1, 2]
+    assert {n["nodeType"] for n in nodes} == {"tool", "result"}
+    assert all("deps" in n for n in nodes)
+
     # The final answer is streamed exactly once (via TaskCompleted, not the
     # result node) — no duplication.
     messages = [
