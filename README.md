@@ -87,6 +87,20 @@ The viewer draws the plan as colour-coded node boxes connected by edges
 they run) above a per-node table; `--no-dag` shows the table alone. See
 [docs/tui.md](./docs/tui.md).
 
+**Editor / agent clients (ACP)** — speak the [Agent Client
+Protocol](https://agentclientprotocol.com) as a JSON-RPC 2.0 server over stdio,
+so an ACP client (the in-repo Rust TUI, or Zed) can spawn the agent as a
+subprocess, submit tasks, and watch the plan and nodes stream back:
+
+```bash
+uv run dagagent acp                            # JSON-RPC over stdin/stdout; logs to stderr
+```
+
+It implements `initialize`, `session/new`, `session/prompt`, and
+`session/cancel`; the plan and per-node execution arrive as `session/update`
+notifications. (`fs/*` and `terminal/*` are intentionally unsupported — the
+agent runs its own tools server-side.)
+
 **REST API directly** — `POST /task` returns a `task_id`; follow it over
 Server-Sent Events or a WebSocket at `/task/{id}/events`, or poll
 `GET /task/{id}`. See [docs/streaming.md](./docs/streaming.md).

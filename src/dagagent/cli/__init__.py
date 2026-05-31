@@ -21,6 +21,7 @@ from dagagent.core import (
     TaskStatus,
     new_task_id,
 )
+from dagagent.gateways.acp import run_acp
 from dagagent.gateways.tui import DEFAULT_BASE_URL, run_tui
 from dagagent.runtime import build_runtime
 
@@ -45,6 +46,18 @@ def tui(
 ) -> None:
     """Submit a task to a running gateway and watch it run in the terminal."""
     asyncio.run(run_tui(request, base_url=url, show_dag=dag))
+
+
+@app.command()
+def acp() -> None:
+    """Speak the Agent Client Protocol over stdio (for the Rust TUI / ACP clients).
+
+    A long-running JSON-RPC 2.0 process: stdin/stdout carry the protocol,
+    diagnostics go to stderr. A client (e.g. the ``clients/tui`` binary) spawns
+    this as a subprocess, submits tasks via ``session/prompt``, and watches the
+    plan and node execution stream back as ``session/update`` notifications.
+    """
+    asyncio.run(run_acp())
 
 
 @app.command()

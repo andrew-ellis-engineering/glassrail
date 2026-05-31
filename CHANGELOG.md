@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- ACP adapter (`dagagent acp`): a JSON-RPC 2.0 server over stdio exposing the
+  agent via the Agent Client Protocol, for the forthcoming Rust TUI and other
+  ACP clients. Implements `initialize`, `session/new`, `session/prompt`, and
+  `session/cancel`, bridging the EventBus into `session/update` notifications
+  (plan, tool calls, message chunks). `fs/*`, `terminal/*`, and `session/load`
+  are intentionally unsupported.
 - Package skeleton (src-layout) with subpackages for core, config, events,
   providers, state, harness, validator, planner, executor, channels,
   gateways, and cli.
