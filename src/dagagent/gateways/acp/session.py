@@ -25,6 +25,18 @@ class Session:
     # Set while a turn is running so session/cancel can target the live task.
     active_task: TaskId | None = None
 
+    def compose_request(self, text: str) -> str:
+        """Build a follow-up task's request, threading the prior result in.
+
+        The first prompt in a session is used verbatim. Later prompts are
+        prefixed with the previous task's ``final_output`` as a context preamble
+        so the task *dovetails* — it sees what came before. This is task input,
+        not node context, so the fresh-context-per-node invariant is untouched.
+        """
+        if not self.carried_context:
+            return text
+        return f"Context from the previous step:\n{self.carried_context}\n\nNew request: {text}"
+
 
 class SessionRegistry:
     """Keyed by ACP ``sessionId``; lives for the adapter process."""

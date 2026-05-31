@@ -32,6 +32,7 @@ from dagagent.events import (
 from dagagent.executor import Orchestrator
 from dagagent.gateways.acp.protocol import Connection, JsonRpcError
 from dagagent.gateways.acp.server import AcpServer
+from dagagent.gateways.acp.session import Session
 from dagagent.harness import ToolHarness
 from dagagent.runtime import Runtime
 from dagagent.state import InMemoryStateStore
@@ -94,10 +95,12 @@ class _FakeOrchestrator(Orchestrator):
     def __init__(self, *, event_bus: EventBus, store: InMemoryStateStore) -> None:
         self._bus = event_bus
         self._store = store
+        self.seen_requests: list[str] = []
 
     async def run(self, task_id: TaskId) -> None:  # type: ignore[override]
         state = await self._store.load_task(task_id)
         assert state is not None
+        self.seen_requests.append(state.user_request)
         await self._bus.publish(PlanReady(task_id=task_id, node_count=2, plan=_PLAN))
 
         await self._bus.publish(
@@ -355,3 +358,46 @@ async def test_prompt_rejects_empty_prompt() -> None:
     sid = (await server.dispatch("session/new", {}))["sessionId"]
     with pytest.raises(JsonRpcError):
         await server.dispatch("session/prompt", {"sessionId": sid, "prompt": []})
+
+
+async def test_dovetail_threads_prior_result_into_follow_up() -> None:
+    conn = _RecordingConnection([])
+    bus = EventBus()
+    store = InMemoryStateStore()
+    orch = _FakeOrchestrator(event_bus=bus, store=store)
+    runtime = Runtime(
+        orchestrator=orch,
+        store=store,
+        harness=ToolHarness(),
+        event_bus=bus,
+        settings=get_settings(),
+    )
+    server = AcpServer(runtime, conn)
+    sid = (await server.dispatch("session/new", {}))["sessionId"]
+
+    await server.dispatch(
+        "session/prompt", {"sessionId": sid, "prompt": [{"type": "text", "text": "what port?"}]}
+    )
+    await server.dispatch(
+        "session/prompt", {"sessionId": sid, "prompt": [{"type": "text", "text": "and the host?"}]}
+    )
+
+    assert len(orch.seen_requests) == 2
+    # The first task is verbatim; the follow-up carries the prior result.
+    assert orch.seen_requests[0] == "what port?"
+    follow_up = orch.seen_requests[1]
+    assert "Context from the previous step:" in follow_up
+    assert "The port is 8443." in follow_up
+    assert "New request: and the host?" in follow_up
+
+
+def test_session_compose_request_is_verbatim_without_context() -> None:
+    session = Session(id="s")
+    assert session.compose_request("do the thing") == "do the thing"
+
+
+def test_session_compose_request_threads_carried_context() -> None:
+    session = Session(id="s", carried_context="prior answer")
+    composed = session.compose_request("next")
+    assert composed.startswith("Context from the previous step:\nprior answer")
+    assert composed.endswith("New request: next")

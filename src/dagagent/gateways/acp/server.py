@@ -172,7 +172,8 @@ class AcpServer:
     async def _run_turn(self, session: Session, text: str) -> str:
         store = self._rt.store
         task_id = new_task_id()
-        state = ExecutionState(task_id=task_id, user_request=text)
+        # Dovetail: a follow-up prompt carries the prior task's result forward.
+        state = ExecutionState(task_id=task_id, user_request=session.compose_request(text))
         await store.save_task(state)
         session.tasks.append(task_id)
         session.active_task = task_id

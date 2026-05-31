@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Dovetailing ACP sessions: a follow-up `session/prompt` in the same session
+  carries the previous task's `final_output` forward as a context preamble, so
+  tasks build on one another. Threaded as task input, leaving the
+  fresh-context-per-node invariant intact.
 - Rust terminal client (`clients/tui`, `dagagent-tui`): a ratatui app that
   spawns `dagagent acp`, submits tasks, streams the plan and node execution,
   and drives the plan-approval gate (approve / reject / reject-with-feedback).

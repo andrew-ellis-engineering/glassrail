@@ -34,6 +34,13 @@ The agent command resolves in this order: positional args → the
 | `Esc` | cancel a running turn, else quit |
 | `Ctrl-C` | quit |
 
+## Dovetailing
+
+Tasks in one session form a chain: after a task completes, the next prompt you
+submit carries the previous result forward as context (handled by the agent's
+ACP session). Ask a question, then a follow-up that refers to "it" or "that" —
+no need to restate. Quit and relaunch for a fresh session.
+
 ## Layout
 
 - **Status line** — agent state (ready / working / awaiting approval).
