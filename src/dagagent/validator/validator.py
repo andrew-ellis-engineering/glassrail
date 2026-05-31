@@ -24,6 +24,7 @@ class PlanValidator:
     def validate(self, plan: Plan) -> list[int]:
         """Run every check; populate and return ``plan.sorted_node_ids``."""
         self._check_node_limit(plan, is_subplan=False)
+        self._check_node_contracts(plan)
         self._check_tool_names(plan)
         self._check_forced_tiers(plan)
         sorted_ids = self._topological_sort(plan)
@@ -40,6 +41,45 @@ class PlanValidator:
         if len(plan.nodes) > limit:
             scope = "Subplan" if is_subplan else "Plan"
             raise PlanValidationError(f"{scope} has {len(plan.nodes)} nodes; max is {limit}")
+
+    def _check_node_contracts(self, plan: Plan) -> None:
+        for node in plan.nodes:
+            if node.type is NodeType.TOOL:
+                if not node.tool:
+                    raise PlanValidationError(f"TOOL node {node.id} must declare a tool")
+            elif node.tool:
+                raise PlanValidationError(
+                    f"{node.type.value.upper()} node {node.id} must not declare a tool"
+                )
+
+            if node.type is NodeType.DECISION:
+                self._check_decision_contract(node)
+            elif node.condition is not None or node.branches is not None or node.default_branch:
+                raise PlanValidationError(
+                    f"{node.type.value.upper()} node {node.id} must not declare decision fields"
+                )
+
+            if node.type is NodeType.SUBPLAN:
+                if node.subplan is None:
+                    raise PlanValidationError(f"SUBPLAN node {node.id} has no nested plan attached")
+            elif node.subplan is not None:
+                raise PlanValidationError(
+                    f"{node.type.value.upper()} node {node.id} must not declare a nested plan"
+                )
+
+    def _check_decision_contract(self, node: Node) -> None:
+        if not node.condition:
+            raise PlanValidationError(f"DECISION node {node.id} must declare a condition")
+        if node.branches is None:
+            raise PlanValidationError(f"DECISION node {node.id} must declare branches")
+        if set(node.branches) != {"yes", "no"}:
+            raise PlanValidationError(
+                f"DECISION node {node.id} branches must be exactly ['yes', 'no']"
+            )
+        if node.default_branch not in node.branches:
+            raise PlanValidationError(
+                f"DECISION node {node.id} default_branch must be one of its branches"
+            )
 
     def _check_tool_names(self, plan: Plan) -> None:
         tool_names = [n.tool for n in plan.nodes if n.type is NodeType.TOOL]
@@ -139,6 +179,7 @@ class PlanValidator:
             if node.subplan is None:
                 raise PlanValidationError(f"SUBPLAN node {node.id} has no nested plan attached")
             self._check_node_limit(node.subplan, is_subplan=True)
+            self._check_node_contracts(node.subplan)
             self._check_tool_names(node.subplan)
             self._check_forced_tiers(node.subplan)
             sub_sorted = self._topological_sort(node.subplan)

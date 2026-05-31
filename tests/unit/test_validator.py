@@ -98,6 +98,94 @@ def test_unknown_tool_raises(validator: PlanValidator) -> None:
         validator.validate(plan)
 
 
+def test_tool_node_without_tool_raises(validator: PlanValidator) -> None:
+    plan = Plan(nodes=[Node(id=1, type=NodeType.TOOL, description="missing tool")])
+    with pytest.raises(PlanValidationError, match="TOOL node 1 must declare a tool"):
+        validator.validate(plan)
+
+
+def test_non_tool_node_with_tool_raises(validator: PlanValidator) -> None:
+    plan = Plan(
+        nodes=[
+            Node(id=1, type=NodeType.RESULT, description="answer", tool="calendar_get"),
+        ],
+    )
+    with pytest.raises(PlanValidationError, match="RESULT node 1 must not declare a tool"):
+        validator.validate(plan)
+
+
+def test_decision_node_without_condition_raises(validator: PlanValidator) -> None:
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.DECISION,
+                description="decide",
+                branches={"yes": [], "no": []},
+                default_branch="yes",
+            ),
+        ],
+    )
+    with pytest.raises(PlanValidationError, match="must declare a condition"):
+        validator.validate(plan)
+
+
+def test_decision_node_without_yes_no_branches_raises(validator: PlanValidator) -> None:
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.DECISION,
+                description="decide",
+                condition="continue?",
+                branches={"continue": [], "stop": []},
+                default_branch="continue",
+            ),
+        ],
+    )
+    with pytest.raises(PlanValidationError, match=r"branches must be exactly \['yes', 'no'\]"):
+        validator.validate(plan)
+
+
+def test_decision_node_with_invalid_default_branch_raises(validator: PlanValidator) -> None:
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.DECISION,
+                description="decide",
+                condition="continue?",
+                branches={"yes": [], "no": []},
+                default_branch="maybe",
+            ),
+        ],
+    )
+    with pytest.raises(PlanValidationError, match="default_branch must be one of its branches"):
+        validator.validate(plan)
+
+
+def test_non_decision_node_with_decision_fields_raises(validator: PlanValidator) -> None:
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.RESULT,
+                description="answer",
+                condition="continue?",
+            ),
+        ],
+    )
+    with pytest.raises(PlanValidationError, match="must not declare decision fields"):
+        validator.validate(plan)
+
+
+def test_non_subplan_node_with_nested_plan_raises(validator: PlanValidator) -> None:
+    nested = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="nested")])
+    plan = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="answer", subplan=nested)])
+    with pytest.raises(PlanValidationError, match="must not declare a nested plan"):
+        validator.validate(plan)
+
+
 def test_forced_tier_outside_configured_range_raises(validator: PlanValidator) -> None:
     plan = Plan(
         nodes=[

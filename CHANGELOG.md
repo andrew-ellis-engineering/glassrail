@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Plan validation now enforces node-type contracts before execution: tool
+  nodes must name a tool, non-tool nodes cannot carry tool fields, decision
+  nodes must declare a binary yes/no branch contract, and only subplan nodes
+  can carry nested plans.
 - Planning retries now feed schema/validation failures back into the next
   planner attempt, so the model can repair a concrete invalid DAG instead of
   retrying blind.
