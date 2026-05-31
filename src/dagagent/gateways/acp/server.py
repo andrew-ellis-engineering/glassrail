@@ -28,6 +28,7 @@ from dagagent.events import (
     NodeStarted,
     PlanFailed,
     PlanReady,
+    TaskCancelled,
     TaskCompleted,
     TaskFailed,
 )
@@ -67,7 +68,6 @@ class AcpServer:
         self._rt = runtime
         self._conn = conn
         self._sessions = SessionRegistry()
-        self._runs: dict[str, asyncio.Task[None]] = {}
         self._cancels: dict[str, asyncio.Event] = {}
 
     async def serve(self) -> None:
@@ -83,7 +83,7 @@ class AcpServer:
                 t.add_done_callback(tasks.discard)
             else:
                 params: dict[str, Any] = msg.get("params") or {}
-                await self._handle_notification(method, params)
+                await self.handle_notification(method, params)
         # stdin closed: let any in-flight request handlers finish before exiting.
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -118,7 +118,8 @@ class AcpServer:
             return await self._session_prompt(params)
         raise JsonRpcError(METHOD_NOT_FOUND, f"method not found: {method}")
 
-    async def _handle_notification(self, method: str, params: dict[str, Any]) -> None:
+    async def handle_notification(self, method: str, params: dict[str, Any]) -> None:
+        """Route one JSON-RPC notification (no response). The public notify surface."""
         if method == "session/cancel":
             self._session_cancel(params)
         else:
@@ -144,15 +145,14 @@ class AcpServer:
         return {"sessionId": session.id}
 
     def _session_cancel(self, params: dict[str, Any]) -> None:
+        # Signal the turn loop; it owns the single cancel of the driver task so
+        # the orchestrator's CancelledError cleanup runs without a double-cancel.
         session_id = params.get("sessionId")
         if not isinstance(session_id, str):
             return
         cancel = self._cancels.get(session_id)
         if cancel is not None:
             cancel.set()
-        run = self._runs.get(session_id)
-        if run is not None and not run.done():
-            run.cancel()
 
     async def _session_prompt(self, params: dict[str, Any]) -> dict[str, Any]:
         session_id = params.get("sessionId")
@@ -187,7 +187,6 @@ class AcpServer:
         # the turn is driven entirely by the events these emit, never by the
         # task's completion, so a pause at the gate doesn't look like an ending.
         current = asyncio.create_task(self._rt.orchestrator.run(task_id))
-        self._runs[session.id] = current
         async with self._rt.event_bus.subscribe() as sub:
             try:
                 while True:
@@ -203,7 +202,6 @@ class AcpServer:
                             stop_reason = outcome
                             break
                         current = outcome
-                        self._runs[session.id] = current
                         continue
                     terminal = await self._translate(session, tracker, event)
                     if terminal is not None:
@@ -211,7 +209,6 @@ class AcpServer:
                         break
             finally:
                 session.active_task = None
-                self._runs.pop(session.id, None)
                 self._cancels.pop(session.id, None)
                 if not current.done():
                     current.cancel()
@@ -312,6 +309,8 @@ class AcpServer:
         elif isinstance(event, PlanFailed):
             await self._message(session, f"Planning failed: {event.error}")
             return "end_turn"
+        elif isinstance(event, TaskCancelled):
+            return "cancelled"
         return None
 
     async def _emit_node_output(

@@ -83,6 +83,10 @@ class TaskFailed(_BaseEvent):
     attempts: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class TaskCancelled(_BaseEvent):
+    type: Literal["task_cancelled"] = "task_cancelled"
+
+
 Event = (
     PlanningStarted
     | PlanReady
@@ -93,11 +97,12 @@ Event = (
     | BranchDecided
     | TaskCompleted
     | TaskFailed
+    | TaskCancelled
 )
 """Union of every event type — the value the bus carries."""
 
 # Events that mark the end of a task's lifecycle. A subscriber streaming one
 # task's events can stop once it sees one of these.
 TERMINAL_EVENT_TYPES: frozenset[str] = frozenset(
-    {"task_completed", "task_failed", "plan_failed", "awaiting_confirmation"}
+    {"task_completed", "task_failed", "plan_failed", "awaiting_confirmation", "task_cancelled"}
 )

@@ -22,6 +22,7 @@ from dagagent.events import (
     AwaitingConfirmation,
     Event,
     EventBus,
+    TaskCancelled,
     TaskCompleted,
     TaskFailed,
 )
@@ -62,6 +63,8 @@ def _terminal_snapshot(state: ExecutionState) -> Event | None:
     if state.status is TaskStatus.AWAITING_CONFIRMATION:
         node_count = len(state.plan.nodes) if state.plan else 0
         return AwaitingConfirmation(task_id=state.task_id, node_count=node_count)
+    if state.status is TaskStatus.CANCELLED:
+        return TaskCancelled(task_id=state.task_id)
     return None
 
 

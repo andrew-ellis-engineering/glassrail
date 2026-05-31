@@ -19,6 +19,7 @@ from dagagent.events.types import (
     PlanFailed,
     PlanningStarted,
     PlanReady,
+    TaskCancelled,
     TaskCompleted,
     TaskFailed,
 )
@@ -35,6 +36,7 @@ __all__ = [
     "PlanReady",
     "PlanningStarted",
     "Subscription",
+    "TaskCancelled",
     "TaskCompleted",
     "TaskFailed",
 ]

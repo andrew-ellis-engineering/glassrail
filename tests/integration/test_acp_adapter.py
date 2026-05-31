@@ -8,6 +8,7 @@ JSON-RPC" validation from the milestone, run in-process for CI.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -389,6 +390,43 @@ async def test_dovetail_threads_prior_result_into_follow_up() -> None:
     assert "Context from the previous step:" in follow_up
     assert "The port is 8443." in follow_up
     assert "New request: and the host?" in follow_up
+
+
+class _BlockingOrchestrator(Orchestrator):
+    """Never emits anything; blocks until its run task is cancelled."""
+
+    def __init__(self) -> None:
+        pass
+
+    async def run(self, task_id: TaskId) -> None:  # type: ignore[override]
+        await asyncio.Event().wait()
+
+
+async def test_session_cancel_ends_turn_as_cancelled() -> None:
+    conn = _RecordingConnection([])
+    bus = EventBus()
+    store = InMemoryStateStore()
+    runtime = Runtime(
+        orchestrator=_BlockingOrchestrator(),
+        store=store,
+        harness=ToolHarness(),
+        event_bus=bus,
+        settings=get_settings(),
+    )
+    server = AcpServer(runtime, conn)
+    sid = (await server.dispatch("session/new", {}))["sessionId"]
+
+    turn = asyncio.create_task(
+        server.dispatch(
+            "session/prompt", {"sessionId": sid, "prompt": [{"type": "text", "text": "go"}]}
+        )
+    )
+    # Give the turn time to register its cancel signal, then cancel it.
+    await asyncio.sleep(0.02)
+    await server.handle_notification("session/cancel", {"sessionId": sid})
+
+    result = await asyncio.wait_for(turn, timeout=2)
+    assert result["stopReason"] == "cancelled"
 
 
 def test_session_compose_request_is_verbatim_without_context() -> None:

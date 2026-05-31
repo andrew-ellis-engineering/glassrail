@@ -8,6 +8,7 @@ takes care of writing it down.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from opentelemetry.trace import Status, StatusCode
@@ -27,6 +28,7 @@ from dagagent.events import (
     PlanFailed,
     PlanningStarted,
     PlanReady,
+    TaskCancelled,
     TaskFailed,
 )
 from dagagent.executor.executor import Executor
@@ -80,6 +82,9 @@ class Orchestrator:
                 state.plan = plan
                 log.info("[%s] Plan validated: %d nodes", task_id, len(plan.nodes))
                 await self._present_or_execute(state)
+            except asyncio.CancelledError:
+                await self._mark_cancelled(state)
+                raise
             except Exception as exc:
                 log.exception("[%s] Unhandled error: %s", task_id, exc)
                 state.status = TaskStatus.FAILED
@@ -116,6 +121,9 @@ class Orchestrator:
 
             try:
                 await self._executor.execute(state)
+            except asyncio.CancelledError:
+                await self._mark_cancelled(state)
+                raise
             except Exception as exc:
                 log.exception("[%s] Resume failed: %s", task_id, exc)
                 state.status = TaskStatus.FAILED
@@ -172,6 +180,9 @@ class Orchestrator:
                 state.plan = plan
                 log.info("[%s] Plan revised: %d nodes", task_id, len(plan.nodes))
                 await self._present_or_execute(state)
+            except asyncio.CancelledError:
+                await self._mark_cancelled(state)
+                raise
             except Exception as exc:
                 log.exception("[%s] Revise failed: %s", task_id, exc)
                 state.status = TaskStatus.FAILED
@@ -189,6 +200,19 @@ class Orchestrator:
     async def _emit(self, event: Event) -> None:
         if self._bus is not None:
             await self._bus.publish(event)
+
+    async def _mark_cancelled(self, state: ExecutionState) -> None:
+        """Record a cancelled task and emit the terminal event.
+
+        Runs in the ``CancelledError`` handler before re-raising; the method's
+        ``finally`` then persists the cancelled state. A single cancel() is
+        assumed (the ACP adapter cancels once), so these awaits complete.
+        """
+        state.status = TaskStatus.CANCELLED
+        if state.error is None:
+            state.error = "cancelled"
+        state.touch()
+        await self._emit(TaskCancelled(task_id=state.task_id))
 
     async def _present_or_execute(self, state: ExecutionState) -> None:
         """Announce the validated plan, then gate on confirmation or execute.

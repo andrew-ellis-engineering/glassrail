@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Cancellation: a `cancelled` task status and a `TaskCancelled` terminal event.
+  The orchestrator handles `asyncio.CancelledError` in run/resume/revise —
+  marking the task cancelled, emitting the event, and persisting state — so an
+  ACP `session/cancel` (Esc in the TUI) leaves consistent state. The adapter
+  cancels the in-flight turn at a single point so cleanup is not interrupted.
 - Dovetailing ACP sessions: a follow-up `session/prompt` in the same session
   carries the previous task's `final_output` forward as a context preamble, so
   tasks build on one another. Threaded as task input, leaving the

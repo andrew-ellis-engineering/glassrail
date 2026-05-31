@@ -7,12 +7,14 @@ the responses the prompt would normally elicit.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from collections.abc import Sequence as _Sequence
 
 from dagagent.config import Settings
 from dagagent.core import ExecutionState, TaskStatus, new_task_id
+from dagagent.events import EventBus
 from dagagent.executor import Executor, Orchestrator
 from dagagent.harness import ToolHarness, register_builtins
 from dagagent.planner import Planner
@@ -225,3 +227,89 @@ async def test_missing_task_is_noop() -> None:
     orch, _ = _build([])
     await orch.run(new_task_id())
     # Just verifying it doesn't raise.
+
+
+class _BlockingProvider:
+    """Yields the plan, then blocks on every later call until released."""
+
+    def __init__(self, plan_payload: str, gate: asyncio.Event) -> None:
+        self._plan = plan_payload
+        self._gate = gate
+        self.calls = 0
+
+    @property
+    def name(self) -> str:
+        return "blocking"
+
+    @property
+    def tier(self) -> int:
+        return 0
+
+    async def complete(
+        self,
+        messages: list[Message],
+        *,
+        json_mode: bool = False,
+        max_tokens: int = 1024,
+        timeout_s: float | None = None,
+    ) -> AsyncIterator[Chunk]:
+        del messages, json_mode, max_tokens, timeout_s
+        self.calls += 1
+        if self.calls == 1:
+            yield Chunk(text=self._plan, tokens_used=1)
+            return
+        await self._gate.wait()  # block mid-execution until released (never, here)
+        yield Chunk(text="{}", tokens_used=0)
+
+
+async def test_cancellation_marks_task_cancelled_and_emits_event() -> None:
+    gate = asyncio.Event()  # never set: execution blocks at the first node LLM call
+    provider = _BlockingProvider(_PLAN_PAYLOAD, gate)
+    settings = Settings()
+    harness = ToolHarness()
+    register_builtins(harness)
+    router = TierRouter([provider])
+    validator = PlanValidator(harness=harness, settings=settings)
+    planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
+    bus = EventBus()
+    executor = Executor(router=router, harness=harness, settings=settings, event_bus=bus)
+    store = InMemoryStateStore()
+    orch = Orchestrator(
+        planner=planner,
+        executor=executor,
+        state_store=store,
+        settings=settings,
+        event_bus=bus,
+    )
+
+    seen: list[str] = []
+
+    async def collect() -> None:
+        async with bus.subscribe() as sub:
+            async for event in sub:
+                seen.append(event.type)
+                if event.type == "task_cancelled":
+                    return
+
+    collector = asyncio.create_task(collect())
+    state = await _seed_task(store)
+    run_task = asyncio.create_task(orch.run(state.task_id))
+
+    # Let planning finish and execution reach the blocking node call.
+    for _ in range(200):
+        await asyncio.sleep(0)
+        if provider.calls >= 2:
+            break
+
+    run_task.cancel()
+    try:
+        await run_task
+    except asyncio.CancelledError:
+        pass
+    await asyncio.wait_for(collector, timeout=1)
+
+    stored = await store.load_task(state.task_id)
+    assert stored is not None
+    assert stored.status is TaskStatus.CANCELLED
+    assert stored.error == "cancelled"
+    assert "task_cancelled" in seen

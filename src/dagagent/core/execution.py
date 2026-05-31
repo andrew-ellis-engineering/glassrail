@@ -89,6 +89,8 @@ class TaskStatus(StrEnum):
     FAILED = "failed"
     PAUSED = "paused"
     """Mid-execution pause for resume."""
+    CANCELLED = "cancelled"
+    """Interrupted by the client (e.g. ACP session/cancel)."""
 
 
 class ExecutionState(BaseModel):
