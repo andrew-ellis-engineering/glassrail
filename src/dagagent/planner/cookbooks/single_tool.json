@@ -1,0 +1,18 @@
+{
+  "id": "single_tool",
+  "title": "Single Tool Then Result",
+  "description": "Use one registered tool, then turn its output into the final answer.",
+  "keywords": ["calendar", "memory", "file", "read", "lookup", "fetch", "tool"],
+  "when_to_use": [
+    "One available tool can provide the needed external information.",
+    "The user wants a direct answer based on that tool result."
+  ],
+  "skeleton": [
+    "tool: call the registered tool with explicit args_template when possible",
+    "result: answer using only the tool output"
+  ],
+  "adaptation_notes": [
+    "Use only tool names listed in Available tools; reject if no registered tool can do the job.",
+    "If tool arguments depend on upstream context, keep args_template limited to known static values and declare context_needed."
+  ]
+}

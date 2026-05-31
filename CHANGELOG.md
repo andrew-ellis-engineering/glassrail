@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Planner cookbook recipes now live as bundled JSON files with descriptions,
+  selection keywords, adaptable skeletons, and adaptation notes. The planner
+  injects one selected recipe as a scaffold rather than hardcoded prompt text
+  or a verbatim template.
 - Plan validation now enforces node-type contracts before execution: tool
   nodes must name a tool, non-tool nodes cannot carry tool fields, decision
   nodes must declare a binary yes/no branch contract, and only subplan nodes

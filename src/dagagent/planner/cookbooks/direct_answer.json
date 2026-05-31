@@ -1,0 +1,17 @@
+{
+  "id": "direct_answer",
+  "title": "Direct Answer",
+  "description": "Answer from the model's existing knowledge when no tool, search, file, or intermediate reasoning is needed.",
+  "keywords": ["explain", "define", "summarize", "summarise", "what is", "overview"],
+  "when_to_use": [
+    "The request can be answered without external state or tool access.",
+    "The user asks for a concise explanation, definition, rewrite, or summary of provided text."
+  ],
+  "skeleton": [
+    "result: produce the final user-facing answer"
+  ],
+  "adaptation_notes": [
+    "Use a tool recipe instead if the request asks for current data, files, web search, memory, or calendar state.",
+    "Do not add think nodes for ordinary explanations; use result unless genuine multi-step reasoning is required."
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "id": "subplan",
+  "title": "Self-Contained Subplan",
+  "description": "Delegate a complex, self-contained sub-task into a nested plan to keep the main graph readable.",
+  "keywords": ["subtask", "multi-step", "pipeline", "for each", "workflow", "delegate", "break down"],
+  "when_to_use": [
+    "A sub-task has three or more distinct internal steps.",
+    "The nested work is self-contained and would clutter the main plan if inlined."
+  ],
+  "skeleton": [
+    "subplan: describe the delegated sub-task and include its nested nodes",
+    "synthesis/result: use the subplan final output in the parent plan"
+  ],
+  "adaptation_notes": [
+    "Never wrap a single tool call in a subplan.",
+    "Respect max subplan count and max subplan node limits from the prompt.",
+    "The nested plan should have the same node contract as the top-level plan."
+  ]
+}

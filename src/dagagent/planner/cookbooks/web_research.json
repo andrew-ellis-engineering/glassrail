@@ -1,0 +1,20 @@
+{
+  "id": "web_research",
+  "title": "Web Or Research Task",
+  "description": "Search or fetch sources, optionally summarize noisy content, then synthesize a final answer.",
+  "keywords": ["web", "search", "research", "source", "sources", "latest", "current", "find"],
+  "when_to_use": [
+    "The user asks to search the web, gather sources, or answer using current external information.",
+    "The registered tool list includes an appropriate search or fetch tool."
+  ],
+  "skeleton": [
+    "tool: search or fetch the relevant source(s)",
+    "summary: condense noisy source output only if downstream nodes need a cleaner context",
+    "result: answer the user with the sourced findings"
+  ],
+  "adaptation_notes": [
+    "Do not invent web tools. If no search/fetch tool is registered, emit a rejection.",
+    "Use multiple tool nodes only when independent searches or sources are genuinely needed.",
+    "Prefer result directly after one concise tool result; add summary/synthesis only when they reduce noise or combine facts."
+  ]
+}

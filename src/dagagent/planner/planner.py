@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from dagagent.config import Settings
 from dagagent.core import Plan, PlanningAttempt, PlanRejectedError, PlanValidationError
 from dagagent.harness import ToolHarness
+from dagagent.planner.cookbook import PlannerCookbook
 from dagagent.providers import Message, TierRouter, collect
 from dagagent.telemetry import ATTR_MIN_TIER, ATTR_PLAN_NODE_COUNT, SPAN_PLAN, get_tracer
 from dagagent.validator import PlanValidator
@@ -34,11 +35,13 @@ class Planner:
         harness: ToolHarness,
         validator: PlanValidator,
         settings: Settings,
+        cookbook: PlannerCookbook | None = None,
     ) -> None:
         self._router = router
         self._harness = harness
         self._validator = validator
         self._settings = settings
+        self._cookbook = cookbook or PlannerCookbook.load_default()
 
     async def plan(self, request: str, *, min_tier: int = 0, feedback: str | None = None) -> Plan:
         """Generate and validate a plan for ``request``.
@@ -112,28 +115,6 @@ class Planner:
             return "configured local endpoint"
         return "not configured (missing API key)"
 
-    def _cookbook_block(self) -> str:
-        """Planner patterns we want the model to reach for before improvising."""
-        return (
-            "Planning cookbook:\n"
-            "- Direct answer: use a single result node when no tool or "
-            "intermediate reasoning is needed.\n"
-            "- Single tool task: tool -> result. The result node depends on the "
-            "tool node and turns tool output into the user-facing answer.\n"
-            "- Web/research task: search/fetch tool nodes -> optional summary "
-            "node for noisy source text -> synthesis/result. Do not invent web "
-            "tools; use only registered tool names.\n"
-            "- Compare or aggregate: create independent tool nodes for the "
-            "independent facts, then one synthesis node to combine them, then "
-            "a result node if the synthesis is not already final.\n"
-            "- Conditional work: tool or context node -> one decision node with "
-            "a binary condition -> branch-specific nodes -> result.\n"
-            "- Subplan: use only for a self-contained 3+ step sub-task that "
-            "would clutter the main plan; never wrap a single tool call.\n"
-            "- Missing capability: emit a rejection instead of fabricating "
-            "tools, hidden state, browsing, filesystem, or external access."
-        )
-
     async def plan_attempt(
         self,
         request: str,
@@ -157,10 +138,14 @@ class Planner:
         with get_tracer().start_as_current_span(SPAN_PLAN) as span:
             span.set_attribute(ATTR_MIN_TIER, min_tier)
             tool_schemas_str = json.dumps(self._harness.all_schemas(), indent=2)
+            cookbook = self._cookbook.to_prompt(
+                request=request,
+                tool_names=self._harness.all_names(),
+            )
             user_content = (
                 f"{self._limits_block()}\n\n"
                 f"{self._tier_block(min_tier=min_tier)}\n\n"
-                f"{self._cookbook_block()}\n\n"
+                f"{cookbook}\n\n"
                 f"Available tools:\n{tool_schemas_str}\n\n"
                 f"User request: {request}"
             )

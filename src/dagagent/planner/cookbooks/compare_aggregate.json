@@ -1,0 +1,19 @@
+{
+  "id": "compare_aggregate",
+  "title": "Compare Or Aggregate",
+  "description": "Gather independent facts, combine them, then present a comparison or aggregate answer.",
+  "keywords": ["compare", "versus", "vs", "aggregate", "rank", "best", "across", "each"],
+  "when_to_use": [
+    "The request asks to compare multiple items or aggregate several independent facts.",
+    "The facts can be gathered independently before synthesis."
+  ],
+  "skeleton": [
+    "tool/result/summary nodes: gather or prepare independent facts",
+    "synthesis: combine the independent outputs",
+    "result: present the comparison or aggregate answer"
+  ],
+  "adaptation_notes": [
+    "Keep fan-out within the plan node budget; consolidate similar lookups when possible.",
+    "Use a result node directly if the synthesis node is already the final user answer and no extra shaping is needed."
+  ]
+}

@@ -174,11 +174,13 @@ async def test_planner_includes_plan_cookbook(harness: ToolHarness) -> None:
     settings = Settings(prompts=NodePrompts(planner="CUSTOM"))
     planner = _planner_from(provider, harness, settings)
 
-    await planner.plan("anything")
+    await planner.plan("Do a web search for Raft consensus")
     user_msg = provider.user_seen[0]
     assert "Planning cookbook:" in user_msg
-    assert "Single tool task: tool -> result" in user_msg
-    assert "Missing capability: emit a rejection" in user_msg
+    assert "best-effort heuristic" in user_msg
+    assert "Never copy the skeleton verbatim" in user_msg
+    assert "right-sized" in user_msg
+    assert "Selected recipe: web_research" in user_msg
 
 
 async def test_feedback_is_woven_into_the_planning_prompt(
