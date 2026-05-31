@@ -74,12 +74,15 @@ class NodeOutputChunk(_BaseEvent):
     """A streaming fragment of a node's text output, emitted as it is generated.
 
     Only emitted for node types whose output is shown as an agent message
-    (think, synthesis, summary). The ACP adapter forwards these as
-    ``agent_message_chunk`` notifications so the TUI can render reasoning live.
+    (think, synthesis, summary). Carries ``node_type`` so transports and
+    clients can distinguish reasoning from synthesis/summary text. The ACP
+    adapter forwards these as ``agent_message_chunk`` notifications with
+    dagagent extension metadata.
     """
 
     type: Literal["node_output_chunk"] = "node_output_chunk"
     node_id: int
+    node_type: NodeType
     text: str
 
 

@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Streaming text events now carry node metadata: `NodeOutputChunk` includes the
+  node type, and ACP `agent_message_chunk` updates include dagagent extension
+  fields (`nodeId`, `nodeType`, `isFinal`) so clients can distinguish
+  intermediate think/summary/synthesis output from the final result.
 - Planner prompts now include a tool capability digest that groups registered
   tools by broad capability before listing the raw JSON schemas, helping the
   planner choose available tool families and reject absent capabilities.

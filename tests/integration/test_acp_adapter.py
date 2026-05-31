@@ -26,6 +26,7 @@ from dagagent.events import (
     AwaitingConfirmation,
     EventBus,
     NodeFinished,
+    NodeOutputChunk,
     NodeStarted,
     PlanReady,
     TaskCompleted,
@@ -41,9 +42,10 @@ from dagagent.state import InMemoryStateStore
 _PLAN: dict[str, Any] = {
     "nodes": [
         {"id": 1, "type": "tool", "description": "read the config", "tool": "file_read"},
-        {"id": 2, "type": "result", "description": "answer the question"},
+        {"id": 3, "type": "think", "description": "inspect the tool result", "context_needed": [1]},
+        {"id": 2, "type": "result", "description": "answer the question", "context_needed": [1, 3]},
     ],
-    "sorted_node_ids": [1, 2],
+    "sorted_node_ids": [1, 3, 2],
 }
 
 
@@ -119,6 +121,31 @@ class _FakeOrchestrator(Orchestrator):
                 confidence=1.0,
                 flagged=False,
                 tier_used=0,
+            )
+        )
+        await self._bus.publish(
+            NodeStarted(task_id=task_id, node_id=3, node_type=NodeType.THINK, tier=2)
+        )
+        state.results[3] = NodeResult(
+            node_id=3, status=NodeStatus.COMPLETED, output="I checked the port.", tier_used=2
+        )
+        await self._store.save_task(state)
+        await self._bus.publish(
+            NodeOutputChunk(
+                task_id=task_id,
+                node_id=3,
+                node_type=NodeType.THINK,
+                text="I checked the port.",
+            )
+        )
+        await self._bus.publish(
+            NodeFinished(
+                task_id=task_id,
+                node_id=3,
+                status=NodeStatus.COMPLETED,
+                confidence=0.8,
+                flagged=False,
+                tier_used=2,
             )
         )
 
@@ -341,24 +368,36 @@ async def test_prompt_streams_plan_nodes_and_result() -> None:
     metas = conn.updates_of("node_meta")
     assert metas, "expected node_meta updates"
     assert all("tier" in m and "confidence" in m for m in metas)
-    assert {m["nodeType"] for m in metas} == {"tool", "result"}
+    assert {m["nodeType"] for m in metas} == {"tool", "think", "result"}
 
     # The graph topology is streamed once as the plan_graph extension.
     graphs = conn.updates_of("plan_graph")
     assert len(graphs) == 1
     nodes = graphs[0]["nodes"]
-    assert [n["id"] for n in nodes] == [1, 2]
-    assert {n["nodeType"] for n in nodes} == {"tool", "result"}
+    assert [n["id"] for n in nodes] == [1, 3, 2]
+    assert {n["nodeType"] for n in nodes} == {"tool", "think", "result"}
     assert all("deps" in n for n in nodes)
 
     # The final answer is streamed exactly once (via TaskCompleted, not the
     # result node) — no duplication.
     messages = [
-        m["content"]["text"]
+        m
         for m in conn.updates_of("agent_message_chunk")
         if m["content"]["text"] == "The port is 8443."
     ]
-    assert messages == ["The port is 8443."]
+    assert len(messages) == 1
+    assert messages[0]["nodeType"] == "result"
+    assert messages[0]["isFinal"] is True
+
+    intermediate = [
+        m
+        for m in conn.updates_of("agent_message_chunk")
+        if m["content"]["text"] == "I checked the port."
+    ]
+    assert len(intermediate) == 1
+    assert intermediate[0]["nodeId"] == 3
+    assert intermediate[0]["nodeType"] == "think"
+    assert intermediate[0]["isFinal"] is False
 
 
 async def test_prompt_rejects_unknown_session() -> None:

@@ -68,6 +68,9 @@ pub struct App<O: Outbound> {
     /// last transcript cell. Any other update kind resets this to false so
     /// the next chunk starts a fresh cell.
     streaming_msg: bool,
+    /// Identity of the current streaming message. Prevents adjacent chunks
+    /// from different nodes (or final output) from merging into one cell.
+    streaming_msg_key: Option<(Option<i64>, String, bool)>,
 }
 
 /// Spinner frames shown in the status line while a turn runs.
@@ -99,6 +102,7 @@ impl<O: Outbound> App<O> {
             history: Vec::new(),
             history_pos: None,
             streaming_msg: false,
+            streaming_msg_key: None,
         }
     }
 
@@ -326,6 +330,7 @@ impl<O: Outbound> App<O> {
         // so the next chunk starts a fresh transcript cell.
         if !matches!(update, SessionUpdate::AgentMessageChunk { .. }) {
             self.streaming_msg = false;
+            self.streaming_msg_key = None;
         }
         match update {
             SessionUpdate::Plan { entries } => {
@@ -369,8 +374,17 @@ impl<O: Outbound> App<O> {
                     }
                 }
             }
-            SessionUpdate::AgentMessageChunk { content } => {
-                if self.streaming_msg && !content.text.is_empty() {
+            SessionUpdate::AgentMessageChunk {
+                content,
+                node_id,
+                node_type,
+                is_final,
+            } => {
+                let key = (node_id, node_type, is_final);
+                if self.streaming_msg
+                    && self.streaming_msg_key.as_ref() == Some(&key)
+                    && !content.text.is_empty()
+                {
                     // Append any non-empty fragment — including whitespace-only
                     // ones — so fine-grained streaming preserves word boundaries.
                     // Fall back to a new cell if the last cell was replaced by
@@ -384,6 +398,7 @@ impl<O: Outbound> App<O> {
                 if !content.text.trim().is_empty() {
                     self.transcript.push(Cell::Message(content.text));
                     self.streaming_msg = true;
+                    self.streaming_msg_key = Some(key);
                 }
             }
             SessionUpdate::NodeMeta {
@@ -764,6 +779,9 @@ mod tests {
             content: Content {
                 text: "the answer".into(),
             },
+            node_id: None,
+            node_type: String::new(),
+            is_final: false,
         }))
         .await;
         assert!(matches!(app.transcript.last(), Some(Cell::Message(m)) if m == "the answer"));
@@ -776,6 +794,9 @@ mod tests {
         for word in ["Hello", ", ", "world"] {
             app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
                 content: Content { text: word.into() },
+                node_id: Some(1),
+                node_type: "think".into(),
+                is_final: false,
             }))
             .await;
         }
@@ -797,6 +818,9 @@ mod tests {
             content: Content {
                 text: "first".into(),
             },
+            node_id: Some(1),
+            node_type: "think".into(),
+            is_final: false,
         }))
         .await;
         // A plan update in between closes the streaming sequence.
@@ -811,6 +835,9 @@ mod tests {
             content: Content {
                 text: "second".into(),
             },
+            node_id: Some(2),
+            node_type: "summary".into(),
+            is_final: false,
         }))
         .await;
         let messages: Vec<_> = app
@@ -829,11 +856,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn different_node_chunks_start_new_cell() {
+        let (mut app, _client, _rx) = app();
+        app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
+            content: Content {
+                text: "thinking".into(),
+            },
+            node_id: Some(1),
+            node_type: "think".into(),
+            is_final: false,
+        }))
+        .await;
+        app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
+            content: Content {
+                text: "final".into(),
+            },
+            node_id: None,
+            node_type: "result".into(),
+            is_final: true,
+        }))
+        .await;
+        let messages: Vec<_> = app
+            .transcript
+            .iter()
+            .filter_map(|c| match c {
+                Cell::Message(m) => Some(m.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(messages, vec!["thinking", "final"]);
+    }
+
+    #[tokio::test]
     async fn whitespace_only_chunk_does_not_open_streaming_cell() {
         let (mut app, _client, _rx) = app();
         let len_before = app.transcript.len();
         app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
             content: Content { text: "  ".into() },
+            node_id: Some(1),
+            node_type: "think".into(),
+            is_final: false,
         }))
         .await;
         assert_eq!(
@@ -850,6 +912,9 @@ mod tests {
         for word in ["foo", " ", "bar"] {
             app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
                 content: Content { text: word.into() },
+                node_id: Some(1),
+                node_type: "think".into(),
+                is_final: false,
             }))
             .await;
         }

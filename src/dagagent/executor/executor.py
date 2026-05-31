@@ -533,7 +533,12 @@ class Executor:
                 if new_text:
                     await self._emit(
                         bus,
-                        NodeOutputChunk(task_id=state.task_id, node_id=node.id, text=new_text),
+                        NodeOutputChunk(
+                            task_id=state.task_id,
+                            node_id=node.id,
+                            node_type=node.type,
+                            text=new_text,
+                        ),
                     )
             if chunk.tokens_used is not None:
                 tokens = chunk.tokens_used

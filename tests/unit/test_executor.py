@@ -550,6 +550,7 @@ async def test_think_node_emits_output_chunks() -> None:
         async def collect_think() -> None:
             async for event in sub:
                 if isinstance(event, NodeOutputChunk):
+                    assert event.node_type is NodeType.THINK
                     chunks.append(event.text)
                 elif isinstance(event, TaskCompleted):
                     break
@@ -579,6 +580,7 @@ async def test_synthesis_node_emits_output_chunks() -> None:
         async def collect_synth() -> None:
             async for event in sub:
                 if isinstance(event, NodeOutputChunk):
+                    assert event.node_type is NodeType.SYNTHESIS
                     chunks.append(event.text)
                 elif isinstance(event, TaskCompleted):
                     break

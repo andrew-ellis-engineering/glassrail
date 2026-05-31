@@ -230,13 +230,24 @@ mod tests {
                 "update": {
                     "sessionUpdate": "agent_message_chunk",
                     "content": {"type": "text", "text": "the answer"},
+                    "nodeId": 2,
+                    "nodeType": "result",
+                    "isFinal": true,
                 },
             },
         });
         route_incoming(value, &pending, &tx);
         match rx.recv().await.unwrap() {
-            ServerMessage::Update(SessionUpdate::AgentMessageChunk { content }) => {
+            ServerMessage::Update(SessionUpdate::AgentMessageChunk {
+                content,
+                node_id,
+                node_type,
+                is_final,
+            }) => {
                 assert_eq!(content.text, "the answer");
+                assert_eq!(node_id, Some(2));
+                assert_eq!(node_type, "result");
+                assert!(is_final);
             }
             other => panic!("expected message chunk, got {other:?}"),
         }

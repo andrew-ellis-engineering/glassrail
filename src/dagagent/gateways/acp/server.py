@@ -280,7 +280,13 @@ class AcpServer:
     async def _translate(self, session: Session, tracker: PlanTracker, event: Event) -> str | None:
         """Emit session/update(s) for one event; return a stop reason if terminal."""
         if isinstance(event, NodeOutputChunk):
-            await self._message(session, event.text)
+            await self._message(
+                session,
+                event.text,
+                node_id=event.node_id,
+                node_type=event.node_type.value,
+                is_final=False,
+            )
         elif isinstance(event, PlanReady) and event.plan is not None:
             tracker.load(event.plan)
             await self._update(session, {"sessionUpdate": "plan", "entries": tracker.entries()})
@@ -321,7 +327,7 @@ class AcpServer:
         """Handle terminal and no-op events; return a stop reason or None."""
         if isinstance(event, TaskCompleted):
             if event.final_output:
-                await self._message(session, event.final_output)
+                await self._message(session, event.final_output, node_type="result", is_final=True)
             return "end_turn"
         if isinstance(event, TaskFailed):
             await self._message(session, f"Task failed: {event.error}")
@@ -385,10 +391,27 @@ class AcpServer:
     async def _update(self, session: Session, update: dict[str, Any]) -> None:
         await self._conn.notify("session/update", {"sessionId": session.id, "update": update})
 
-    async def _message(self, session: Session, text: str) -> None:
+    async def _message(
+        self,
+        session: Session,
+        text: str,
+        *,
+        node_id: int | None = None,
+        node_type: str | None = None,
+        is_final: bool = False,
+    ) -> None:
+        update: dict[str, Any] = {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {"type": "text", "text": text},
+            "isFinal": is_final,
+        }
+        if node_id is not None:
+            update["nodeId"] = node_id
+        if node_type is not None:
+            update["nodeType"] = node_type
         await self._update(
             session,
-            {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": text}},
+            update,
         )
 
 
