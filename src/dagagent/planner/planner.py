@@ -16,6 +16,7 @@ from dagagent.config import Settings
 from dagagent.core import Plan, PlanningAttempt, PlanRejectedError, PlanValidationError
 from dagagent.harness import ToolHarness
 from dagagent.planner.cookbook import PlannerCookbook
+from dagagent.planner.tool_digest import render_tool_capability_digest
 from dagagent.providers import Message, TierRouter, collect
 from dagagent.telemetry import ATTR_MIN_TIER, ATTR_PLAN_NODE_COUNT, SPAN_PLAN, get_tracer
 from dagagent.validator import PlanValidator
@@ -137,15 +138,18 @@ class Planner:
         """
         with get_tracer().start_as_current_span(SPAN_PLAN) as span:
             span.set_attribute(ATTR_MIN_TIER, min_tier)
-            tool_schemas_str = json.dumps(self._harness.all_schemas(), indent=2)
+            tool_schemas = self._harness.all_schemas()
+            tool_schemas_str = json.dumps(tool_schemas, indent=2)
             cookbook = self._cookbook.to_prompt(
                 request=request,
                 tool_names=self._harness.all_names(),
             )
+            tool_digest = render_tool_capability_digest(tool_schemas)
             user_content = (
                 f"{self._limits_block()}\n\n"
                 f"{self._tier_block(min_tier=min_tier)}\n\n"
                 f"{cookbook}\n\n"
+                f"{tool_digest}\n\n"
                 f"Available tools:\n{tool_schemas_str}\n\n"
                 f"User request: {request}"
             )

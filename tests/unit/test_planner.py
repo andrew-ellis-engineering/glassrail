@@ -183,6 +183,20 @@ async def test_planner_includes_plan_cookbook(harness: ToolHarness) -> None:
     assert "Selected recipe: web_research" in user_msg
 
 
+async def test_planner_includes_tool_capability_digest(harness: ToolHarness) -> None:
+    """The planner sees a coarse capability map before raw tool schemas."""
+    payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
+    provider = _CapturingProvider(payload=payload)
+    planner = _planner_from(provider, harness, Settings())
+
+    await planner.plan("read a local file")
+    user_msg = provider.user_seen[0]
+    assert "Tool capability digest:" in user_msg
+    assert "Filesystem / local files: file_read" in user_msg
+    assert "Available tools:" in user_msg
+    assert user_msg.index("Tool capability digest:") < user_msg.index("Available tools:")
+
+
 async def test_feedback_is_woven_into_the_planning_prompt(
     harness: ToolHarness, settings: Settings
 ) -> None:

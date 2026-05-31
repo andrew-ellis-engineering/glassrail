@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Planner prompts now include a tool capability digest that groups registered
+  tools by broad capability before listing the raw JSON schemas, helping the
+  planner choose available tool families and reject absent capabilities.
 - Planner cookbook recipes now live as bundled JSON files with descriptions,
   selection keywords, adaptable skeletons, and adaptation notes. The planner
   injects one selected recipe as a scaffold rather than hardcoded prompt text
