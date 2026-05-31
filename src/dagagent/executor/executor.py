@@ -467,7 +467,16 @@ class Executor:
         subscribers (e.g. the ACP adapter) can forward it to the client in
         real time.
         """
-        ctx = assemble_context(node, state.results)
+        # Tool, decision, and subplan nodes don't use _execute_llm_node so they
+        # never receive the dependents section (intentional — subplan is a context
+        # firewall; decision/tool nodes don't take an open-ended LLM prompt).
+        plan = state.plan
+        dependents = (
+            [n for n in plan.nodes if node.id in n.context_needed and n.id != node.id]
+            if plan
+            else []
+        )
+        ctx = assemble_context(node, state.results, dependent_nodes=dependents or None)
         messages: list[Message] = [
             {"role": "system", "content": self._node_system_prompt(node.type)},
             {

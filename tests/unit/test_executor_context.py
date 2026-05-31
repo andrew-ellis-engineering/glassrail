@@ -77,3 +77,61 @@ def test_long_output_middle_truncated() -> None:
     text = assemble_context(node, results, max_chars_per_dep=200)
     assert "truncated" in text
     assert len(text) < 1000
+
+
+def _dep_node(nid: int, desc: str, *, ntype: NodeType = NodeType.RESULT) -> Node:
+    return Node(id=nid, type=ntype, description=desc, context_needed=[10])
+
+
+def test_dependent_nodes_appended() -> None:
+    node = _node(ctx=[])
+    dep = _dep_node(20, "Summarise findings")
+    text = assemble_context(node, {}, dependent_nodes=[dep])
+    assert "Your output will be consumed by" in text
+    assert "Node 20" in text
+    assert "Summarise findings" in text
+
+
+def test_dependent_nodes_include_type() -> None:
+    node = _node(ctx=[])
+    dep = _dep_node(21, "Final answer", ntype=NodeType.RESULT)
+    text = assemble_context(node, {}, dependent_nodes=[dep])
+    assert "result" in text
+
+
+def test_no_dependent_nodes_none() -> None:
+    node = _node(ctx=[])
+    text = assemble_context(node, {}, dependent_nodes=None)
+    assert "consumed by" not in text
+
+
+def test_no_dependent_nodes_default() -> None:
+    node = _node(ctx=[])
+    text = assemble_context(node, {})
+    assert "consumed by" not in text
+
+
+def test_dependent_nodes_combined_with_upstream() -> None:
+    node = _node(ctx=[1])
+    results = {1: NodeResult(node_id=1, status=NodeStatus.COMPLETED, output="data")}
+    dep = _dep_node(20, "Write report")
+    text = assemble_context(node, results, dependent_nodes=[dep])
+    assert "Node 1 output" in text
+    assert "Write report" in text
+
+
+def test_no_context_needed_with_dependents_not_empty() -> None:
+    node = _node(ctx=[])
+    dep = _dep_node(20, "consume me")
+    text = assemble_context(node, {}, dependent_nodes=[dep])
+    assert text != ""
+
+
+def test_multiple_dependents_all_listed() -> None:
+    node = _node(ctx=[])
+    deps = [_dep_node(20, "Write report"), _dep_node(21, "Send summary")]
+    text = assemble_context(node, {}, dependent_nodes=deps)
+    assert "Node 20" in text
+    assert "Write report" in text
+    assert "Node 21" in text
+    assert "Send summary" in text

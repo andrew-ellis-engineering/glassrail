@@ -125,7 +125,8 @@ async def test_full_run_emits_lifecycle_sequence() -> None:
         await orch.run(state.task_id)
         events = await _drain(sub)
 
-    types = [e.type for e in events]
+    # Filter streaming chunks — this test is about lifecycle boundaries.
+    types = [e.type for e in events if e.type != "node_output_chunk"]
     assert types == [
         "planning_started",
         "plan_ready",
@@ -176,7 +177,7 @@ async def test_confirm_gate_emits_awaiting_then_completes_on_resume() -> None:
     async with bus.subscribe() as sub:
         await orch.resume(state.task_id)
         resumed = await _drain(sub)
-    assert [e.type for e in resumed] == [
+    assert [e.type for e in resumed if e.type != "node_output_chunk"] == [
         "node_started",
         "node_finished",
         "node_started",

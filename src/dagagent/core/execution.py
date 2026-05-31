@@ -91,6 +91,8 @@ class TaskStatus(StrEnum):
     """Mid-execution pause for resume."""
     CANCELLED = "cancelled"
     """Interrupted by the client (e.g. ACP session/cancel)."""
+    REJECTED = "rejected"
+    """Planner determined the task cannot be completed with available tools."""
 
 
 class ExecutionState(BaseModel):

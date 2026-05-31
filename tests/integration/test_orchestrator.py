@@ -22,6 +22,8 @@ from dagagent.providers import Chunk, Message, TierRouter
 from dagagent.state import InMemoryStateStore
 from dagagent.validator import PlanValidator
 
+_REJECTION_PAYLOAD = json.dumps({"rejection": "I don't have a send_email tool"})
+
 
 class _Scripted:
     def __init__(self, responses: _Sequence[str]) -> None:
@@ -47,6 +49,52 @@ class _Scripted:
         if not self._responses:
             raise RuntimeError("scripted exhausted")
         yield Chunk(text=self._responses.pop(0), tokens_used=1)
+
+
+class _CapturingScripted(_Scripted):
+    """Like _Scripted but records every user message it receives."""
+
+    def __init__(self, responses: _Sequence[str]) -> None:
+        super().__init__(responses)
+        self.user_messages: list[str] = []
+
+    async def complete(
+        self,
+        messages: list[Message],
+        *,
+        json_mode: bool = False,
+        max_tokens: int = 1024,
+        timeout_s: float | None = None,
+    ) -> AsyncIterator[Chunk]:
+        user_msg = next((m["content"] for m in messages if m["role"] == "user"), "")
+        self.user_messages.append(user_msg)
+        async for chunk in super().complete(
+            messages, json_mode=json_mode, max_tokens=max_tokens, timeout_s=timeout_s
+        ):
+            yield chunk
+
+
+def _build_capturing(
+    responses: list[str],
+    *,
+    settings: Settings | None = None,
+) -> tuple[Orchestrator, InMemoryStateStore, _CapturingScripted]:
+    settings = settings or Settings()
+    harness = ToolHarness()
+    register_builtins(harness)
+    provider = _CapturingScripted(responses)
+    router = TierRouter([provider])
+    validator = PlanValidator(harness=harness, settings=settings)
+    planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
+    executor = Executor(router=router, harness=harness, settings=settings)
+    store = InMemoryStateStore()
+    orchestrator = Orchestrator(
+        planner=planner,
+        executor=executor,
+        state_store=store,
+        settings=settings,
+    )
+    return orchestrator, store, provider
 
 
 def _build(
@@ -229,6 +277,151 @@ async def test_missing_task_is_noop() -> None:
     # Just verifying it doesn't raise.
 
 
+def _build_with_bus(
+    responses: list[str],
+    *,
+    settings: Settings | None = None,
+) -> tuple[Orchestrator, InMemoryStateStore, EventBus]:
+    settings = settings or Settings()
+    harness = ToolHarness()
+    register_builtins(harness)
+    router = TierRouter([_Scripted(responses)])
+    validator = PlanValidator(harness=harness, settings=settings)
+    planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
+    executor = Executor(router=router, harness=harness, settings=settings)
+    store = InMemoryStateStore()
+    bus = EventBus()
+    orchestrator = Orchestrator(
+        planner=planner,
+        executor=executor,
+        state_store=store,
+        settings=settings,
+        event_bus=bus,
+    )
+    return orchestrator, store, bus
+
+
+async def test_rejection_marks_task_rejected_and_does_not_retry() -> None:
+    # The scripted provider only has one response; if it were retried a second
+    # time the _Scripted would raise RuntimeError("scripted exhausted").
+    orch, store = _build([_REJECTION_PAYLOAD])
+    state = await _seed_task(store, "send an email to nobody")
+
+    await orch.run(state.task_id)
+    result = await store.load_task(state.task_id)
+
+    assert result is not None
+    assert result.status is TaskStatus.REJECTED
+    assert result.error == "I don't have a send_email tool"
+    assert len(result.planning_attempts) == 1
+    assert result.planning_attempts[0].error_type == "rejection"
+
+
+async def test_rejection_emits_plan_rejected_event() -> None:
+    orch, store, bus = _build_with_bus([_REJECTION_PAYLOAD])
+    state = await _seed_task(store, "send an email to nobody")
+
+    seen: list[str] = []
+
+    async def collect_events() -> None:
+        async with bus.subscribe() as sub:
+            async for event in sub:
+                seen.append(event.type)
+                if event.type in {"plan_rejected", "plan_failed", "task_failed"}:
+                    return
+
+    collector = asyncio.create_task(collect_events())
+    run_task = asyncio.create_task(orch.run(state.task_id))
+    # Let the collector subscribe before events are published.
+    await asyncio.sleep(0)
+    await asyncio.wait_for(run_task, timeout=5)
+    await asyncio.wait_for(collector, timeout=1)
+
+    assert "plan_rejected" in seen
+    assert "plan_failed" not in seen
+
+
+async def test_revise_rejection_marks_task_rejected() -> None:
+    orch, store = _build(
+        [_PLAN_PAYLOAD, _REJECTION_PAYLOAD],
+        settings=Settings(confirm_plans=True),
+    )
+    state = await _seed_task(store)
+
+    await orch.run(state.task_id)
+    paused = await store.load_task(state.task_id)
+    assert paused is not None
+    assert paused.status is TaskStatus.AWAITING_CONFIRMATION
+
+    await orch.revise(state.task_id, "redo the plan")
+    result = await store.load_task(state.task_id)
+    assert result is not None
+    assert result.status is TaskStatus.REJECTED
+    assert result.error == "I don't have a send_email tool"
+
+
+async def test_stall_passes_prior_reasoning_to_next_attempt() -> None:
+    # First attempt: long non-JSON output (a reasoning stall, >500 chars).
+    # Second attempt: a valid plan.
+    # The capturing provider lets us confirm the stall content was forwarded.
+    stall_output = "Let me think about this... " + ("x" * 600)
+    orch, store, provider = _build_capturing(
+        [stall_output, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT],
+        settings=Settings(max_replan_attempts=1),
+    )
+    state = await _seed_task(store)
+
+    await orch.run(state.task_id)
+    result = await store.load_task(state.task_id)
+
+    assert result is not None
+    assert result.status is TaskStatus.COMPLETED
+    assert len(result.planning_attempts) == 2
+    assert result.planning_attempts[0].error_type == "json"
+    # The second planning call should contain the stall reasoning.
+    assert len(provider.user_messages) >= 2
+    assert "<prior_reasoning>" in provider.user_messages[1]
+    assert stall_output[:50] in provider.user_messages[1]
+
+
+async def test_short_invalid_json_does_not_carry_prior_reasoning() -> None:
+    # A short invalid-JSON response (<=500 chars) must NOT be treated as a stall.
+    short_bad = "nope"  # well under 500 chars
+    orch, store, provider = _build_capturing(
+        [short_bad, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT],
+        settings=Settings(max_replan_attempts=1),
+    )
+    state = await _seed_task(store)
+
+    await orch.run(state.task_id)
+    result = await store.load_task(state.task_id)
+
+    assert result is not None
+    assert result.status is TaskStatus.COMPLETED
+    assert result.planning_attempts[0].error_type == "json"
+    # The second planning call must NOT contain prior_reasoning.
+    assert len(provider.user_messages) >= 2
+    assert "<prior_reasoning>" not in provider.user_messages[1]
+
+
+async def test_exactly_stall_threshold_does_not_trigger_passthrough() -> None:
+    # Exactly 500 chars (== _STALL_MIN_CHARS, not >) must NOT trigger passthrough.
+    at_threshold = "x" * 500
+    orch, store, provider = _build_capturing(
+        [at_threshold, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT],
+        settings=Settings(max_replan_attempts=1),
+    )
+    state = await _seed_task(store)
+
+    await orch.run(state.task_id)
+    result = await store.load_task(state.task_id)
+
+    assert result is not None
+    assert result.status is TaskStatus.COMPLETED
+    assert len(provider.user_messages) >= 2
+    assert "<prior_reasoning>" not in provider.user_messages[1]
+
+
 class _BlockingProvider:
     """Yields the plan, then blocks on every later call until released."""
 
@@ -313,3 +506,63 @@ async def test_cancellation_marks_task_cancelled_and_emits_event() -> None:
     assert stored.status is TaskStatus.CANCELLED
     assert stored.error == "cancelled"
     assert "task_cancelled" in seen
+
+
+# Three-node plan: tool → synthesis → result.  The synthesis node (id 2)
+# should see "Your output will be consumed by … Node 3" in its prompt because
+# the result node (id 3) declares context_needed=[2].
+_PLAN_THREE_NODES = json.dumps(
+    {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "tool",
+                "description": "get today",
+                "tool": "calendar_get",
+                "args_template": {"date": "2026-05-27"},
+                "context_needed": [],
+            },
+            {
+                "id": 2,
+                "type": "synthesis",
+                "description": "summarise events",
+                "context_needed": [1],
+            },
+            {
+                "id": 3,
+                "type": "result",
+                "description": "final answer",
+                "context_needed": [2],
+            },
+        ]
+    }
+)
+_RESULT_OUT = json.dumps({"output": "done.", "confidence": 1.0})
+
+
+async def test_dependent_nodes_section_in_synthesis_prompt() -> None:
+    """synthesis node (id 2) should be told that result node (id 3) consumes it."""
+    # Scripted responses in call order:
+    # 0: planner → plan JSON
+    # 1: tool shape-check → OK
+    # 2: synthesis → output
+    # 3: result → output
+    orch, store, provider = _build_capturing(
+        [_PLAN_THREE_NODES, _SHAPE_OK, _SYNTH_OUT, _RESULT_OUT],
+    )
+    state = await _seed_task(store)
+    await orch.run(state.task_id)
+
+    stored = await store.load_task(state.task_id)
+    assert stored is not None
+    assert stored.status is TaskStatus.COMPLETED
+
+    # The synthesis node is the 3rd LLM call (index 2).
+    synthesis_msg = provider.user_messages[2]
+    assert "Your output will be consumed by" in synthesis_msg
+    assert "Node 3" in synthesis_msg
+    assert "result" in synthesis_msg
+
+    # The result node (index 3) is terminal — no dependents, no section.
+    result_msg = provider.user_messages[3]
+    assert "consumed by" not in result_msg

@@ -29,6 +29,7 @@ def assemble_context(
     node: Node,
     results: dict[int, NodeResult],
     *,
+    dependent_nodes: list[Node] | None = None,
     max_chars_per_dep: int = 4000,
 ) -> str:
     """Build the prompt context for one node.
@@ -36,11 +37,13 @@ def assemble_context(
     Skipped, empty, or failed upstream nodes get a substitution notice
     rather than raising, so a branch-skip elsewhere in the graph doesn't
     cascade into a hard execution error.
-    """
-    if not node.context_needed:
-        return ""
 
+    ``dependent_nodes`` — nodes that will consume this node's output. When
+    provided, a brief "consumed by" section is appended so the current node
+    can tailor its output to what its consumers actually need.
+    """
     parts: list[str] = []
+
     for dep_id in node.context_needed:
         result = results.get(dep_id)
         if result is None or result.status is NodeStatus.SKIPPED:
@@ -53,5 +56,9 @@ def assemble_context(
             raw = result.output if isinstance(result.output, str) else json.dumps(result.output)
             truncated = _truncate_middle(raw, max_chars_per_dep)
             parts.append(f"[Node {dep_id} output]:\n{truncated}")
+
+    if dependent_nodes:
+        lines = [f"  - Node {d.id} ({d.type}): {d.description}" for d in dependent_nodes]
+        parts.append("Your output will be consumed by:\n" + "\n".join(lines))
 
     return "\n\n".join(parts)

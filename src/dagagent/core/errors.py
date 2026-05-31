@@ -15,6 +15,10 @@ class PlanValidationError(DagagentError):
     """Raised when a plan fails structural validation."""
 
 
+class PlanRejectedError(DagagentError):
+    """Raised when the planner explicitly rejects a task it cannot complete."""
+
+
 class ToolRegistrationError(DagagentError):
     """Raised when tool registration fails (e.g., name collision)."""
 

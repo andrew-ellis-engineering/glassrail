@@ -34,14 +34,26 @@ Rules:
   set type=summary
 - The final node whose output is the user's answer should be type=result;
   use synthesis for intermediate combination steps
-- Use type=subplan sparingly — only when a self-contained sub-task is
-  best expressed as its own DAG. Set "subplan" to a nested plan object
-  with the same shape as this top-level plan. Respect the node and
-  subplan limits stated in the request
+- Use type=subplan only when a sub-task is genuinely self-contained,
+  meaningfully complex (3+ distinct steps), and would clutter the main
+  plan if inlined. For simpler cases add nodes directly to the main plan.
+  A subplan node carries a "subplan" object with the same shape as this
+  top-level plan; the nested plan's final_output becomes this node's
+  output. Respect the node and subplan limits stated in the request.
+  Example: a research task with fetch → extract → summarise steps inside
+  a subplan. Do NOT wrap a single tool call in a subplan — that is always
+  wrong.
 - reasoning_required=true only for nodes needing genuine multi-step logic
   beyond what type=think already implies
+- If the task cannot be completed with the available tools — the required
+  tool is not registered, the request is contradictory, or no valid DAG
+  can be constructed — emit {"rejection": "<reason>"} instead of a plan.
+  Reject only when no plan could succeed, not merely because the task is
+  difficult. Never fabricate tool names or invent capabilities.
 
-Output ONLY valid JSON matching this schema (no markdown, no explanation):
+Output ONLY valid JSON — either a plan or a rejection (no markdown, no explanation):
+
+Plan:
 {
   "nodes": [
     {
@@ -60,6 +72,9 @@ Output ONLY valid JSON matching this schema (no markdown, no explanation):
     }
   ]
 }
+
+Rejection (when the task cannot be completed):
+{"rejection": "<clear explanation of why this task cannot be completed>"}
 
 /no_think
 """

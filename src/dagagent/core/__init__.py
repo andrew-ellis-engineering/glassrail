@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dagagent.core.errors import (
     DagagentError,
+    PlanRejectedError,
     PlanValidationError,
     ToolExecutionError,
     ToolRegistrationError,
@@ -32,6 +33,7 @@ __all__ = [
     "NodeStatus",
     "NodeType",
     "Plan",
+    "PlanRejectedError",
     "PlanValidationError",
     "PlanningAttempt",
     "TaskId",

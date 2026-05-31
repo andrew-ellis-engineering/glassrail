@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 import pytest
 
 from dagagent.config import NodeBudgets, NodePrompts, Settings
-from dagagent.core import NodeType, PlanValidationError
+from dagagent.core import NodeType, PlanRejectedError, PlanValidationError
 from dagagent.harness import ToolHarness, register_builtins
 from dagagent.planner import Planner
 from dagagent.providers import Chunk, Message, TierRouter
@@ -232,3 +232,46 @@ async def test_plan_attempt_captures_validation_error(
     assert attempt.error_type == "validation"
     assert attempt.error is not None
     assert "unknown tools" in attempt.error
+
+
+async def test_rejection_returned_as_rejection_error_type(
+    harness: ToolHarness, settings: Settings
+) -> None:
+    payload = json.dumps({"rejection": "I don't have a send_email tool"})
+    planner = _planner_from(_FixedProvider(payload=payload), harness, settings)
+    attempt = await planner.plan_attempt("send an email", attempt=0)
+    assert attempt.error_type == "rejection"
+    assert "send_email" in (attempt.error or "")
+    assert attempt.plan is None
+    assert attempt.valid is False
+
+
+async def test_plan_raises_plan_rejected_error(harness: ToolHarness, settings: Settings) -> None:
+    payload = json.dumps({"rejection": "No suitable tools available"})
+    planner = _planner_from(_FixedProvider(payload=payload), harness, settings)
+    with pytest.raises(PlanRejectedError, match="No suitable tools available"):
+        await planner.plan("do something impossible")
+
+
+async def test_prior_reasoning_injected_into_user_message(
+    harness: ToolHarness, settings: Settings
+) -> None:
+    payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
+    provider = _CapturingProvider(payload=payload)
+    planner = _planner_from(provider, harness, settings)
+
+    await planner.plan_attempt("do a thing", attempt=1, prior_reasoning="Step 1: consider X")
+    user_msg = provider.user_seen[0]
+    assert "prior_reasoning" in user_msg
+    assert "Step 1: consider X" in user_msg
+
+
+async def test_no_prior_reasoning_leaves_prompt_clean(
+    harness: ToolHarness, settings: Settings
+) -> None:
+    payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
+    provider = _CapturingProvider(payload=payload)
+    planner = _planner_from(provider, harness, settings)
+
+    await planner.plan_attempt("do a thing", attempt=0)
+    assert "prior_reasoning" not in provider.user_seen[0]

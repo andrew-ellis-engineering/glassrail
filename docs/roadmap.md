@@ -56,6 +56,31 @@ observability, then the operational surfaces.
   tasks, and cancel a run — all without a running gateway. Deferred to later:
   token-level streaming, session persistence/`session/load`, structural plan
   editing, and additional ACP clients (desktop/IDE).
+- **Planner subplan guidance** — add explicit instruction to the planner system
+  prompt covering when and how to emit a `subplan` node, with examples. No code
+  change; pure prompt improvement.
+- **Planning failure mode detection** — the planner can reason indefinitely
+  without emitting a valid plan (streaming stall). Detect this with a timeout
+  or token budget and push accumulated reasoning content into the next attempt
+  rather than starting cold, so the retry has context on what was tried.
+  Additionally, give the planner an explicit escape hatch: a structured
+  `rejection` response (distinct from a plan) it can emit when the task is
+  outside its capabilities — e.g. required tools are not registered, the
+  request is contradictory, or it cannot construct a valid DAG. The
+  orchestrator surfaces this to the user rather than retrying indefinitely.
+- **Upstream context awareness** — when assembling a node's context, include the
+  descriptions of its direct dependents so upstream nodes (synthesis, summary)
+  know what aspect the downstream node needs. One change in the executor's
+  context-assembly logic.
+- **Per-tool HITL configuration** — extend HITL beyond plan approval to
+  individual tool calls. Each registered tool gets a configurable approval
+  policy (`auto` / `always` / `never`); the executor checks the policy before
+  invoking and pauses for user confirmation when required. The ACP
+  `session/request_permission` primitive is already in place. *[needs further
+  spec: policy schema, default, how auto-mode decides]*
+- **Summary node format variants** — add a `format` field (`concise` / `medium`
+  / `verbose`) to summary nodes, routed through `_LLM_NODE_SPECS`. Lets the
+  planner match compression level to downstream purpose.
 
 Exit gate: eval scores meet an agreed bar — this is the gate that unlocks the
 first PyPI publish.
@@ -64,13 +89,42 @@ first PyPI publish.
 
 Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, reasoning mode (`/think`).
 
+- **HITL clarifying-questions node** — a new node type that pauses execution to
+  ask the user a targeted question before proceeding, distinct from plan
+  approval. The model decides what to ask; the answer is injected into
+  downstream context. *[needs further spec: node schema, how answer flows into
+  dependents, interaction with ACP session/request_permission vs. a new method]*
+- **RAG-like planner aids** — a read-only tool the planner can invoke to pull
+  pre-written plan templates or task-type guidelines from a known location
+  (e.g. Obsidian vault notes). Gives the planner a starting scaffold for
+  well-understood task types rather than reasoning from scratch each time.
+  *[needs further spec: retrieval mechanism, file format, update workflow]*
+- **TUI: chat session mode** — evolve the TUI from a one-shot viewer into a
+  persistent chat-style interface with a live input composer, making it the
+  primary HITL surface. Subsumes the coding-agent harness idea. Depends on
+  channels work above.
+- **Token-level streaming in TUI** — surface token-by-token output in the Rust
+  client as the model generates, giving a live sense of progress. Currently
+  deferred in the ACP adapter.
+
 ## Phase 2.5 — Dreaming
 
 Memory consolidation cron, audit trail, user-curation workflow.
 
+- **Long / medium / short-term memory model** — define the three tiers (what
+  qualifies, lifetime, retrieval) and how they are managed and surfaced to
+  nodes. *[needs further spec: tier definitions, eviction/consolidation rules,
+  injection points in context assembly]*
+
 ## Phase 3 — Insomnia
 
 Autonomous research, scheduler, web tools, emergent subplans, mid-graph subplans, parallel sub-agents.
+
+- **Loops in plans** — allow the planner to emit a loop construct with an
+  explicit termination condition (iterate a list, retry until predicate, etc.)
+  and an output-aggregation strategy. Requires non-trivial validator and
+  executor changes. *[needs further spec: loop node schema, termination
+  semantics, aggregation modes]*
 
 ## Phase 4 — Production & Community
 

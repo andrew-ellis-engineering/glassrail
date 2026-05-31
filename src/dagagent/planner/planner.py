@@ -12,7 +12,7 @@ import logging
 from typing import Any, cast
 
 from dagagent.config import Settings
-from dagagent.core import Plan, PlanningAttempt, PlanValidationError
+from dagagent.core import Plan, PlanningAttempt, PlanRejectedError, PlanValidationError
 from dagagent.harness import ToolHarness
 from dagagent.providers import Message, TierRouter, collect
 from dagagent.telemetry import ATTR_MIN_TIER, ATTR_PLAN_NODE_COUNT, SPAN_PLAN, get_tracer
@@ -46,6 +46,8 @@ class Planner:
         attempt = await self.plan_attempt(request, attempt=0, min_tier=min_tier, feedback=feedback)
         if attempt.plan is not None:
             return attempt.plan
+        if attempt.error_type == "rejection":
+            raise PlanRejectedError(attempt.error or "Task rejected by planner")
         if attempt.error_type == "validation":
             raise PlanValidationError(attempt.error or "Plan failed validation")
         raise ValueError(attempt.error or "Planner failed")
@@ -73,8 +75,14 @@ class Planner:
         attempt: int,
         min_tier: int = 0,
         feedback: str | None = None,
+        prior_reasoning: str | None = None,
     ) -> PlanningAttempt:
-        """Generate one plan attempt and retain raw output plus validation errors."""
+        """Generate one plan attempt and retain raw output plus validation errors.
+
+        ``prior_reasoning`` carries accumulated output from a previous attempt
+        that failed to emit valid JSON (a reasoning stall), so the next attempt
+        can build on it rather than starting from scratch.
+        """
         with get_tracer().start_as_current_span(SPAN_PLAN) as span:
             span.set_attribute(ATTR_MIN_TIER, min_tier)
             tool_schemas_str = json.dumps(self._harness.all_schemas(), indent=2)
@@ -88,6 +96,13 @@ class Planner:
                     "\n\nA previous plan for this request was rejected. Produce a "
                     "revised plan that addresses this feedback:\n"
                     f"{feedback}"
+                )
+            if prior_reasoning:
+                user_content += (
+                    "\n\nA previous planning attempt produced the following reasoning "
+                    "but did not emit a valid plan. Build on it rather than starting "
+                    "from scratch:\n"
+                    f"<prior_reasoning>\n{prior_reasoning}\n</prior_reasoning>"
                 )
             messages: list[Message] = [
                 {"role": "system", "content": self._settings.prompts.planner},
@@ -123,6 +138,20 @@ class Planner:
                     tokens_used=tokens,
                 )
             parsed = cast("dict[str, Any]", data)
+
+            # Rejection is checked before the plan schema so a response that
+            # contains both "rejection" and "nodes" is treated as a rejection.
+            if "rejection" in parsed:
+                reason = str(parsed["rejection"])
+                log.info("Planner rejected task: %s", reason)
+                return PlanningAttempt(
+                    attempt=attempt,
+                    raw_output=raw,
+                    parsed=parsed,
+                    error=reason,
+                    error_type="rejection",
+                    tokens_used=tokens,
+                )
 
             try:
                 plan = Plan.model_validate(parsed)
