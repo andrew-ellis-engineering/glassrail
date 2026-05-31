@@ -23,6 +23,19 @@ The agent command resolves in this order: positional args → the
 `DAGAGENT_AGENT_CMD` environment variable (space-separated) → the default
 `dagagent acp`.
 
+### Try it without a model server
+
+A scripted fake agent (`examples/fake_agent.rs`) speaks the protocol with canned
+responses — a streaming plan, the approval gate, guided replan on
+reject-with-feedback, and a result — so you can drive the full TUI with no
+dagagent or MLX:
+
+```bash
+cargo run -- cargo run --quiet --example fake_agent
+```
+
+Submit any task, then approve (`a`), revise (`e`), or reject (`r`) the plan.
+
 ## Keys
 
 | Key | Action |
