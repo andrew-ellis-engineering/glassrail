@@ -1,0 +1,49 @@
+name = "tool-read-value"
+tags = ["tool-use", "result", "control-pair"]
+type = "capability"
+difficulty = 2
+timeout_s = 150
+
+expected_behavior = """
+The agent must read /tmp/dagagent-eval/app.conf via file_read and report the
+port value 8443. It must not fabricate the common default (8080) or any other
+value. Control twin of tool-skip-read: together they guard both the
+always-reads and never-reads degenerate strategies.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+"/tmp/dagagent-eval/app.conf" = "app.conf"
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Reports port 8443"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b8443\\b"
+
+[[criteria]]
+text = "Does not report the common default port 8080"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "\\b8080\\b"
+
+[[criteria]]
+text = "Used file_read on the config file"
+grader = "trajectory"
+tool_sequence = ["file_read"]
+target = "/tmp/dagagent-eval/app.conf"
+
+[[criteria]]
+text = "Reports 8443 as the configured port, attributing it to the file"
+grader = "llm"

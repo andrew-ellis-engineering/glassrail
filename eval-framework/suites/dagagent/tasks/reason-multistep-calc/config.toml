@@ -1,0 +1,52 @@
+name = "reason-multistep-calc"
+tags = ["reasoning", "multistep", "result"]
+type = "capability"
+difficulty = 4
+timeout_s = 240
+
+expected_behavior = """
+Step-by-step:
+  1. Widgets in 8 hours: 120/hr × 8 hr = 960 widgets
+  2. Full crates: floor(960 / 600) = 1 full crate
+  3. Widgets in full crates: 1 × 600 = 600 widgets
+  4. Weight: 600 × 250 g = 150,000 g = 150 kg
+
+A correct run reaches 1 full crate and 150 kg. An intermediate slip (e.g.
+treating 960/600 as 1.6 crates without flooring) changes the weight, so
+pass^k will sag on this task before it sags on simpler ones.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "States 1 full crate"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b1\\b.{0,60}(crate|full)"
+
+[[criteria]]
+text = "States total weight of 150 kg"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b150\\s*(kg|kilogram)"
+
+[[criteria]]
+text = "Plan terminates on a result node"
+grader = "trajectory"
+tool_sequence = ["result"]
+
+[[criteria]]
+text = "Correctly calculates 1 full crate and 150 kg with valid intermediate steps"
+grader = "llm"

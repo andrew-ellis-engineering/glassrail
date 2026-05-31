@@ -1,0 +1,47 @@
+name = "tool-skip-read"
+tags = ["tool-use", "result", "control-pair"]
+type = "capability"
+difficulty = 2
+control_for = "tool-read-value"
+timeout_s = 120
+
+expected_behavior = """
+HTTPS uses port 443 — this is well-known general knowledge requiring no file
+access. A correct run answers from knowledge and does NOT call file_read. The
+control twin of tool-read-value: together they block both the always-reads and
+never-reads degenerate strategies from passing the suite.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Reports port 443"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b443\\b"
+
+[[criteria]]
+text = "Did not call file_read (answer from general knowledge)"
+grader = "trajectory"
+tool_sequence = ["file_read"]
+value = "absent"
+
+[[criteria]]
+text = "Plan terminates on a result node"
+grader = "trajectory"
+tool_sequence = ["result"]
+
+[[criteria]]
+text = "Answers 443 from general knowledge without reading any file"
+grader = "llm"

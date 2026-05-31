@@ -1,0 +1,50 @@
+name = "recommend-reliable-xfer"
+tags = ["multistep", "synthesis", "result", "control-pair"]
+type = "capability"
+difficulty = 3
+control_for = "recommend-streaming"
+timeout_s = 240
+
+expected_behavior = """
+A financial ledger sync requires guaranteed, ordered delivery with no data
+loss — these are the defining strengths of TCP. A correct run compares both
+protocols and recommends TCP, citing reliable/ordered delivery rather than
+low latency. This task is the control twin of recommend-streaming: together
+they guard against a model that always recommends the same transport regardless
+of the stated constraints.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Discusses TCP"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)\\btcp\\b"
+
+[[criteria]]
+text = "Discusses UDP"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)\\budp\\b"
+
+[[criteria]]
+text = "Plan terminates on a result node"
+grader = "trajectory"
+tool_sequence = ["result"]
+
+[[criteria]]
+text = "Recommends TCP, citing guaranteed or ordered delivery for a financial ledger"
+grader = "llm"

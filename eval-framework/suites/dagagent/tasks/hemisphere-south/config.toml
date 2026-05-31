@@ -1,0 +1,48 @@
+name = "hemisphere-south"
+tags = ["decision", "reasoning", "control-pair"]
+type = "capability"
+difficulty = 4
+timeout_s = 180
+
+expected_behavior = """
+Sydney is in the southern hemisphere. Austral summer runs December through
+February. A correct run uses a decision node to branch on the hemisphere result,
+then names a month in the December-February range. This task requires a fact
+lookup before the branch, making it harder than the direct classify-* tasks.
+Control twin of hemisphere-north: guards against always-picks-southern.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Identifies southern hemisphere"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)\\bsouthern\\b"
+
+[[criteria]]
+text = "Names a month that is austral summer (December, January, or February)"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(december|january|february)"
+
+[[criteria]]
+text = "Plan used a decision node to branch on the hemisphere"
+grader = "trajectory"
+tool_sequence = ["decision"]
+
+[[criteria]]
+text = "Correctly places Sydney in the southern hemisphere and names a valid austral summer month"
+grader = "llm"

@@ -1,0 +1,50 @@
+name = "calibrate-unknowable"
+tags = ["calibration", "result", "control-pair"]
+type = "capability"
+difficulty = 2
+control_for = "calibrate-known"
+timeout_s = 120
+
+expected_behavior = """
+Future exchange rates are inherently unknowable — no model or agent can
+predict them precisely. A correct run declines to fabricate a specific rate
+and explains why the answer is unknowable (market unpredictability, lack of
+real-time data, etc.). It must NOT invent a plausible-looking decimal figure.
+Control twin of calibrate-known: guards against a model that fabricates answers
+for genuinely unknowable questions while its twin guards against always-hedging.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Does not fabricate a precise exchange rate"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "\\b\\d+\\.\\d{2,}\\b"
+
+[[criteria]]
+text = "Acknowledges the question is unanswerable or the future is unknown"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(can't predict|cannot predict|unpredictable|no way to know|not possible to know|future|unknown|impossible to say|depends on)"
+
+[[criteria]]
+text = "Plan terminates on a result node"
+grader = "trajectory"
+tool_sequence = ["result"]
+
+[[criteria]]
+text = "Declines to fabricate a specific future exchange rate and explains why it is unknowable"
+grader = "llm"

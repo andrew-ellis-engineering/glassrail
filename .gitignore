@@ -74,4 +74,6 @@ logs/
 
 # Local runtime config & state
 config.toml
+!eval-framework/**/config.toml
+!eval-framework/**/suite.toml
 state.sqlite
