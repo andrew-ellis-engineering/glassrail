@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use crate::acp::messages::{PermOption, PlanEntry, SessionUpdate};
-use crate::acp::{AcpClient, ServerMessage};
+use crate::acp::{Outbound, ServerMessage};
 use crate::transcript::Cell;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,8 +31,8 @@ struct PermissionState {
     plan: Vec<PlanEntry>,
 }
 
-pub struct App {
-    client: AcpClient,
+pub struct App<O: Outbound> {
+    client: O,
     tx: mpsc::UnboundedSender<ServerMessage>,
     session_id: String,
 
@@ -48,12 +48,8 @@ pub struct App {
     tool_idx: HashMap<String, usize>,
 }
 
-impl App {
-    pub fn new(
-        client: AcpClient,
-        tx: mpsc::UnboundedSender<ServerMessage>,
-        session_id: String,
-    ) -> Self {
+impl<O: Outbound> App<O> {
+    pub fn new(client: O, tx: mpsc::UnboundedSender<ServerMessage>, session_id: String) -> Self {
         App {
             client,
             tx,
@@ -283,4 +279,244 @@ fn reject(feedback: Option<String>) -> Value {
 
 fn cancel() -> Value {
     json!({"outcome": {"outcome": "cancelled"}})
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use anyhow::Result;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    use super::*;
+    use crate::acp::messages::{Content, PermOption, PermissionParams, PlanEntry, PlanWrap};
+
+    #[derive(Clone, Default)]
+    struct FakeOutbound {
+        requests: Arc<Mutex<Vec<(String, Value)>>>,
+        notifications: Arc<Mutex<Vec<(String, Value)>>>,
+        responses: Arc<Mutex<Vec<(Value, Value)>>>,
+    }
+
+    impl Outbound for FakeOutbound {
+        async fn request(&self, method: &str, params: Value) -> Result<Value> {
+            self.requests
+                .lock()
+                .unwrap()
+                .push((method.to_string(), params));
+            Ok(json!({"stopReason": "end_turn"}))
+        }
+        async fn notify(&self, method: &str, params: Value) -> Result<()> {
+            self.notifications
+                .lock()
+                .unwrap()
+                .push((method.to_string(), params));
+            Ok(())
+        }
+        async fn respond(&self, id: Value, result: Value) -> Result<()> {
+            self.responses.lock().unwrap().push((id, result));
+            Ok(())
+        }
+    }
+
+    type TestApp = App<FakeOutbound>;
+
+    fn app() -> (
+        TestApp,
+        FakeOutbound,
+        mpsc::UnboundedReceiver<ServerMessage>,
+    ) {
+        let client = FakeOutbound::default();
+        let (tx, rx) = mpsc::unbounded_channel();
+        (App::new(client.clone(), tx, "sess-1".into()), client, rx)
+    }
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::empty())
+    }
+
+    fn permission() -> ServerMessage {
+        ServerMessage::Permission {
+            id: json!(7),
+            params: PermissionParams {
+                plan: Some(PlanWrap {
+                    entries: vec![PlanEntry {
+                        content: "step one".into(),
+                        status: "pending".into(),
+                    }],
+                }),
+                options: vec![PermOption {
+                    option_id: "approve".into(),
+                    name: "Approve".into(),
+                }],
+            },
+        }
+    }
+
+    fn last_response(client: &FakeOutbound) -> Value {
+        client.responses.lock().unwrap().last().unwrap().1.clone()
+    }
+
+    #[tokio::test]
+    async fn submit_starts_a_turn_and_records_the_prompt() {
+        let (mut app, client, mut rx) = app();
+        app.composer = "do the thing".into();
+        app.on_key(key(KeyCode::Enter)).await;
+
+        assert_eq!(app.status, Status::Working);
+        assert!(matches!(app.transcript.last(), Some(Cell::Prompt(p)) if p == "do the thing"));
+        assert!(app.composer.is_empty());
+
+        // The spawned turn task issues session/prompt and reports completion.
+        let msg = rx.recv().await.unwrap();
+        assert!(matches!(msg, ServerMessage::TurnEnded(reason) if reason == "end_turn"));
+        let reqs = client.requests.lock().unwrap();
+        assert_eq!(reqs[0].0, "session/prompt");
+    }
+
+    #[tokio::test]
+    async fn empty_prompt_does_not_submit() {
+        let (mut app, client, _rx) = app();
+        app.composer = "   ".into();
+        app.on_key(key(KeyCode::Enter)).await;
+        assert_eq!(app.status, Status::Ready);
+        assert!(client.requests.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn permission_enters_approval_mode() {
+        let (mut app, _client, _rx) = app();
+        app.on_server(permission()).await;
+        assert_eq!(app.status, Status::AwaitingApproval);
+        assert!(matches!(app.mode, Mode::Approval));
+        assert_eq!(app.permission_options().unwrap()[0].option_id, "approve");
+        assert_eq!(app.permission_plan().unwrap()[0].content, "step one");
+    }
+
+    #[tokio::test]
+    async fn approve_responds_and_resumes_working() {
+        let (mut app, client, _rx) = app();
+        app.on_server(permission()).await;
+        app.on_key(key(KeyCode::Char('a'))).await;
+
+        assert_eq!(
+            last_response(&client),
+            json!({"outcome": {"outcome": "selected", "optionId": "approve"}})
+        );
+        assert_eq!(app.status, Status::Working);
+        assert!(matches!(app.mode, Mode::Normal));
+    }
+
+    #[tokio::test]
+    async fn reject_without_feedback_responds_reject() {
+        let (mut app, client, _rx) = app();
+        app.on_server(permission()).await;
+        app.on_key(key(KeyCode::Char('r'))).await;
+        assert_eq!(
+            last_response(&client),
+            json!({"outcome": {"outcome": "selected", "optionId": "reject"}})
+        );
+    }
+
+    #[tokio::test]
+    async fn reject_with_feedback_threads_text() {
+        let (mut app, client, _rx) = app();
+        app.on_server(permission()).await;
+        app.on_key(key(KeyCode::Char('e'))).await;
+        assert!(matches!(app.mode, Mode::Feedback(_)));
+        for c in "shorter".chars() {
+            app.on_key(key(KeyCode::Char(c))).await;
+        }
+        app.on_key(key(KeyCode::Enter)).await;
+
+        assert_eq!(
+            last_response(&client),
+            json!({"outcome": {"outcome": "selected", "optionId": "reject"}, "feedback": "shorter"})
+        );
+        assert!(app
+            .transcript
+            .iter()
+            .any(|c| matches!(c, Cell::Notice(n) if n.contains("shorter"))));
+    }
+
+    #[tokio::test]
+    async fn esc_in_approval_cancels() {
+        let (mut app, client, _rx) = app();
+        app.on_server(permission()).await;
+        app.on_key(key(KeyCode::Esc)).await;
+        assert_eq!(
+            last_response(&client),
+            json!({"outcome": {"outcome": "cancelled"}})
+        );
+    }
+
+    #[tokio::test]
+    async fn plan_and_tool_updates_render() {
+        let (mut app, _client, _rx) = app();
+        app.on_server(ServerMessage::Update(SessionUpdate::Plan {
+            entries: vec![PlanEntry {
+                content: "do x".into(),
+                status: "in_progress".into(),
+            }],
+        }))
+        .await;
+        assert_eq!(app.plan[0].content, "do x");
+
+        app.on_server(ServerMessage::Update(SessionUpdate::ToolCall {
+            tool_call_id: "node-1".into(),
+            title: "read file".into(),
+            status: "in_progress".into(),
+        }))
+        .await;
+        app.on_server(ServerMessage::Update(SessionUpdate::ToolCallUpdate {
+            tool_call_id: "node-1".into(),
+            status: "completed".into(),
+        }))
+        .await;
+        assert!(app
+            .transcript
+            .iter()
+            .any(|c| matches!(c, Cell::Tool { title, status } if title == "read file" && status == "completed")));
+    }
+
+    #[tokio::test]
+    async fn message_chunk_appends_a_message() {
+        let (mut app, _client, _rx) = app();
+        app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
+            content: Content {
+                text: "the answer".into(),
+            },
+        }))
+        .await;
+        assert!(matches!(app.transcript.last(), Some(Cell::Message(m)) if m == "the answer"));
+    }
+
+    #[tokio::test]
+    async fn turn_ended_returns_to_ready() {
+        let (mut app, _client, _rx) = app();
+        app.composer = "go".into();
+        app.on_key(key(KeyCode::Enter)).await;
+        assert_eq!(app.status, Status::Working);
+        app.on_server(ServerMessage::TurnEnded("end_turn".into()))
+            .await;
+        assert_eq!(app.status, Status::Ready);
+    }
+
+    #[tokio::test]
+    async fn esc_while_working_cancels_the_turn() {
+        let (mut app, client, _rx) = app();
+        app.composer = "go".into();
+        app.on_key(key(KeyCode::Enter)).await; // now Working
+        app.on_key(key(KeyCode::Esc)).await;
+        let notes = client.notifications.lock().unwrap();
+        assert_eq!(notes[0].0, "session/cancel");
+        assert!(!app.should_quit);
+    }
+
+    #[tokio::test]
+    async fn esc_when_idle_quits() {
+        let (mut app, _client, _rx) = app();
+        app.on_key(key(KeyCode::Esc)).await;
+        assert!(app.should_quit);
+    }
 }

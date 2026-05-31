@@ -15,7 +15,7 @@ use futures::StreamExt;
 use serde_json::json;
 use tokio::sync::mpsc;
 
-use crate::acp::{AcpClient, ServerMessage};
+use crate::acp::{AcpClient, Outbound, ServerMessage};
 use crate::app::App;
 
 #[tokio::main]
@@ -60,9 +60,9 @@ async fn handshake(client: &AcpClient) -> Result<String> {
         .context("session/new returned no sessionId")
 }
 
-async fn run(
+async fn run<O: Outbound>(
     terminal: &mut ratatui::DefaultTerminal,
-    app: &mut App,
+    app: &mut App<O>,
     rx: &mut mpsc::UnboundedReceiver<ServerMessage>,
 ) -> Result<()> {
     let mut events = EventStream::new();

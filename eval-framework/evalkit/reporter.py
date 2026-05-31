@@ -84,7 +84,16 @@ def save_run_metadata(run_dir: Path, suite: SuiteResult) -> None:
             "harness_version": suite.harness_version,
             "trials_per_task": suite.trials_per_task,
             "total_cost_usd": suite.total_cost_usd,
-            "tasks": [tr.task.id for tr in suite.task_results],
+            "agent_seconds_total": sum(_task_seconds(tr)[0] for tr in suite.task_results),
+            "wall_seconds": (
+                (suite.completed_at - suite.started_at).total_seconds()
+                if suite.completed_at
+                else None
+            ),
+            "tasks": [
+                {"id": tr.task.id, "mean_trial_seconds": _task_seconds(tr)[1]}
+                for tr in suite.task_results
+            ],
         },
     )
 
@@ -132,6 +141,17 @@ def _cell(passed: bool) -> str:
     return "PASS" if passed else "FAIL"
 
 
+def _task_seconds(result: TaskResult) -> tuple[float, float]:
+    """Return (total, mean) subject wall-time in seconds across a task's trials."""
+    durs = [t.duration_s for t in result.trials]
+    total = sum(durs)
+    return total, (total / len(durs) if durs else 0.0)
+
+
+def _fmt_secs(s: float) -> str:
+    return f"{s:.0f}s" if s < 90 else f"{s / 60:.1f}m"
+
+
 def print_task_result(result: TaskResult) -> None:
     scores = result.scores
     k = len(scores)
@@ -154,9 +174,11 @@ def print_task_result(result: TaskResult) -> None:
 
     perfect = sum(1 for s in scores if s.pass_rate == 1.0)
     lo, hi = stats.wilson_ci(perfect, k)
+    _total, mean_s = _task_seconds(result)
     print(
         f"  → pass@{k}={result.pass_at_k:.2f}  pass^{k}={result.pass_pow_k:.2f}  "
-        f"mean={result.mean_pass_rate:.2f}  pass^k 95% CI=[{lo:.2f}, {hi:.2f}]"
+        f"mean={result.mean_pass_rate:.2f}  pass^k 95% CI=[{lo:.2f}, {hi:.2f}]  "
+        f"mean trial={_fmt_secs(mean_s)}"
     )
 
 
@@ -166,17 +188,30 @@ def print_suite_summary(suite: SuiteResult) -> None:
     print(f"  model={suite.model}  grader={suite.grader_model}  harness={suite.harness_version}")
     print(f"{'=' * 64}")
     reg_fail = 0
+    agent_secs = 0.0
     for tr in suite.task_results:
         flag = ""
         if tr.task.type == "regression" and tr.pass_pow_k == 0.0:
             flag = "  ← REGRESSION (pass^k=0)"
             reg_fail += 1
+        total_s, mean_s = _task_seconds(tr)
+        agent_secs += total_s
         print(
             f"  {tr.task.id:<28} {tr.task.type:<11} "
-            f"pass@k={tr.pass_at_k:.2f} pass^k={tr.pass_pow_k:.2f}{flag}"
+            f"pass@k={tr.pass_at_k:.2f} pass^k={tr.pass_pow_k:.2f} "
+            f"{_fmt_secs(mean_s):>6}/trial{flag}"
         )
     _print_control_concordance(suite)
     print(f"  {'-' * 60}")
+    wall = (
+        (suite.completed_at - suite.started_at).total_seconds()
+        if suite.completed_at
+        else agent_secs
+    )
+    print(
+        f"  agent time: {_fmt_secs(agent_secs)} over {suite.trials_per_task * len(suite.task_results)}"
+        f" trials   wall clock: {_fmt_secs(wall)}"
+    )
     print(f"  regression failures: {reg_fail}   total cost: ${suite.total_cost_usd:.4f}")
     print(f"{'=' * 64}\n")
 

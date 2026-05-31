@@ -7,11 +7,12 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
-use crate::acp::messages::PlanEntry;
+use crate::acp::messages::{PermOption, PlanEntry};
+use crate::acp::Outbound;
 use crate::app::{App, Mode, Status};
 use crate::transcript::Cell;
 
-pub fn render(frame: &mut Frame, app: &App) {
+pub fn render<O: Outbound>(frame: &mut Frame, app: &App<O>) {
     let chunks = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(1),
@@ -19,19 +20,23 @@ pub fn render(frame: &mut Frame, app: &App) {
     ])
     .split(frame.area());
 
-    render_status(frame, chunks[0], app);
-    render_body(frame, chunks[1], app);
-    render_composer(frame, chunks[2], app);
+    render_status(frame, chunks[0], app.status);
+    render_body(frame, chunks[1], &app.plan, &app.transcript);
+    render_composer(frame, chunks[2], &app.composer);
 
-    match app.mode {
-        Mode::Approval => render_approval(frame, app),
-        Mode::Feedback(ref buf) => render_feedback(frame, buf),
+    match &app.mode {
+        Mode::Approval => render_approval(
+            frame,
+            app.permission_plan().unwrap_or(&[]),
+            app.permission_options().unwrap_or(&[]),
+        ),
+        Mode::Feedback(buf) => render_feedback(frame, buf),
         Mode::Normal => {}
     }
 }
 
-fn render_status(frame: &mut Frame, area: Rect, app: &App) {
-    let (label, color) = match app.status {
+fn render_status(frame: &mut Frame, area: Rect, status: Status) {
+    let (label, color) = match status {
         Status::Ready => ("● ready", Color::Green),
         Status::Working => ("◐ working…", Color::Yellow),
         Status::AwaitingApproval => ("⏸ awaiting approval", Color::Magenta),
@@ -50,15 +55,15 @@ fn render_status(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Paragraph::new(line), area);
 }
 
-fn render_body(frame: &mut Frame, area: Rect, app: &App) {
-    if app.plan.is_empty() {
-        render_transcript(frame, area, app);
+fn render_body(frame: &mut Frame, area: Rect, plan: &[PlanEntry], transcript: &[Cell]) {
+    if plan.is_empty() {
+        render_transcript(frame, area, transcript);
         return;
     }
-    let plan_h = (app.plan.len() as u16 + 2).min(area.height / 2).max(3);
+    let plan_h = (plan.len() as u16 + 2).min(area.height / 2).max(3);
     let parts = Layout::vertical([Constraint::Length(plan_h), Constraint::Min(1)]).split(area);
-    render_plan(frame, parts[0], &app.plan);
-    render_transcript(frame, parts[1], app);
+    render_plan(frame, parts[0], plan);
+    render_transcript(frame, parts[1], transcript);
 }
 
 fn render_plan(frame: &mut Frame, area: Rect, plan: &[PlanEntry]) {
@@ -79,9 +84,9 @@ fn plan_line(entry: &PlanEntry) -> Line<'static> {
     ])
 }
 
-fn render_transcript(frame: &mut Frame, area: Rect, app: &App) {
+fn render_transcript(frame: &mut Frame, area: Rect, transcript: &[Cell]) {
     let mut lines: Vec<Line> = Vec::new();
-    for cell in &app.transcript {
+    for cell in transcript {
         match cell {
             Cell::Prompt(text) => lines.push(Line::from(Span::styled(
                 format!("❯ {text}"),
@@ -122,18 +127,17 @@ fn render_transcript(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(para, area);
 }
 
-fn render_composer(frame: &mut Frame, area: Rect, app: &App) {
+fn render_composer(frame: &mut Frame, area: Rect, composer: &str) {
     let block = Block::default().borders(Borders::ALL).title(" task ");
     let body = Line::from(vec![
         Span::styled("> ", Style::default().fg(Color::Cyan)),
-        Span::raw(app.composer.clone()),
+        Span::raw(composer.to_string()),
         Span::styled("▏", Style::default().fg(Color::Cyan)),
     ]);
     frame.render_widget(Paragraph::new(body).block(block), area);
 }
 
-fn render_approval(frame: &mut Frame, app: &App) {
-    let plan = app.permission_plan().unwrap_or(&[]);
+fn render_approval(frame: &mut Frame, plan: &[PlanEntry], options: &[PermOption]) {
     let mut lines: Vec<Line> = vec![Line::from(Span::styled(
         "Review the plan, then choose:",
         Style::default().add_modifier(Modifier::BOLD),
@@ -141,7 +145,7 @@ fn render_approval(frame: &mut Frame, app: &App) {
     for entry in plan {
         lines.push(plan_line(entry));
     }
-    if let Some(options) = app.permission_options() {
+    if !options.is_empty() {
         lines.push(Line::raw(""));
         for opt in options {
             lines.push(Line::from(Span::styled(

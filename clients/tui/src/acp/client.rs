@@ -13,6 +13,7 @@
 //! contained change behind this module.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -38,6 +39,15 @@ pub enum ServerMessage {
     Error(String),
     /// The agent process exited / its stdout closed.
     AgentGone,
+}
+
+/// The client→agent calls the app makes. Abstracted from the concrete
+/// stdio-backed [`AcpClient`] so the app's state machine can be tested against a
+/// fake without spawning a subprocess.
+pub trait Outbound: Clone + Send + Sync + 'static {
+    fn request(&self, method: &str, params: Value) -> impl Future<Output = Result<Value>> + Send;
+    fn notify(&self, method: &str, params: Value) -> impl Future<Output = Result<()>> + Send;
+    fn respond(&self, id: Value, result: Value) -> impl Future<Output = Result<()>> + Send;
 }
 
 type Pending = Arc<Mutex<HashMap<i64, oneshot::Sender<Result<Value>>>>>;
@@ -98,8 +108,19 @@ impl AcpClient {
         Ok((client, child))
     }
 
+    async fn write(&self, msg: &Value) -> Result<()> {
+        let mut line = serde_json::to_string(msg)?;
+        line.push('\n');
+        let mut guard = self.stdin.lock().await;
+        guard.write_all(line.as_bytes()).await?;
+        guard.flush().await?;
+        Ok(())
+    }
+}
+
+impl Outbound for AcpClient {
     /// Send a request and await its response result.
-    pub async fn request(&self, method: &str, params: Value) -> Result<Value> {
+    async fn request(&self, method: &str, params: Value) -> Result<Value> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst) + 1;
         let (otx, orx) = oneshot::channel();
         self.pending.lock().unwrap().insert(id, otx);
@@ -112,24 +133,15 @@ impl AcpClient {
     }
 
     /// Send a notification (no response expected), e.g. `session/cancel`.
-    pub async fn notify(&self, method: &str, params: Value) -> Result<()> {
+    async fn notify(&self, method: &str, params: Value) -> Result<()> {
         let msg = json!({"jsonrpc": "2.0", "method": method, "params": params});
         self.write(&msg).await
     }
 
     /// Reply to an agent→client request (e.g. a permission decision).
-    pub async fn respond(&self, id: Value, result: Value) -> Result<()> {
+    async fn respond(&self, id: Value, result: Value) -> Result<()> {
         let msg = json!({"jsonrpc": "2.0", "id": id, "result": result});
         self.write(&msg).await
-    }
-
-    async fn write(&self, msg: &Value) -> Result<()> {
-        let mut line = serde_json::to_string(msg)?;
-        line.push('\n');
-        let mut guard = self.stdin.lock().await;
-        guard.write_all(line.as_bytes()).await?;
-        guard.flush().await?;
-        Ok(())
     }
 }
 

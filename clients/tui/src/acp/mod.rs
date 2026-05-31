@@ -1,4 +1,4 @@
 pub mod client;
 pub mod messages;
 
-pub use client::{AcpClient, ServerMessage};
+pub use client::{AcpClient, Outbound, ServerMessage};
