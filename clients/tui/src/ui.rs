@@ -14,10 +14,11 @@ use crate::graph::GraphNode;
 use crate::transcript::Cell;
 
 pub fn render<O: Outbound>(frame: &mut Frame, app: &App<O>) {
+    let composer_h = composer_height(&app.composer, frame.area().width);
     let chunks = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(1),
-        Constraint::Length(3),
+        Constraint::Length(composer_h),
     ])
     .split(frame.area());
 
@@ -157,18 +158,31 @@ fn render_dag(frame: &mut Frame, area: Rect, graph: &[GraphNode]) {
 }
 
 fn render_transcript(frame: &mut Frame, area: Rect, transcript: &[Cell], scrollback: u16) {
+    let inner_w = area.width.saturating_sub(2).max(1) as usize;
     let mut lines: Vec<Line> = Vec::new();
     for cell in transcript {
         match cell {
-            Cell::Prompt(text) => lines.push(Line::from(Span::styled(
-                format!("❯ {text}"),
+            Cell::Prompt(text) => lines.extend(wrap_styled(
+                &format!("❯ {text}"),
+                inner_w,
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
-            ))),
+            )),
             Cell::Message(text) => {
                 for raw in text.split('\n') {
-                    lines.push(Line::raw(raw.to_string()));
+                    lines.extend(wrap_styled(raw, inner_w, Style::default()));
+                }
+            }
+            Cell::Thought(text) => {
+                for raw in text.split('\n') {
+                    lines.extend(wrap_styled(
+                        &format!("> {raw}"),
+                        inner_w,
+                        Style::default()
+                            .fg(Color::DarkGray)
+                            .add_modifier(Modifier::ITALIC),
+                    ));
                 }
             }
             Cell::Tool {
@@ -191,26 +205,29 @@ fn render_transcript(frame: &mut Frame, area: Rect, transcript: &[Cell], scrollb
                     format!("  [{status}]"),
                     Style::default().fg(Color::DarkGray),
                 ));
-                lines.push(Line::from(spans));
+                lines.extend(wrap_line(Line::from(spans), inner_w));
                 if let Some(out) = output {
-                    lines.push(Line::from(Span::styled(
-                        format!("  ↳ {out}"),
+                    lines.extend(wrap_styled(
+                        &format!("  ↳ {out}"),
+                        inner_w,
                         Style::default().fg(Color::DarkGray),
-                    )));
+                    ));
                 }
             }
-            Cell::Meta(text) => lines.push(Line::from(Span::styled(
-                format!("  {text}"),
+            Cell::Meta(text) => lines.extend(wrap_styled(
+                &format!("  {text}"),
+                inner_w,
                 Style::default()
                     .fg(Color::DarkGray)
                     .add_modifier(Modifier::DIM),
-            ))),
-            Cell::Notice(text) => lines.push(Line::from(Span::styled(
-                text.clone(),
+            )),
+            Cell::Notice(text) => lines.extend(wrap_styled(
+                text,
+                inner_w,
                 Style::default()
                     .fg(Color::DarkGray)
                     .add_modifier(Modifier::ITALIC),
-            ))),
+            )),
         }
         lines.push(Line::raw(""));
     }
@@ -226,30 +243,98 @@ fn render_transcript(frame: &mut Frame, area: Rect, transcript: &[Cell], scrollb
     // Pin to the tail, then let scrollback move the window up (clamped at the top).
     let max_scroll = (lines.len() as u16).saturating_sub(inner_h);
     let scroll = max_scroll.saturating_sub(scrollback);
-    let para = Paragraph::new(lines)
-        .block(block)
-        .wrap(Wrap { trim: false })
-        .scroll((scroll, 0));
+    let para = Paragraph::new(lines).block(block).scroll((scroll, 0));
     frame.render_widget(para, area);
 }
 
 fn render_composer(frame: &mut Frame, area: Rect, composer: &str, cursor: usize) {
     let block = Block::default().borders(Borders::ALL).title(" task ");
+    let inner_w = area.width.saturating_sub(2).max(1) as usize;
     let chars: Vec<char> = composer.chars().collect();
     let at = cursor.min(chars.len());
     let cursor_style = Style::default().add_modifier(Modifier::REVERSED);
 
-    let mut spans = vec![
-        Span::styled("> ", Style::default().fg(Color::Cyan)),
-        Span::raw(chars[..at].iter().collect::<String>()),
+    let mut cells = vec![
+        Span::styled(">".to_string(), Style::default().fg(Color::Cyan)),
+        Span::raw(" ".to_string()),
     ];
-    if at < chars.len() {
-        spans.push(Span::styled(chars[at].to_string(), cursor_style));
-        spans.push(Span::raw(chars[at + 1..].iter().collect::<String>()));
-    } else {
-        spans.push(Span::styled(" ", cursor_style)); // block at end of line
+    for (idx, ch) in chars.iter().enumerate() {
+        let style = if idx == at {
+            cursor_style
+        } else {
+            Style::default()
+        };
+        cells.push(Span::styled(ch.to_string(), style));
     }
-    frame.render_widget(Paragraph::new(Line::from(spans)).block(block), area);
+    if at == chars.len() {
+        cells.push(Span::styled(" ".to_string(), cursor_style));
+    }
+
+    let mut lines = chunk_spans(cells, inner_w);
+    let visible_h = area.height.saturating_sub(2).max(1) as usize;
+    if lines.len() > visible_h {
+        lines = lines.split_off(lines.len() - visible_h);
+    }
+    frame.render_widget(Paragraph::new(lines).block(block), area);
+}
+
+fn composer_height(composer: &str, terminal_w: u16) -> u16 {
+    let inner_w = terminal_w.saturating_sub(2).max(1) as usize;
+    let chars = composer.chars().count() + 3; // prompt marker, space, cursor block
+    let visual = chars.div_ceil(inner_w).max(1) as u16;
+    (visual + 2).clamp(3, 8)
+}
+
+fn wrap_styled(text: &str, width: usize, style: Style) -> Vec<Line<'static>> {
+    wrap_plain(text, width)
+        .into_iter()
+        .map(|line| Line::from(Span::styled(line, style)))
+        .collect()
+}
+
+fn wrap_line(line: Line<'static>, width: usize) -> Vec<Line<'static>> {
+    let spans: Vec<Span<'static>> = line
+        .spans
+        .into_iter()
+        .flat_map(|span| {
+            let style = span.style;
+            span.content
+                .chars()
+                .map(move |ch| Span::styled(ch.to_string(), style))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    chunk_spans(spans, width)
+}
+
+fn chunk_spans(spans: Vec<Span<'static>>, width: usize) -> Vec<Line<'static>> {
+    let width = width.max(1);
+    if spans.is_empty() {
+        return vec![Line::raw("")];
+    }
+    let mut lines = Vec::new();
+    for chunk in spans.chunks(width) {
+        lines.push(Line::from(chunk.to_vec()));
+    }
+    lines
+}
+
+fn wrap_plain(text: &str, width: usize) -> Vec<String> {
+    let width = width.max(1);
+    if text.is_empty() {
+        return vec![String::new()];
+    }
+    let mut out = Vec::new();
+    let mut current = String::new();
+    for ch in text.chars() {
+        if current.chars().count() == width {
+            out.push(current);
+            current = String::new();
+        }
+        current.push(ch);
+    }
+    out.push(current);
+    out
 }
 
 fn render_approval(frame: &mut Frame, plan: &[PlanEntry], options: &[PermOption]) {
@@ -325,4 +410,46 @@ fn centered(area: Rect, percent_x: u16, height: u16) -> Rect {
     Layout::vertical([Constraint::Length(height)])
         .flex(Flex::Center)
         .split(h[0])[0]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transcript_wrapping_counts_visual_lines() {
+        let lines = wrap_styled("abcdef", 2, Style::default());
+        let rendered: Vec<String> = lines
+            .into_iter()
+            .map(|line| line.spans.into_iter().map(|span| span.content).collect())
+            .collect();
+        assert_eq!(rendered, vec!["ab", "cd", "ef"]);
+    }
+
+    #[test]
+    fn composer_height_grows_for_wrapped_input() {
+        assert_eq!(composer_height("abc", 10), 3);
+        assert_eq!(composer_height("abcdefghij", 6), 6);
+        assert_eq!(composer_height("abcdefghijklmnopqrstuvwxyz", 6), 8);
+    }
+
+    #[test]
+    fn wrapped_composer_keeps_cursor_cell() {
+        let lines = chunk_spans(
+            vec![
+                Span::raw("a".to_string()),
+                Span::styled(
+                    "b".to_string(),
+                    Style::default().add_modifier(Modifier::REVERSED),
+                ),
+                Span::raw("c".to_string()),
+            ],
+            2,
+        );
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].spans[1]
+            .style
+            .add_modifier
+            .contains(Modifier::REVERSED));
+    }
 }

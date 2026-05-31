@@ -11,6 +11,8 @@ pub enum Cell {
     Prompt(String),
     /// An agent message chunk (think/summary/synthesis output, or the result).
     Message(String),
+    /// Live reasoning/thinking output, rendered dimmer than final answers.
+    Thought(String),
     /// A tool call: its title, arguments, latest status, and (once done) output.
     Tool {
         title: String,

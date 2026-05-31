@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or a verbatim template.
 
 ### Changed
+- TUI transcript and composer rendering now pre-wrap to the pane width before
+  computing scroll offsets. Long streamed results stay fully scrollable, and
+  long prompts wrap inside a composer that grows up to a small cap.
+- TUI live `think` chunks render as dim italic quote-style transcript cells,
+  using the ACP node metadata added for intermediate output streams.
 - Tightened the default planner, decision, think, summary, synthesis, result,
   and shape-check prompts to make node roles clearer, preserve downstream
   information, and avoid over-compressed or invented outputs.

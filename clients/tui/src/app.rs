@@ -380,6 +380,7 @@ impl<O: Outbound> App<O> {
                 node_type,
                 is_final,
             } => {
+                let is_thought = node_type == "think" && !is_final;
                 let key = (node_id, node_type, is_final);
                 if self.streaming_msg
                     && self.streaming_msg_key.as_ref() == Some(&key)
@@ -389,14 +390,21 @@ impl<O: Outbound> App<O> {
                     // ones — so fine-grained streaming preserves word boundaries.
                     // Fall back to a new cell if the last cell was replaced by
                     // something else (shouldn't happen, but be safe).
-                    if let Some(Cell::Message(s)) = self.transcript.last_mut() {
-                        s.push_str(&content.text);
-                        return;
+                    match self.transcript.last_mut() {
+                        Some(Cell::Message(s)) | Some(Cell::Thought(s)) => {
+                            s.push_str(&content.text);
+                            return;
+                        }
+                        _ => {}
                     }
                 }
                 // Not yet streaming: only open a new cell for visible content.
                 if !content.text.trim().is_empty() {
-                    self.transcript.push(Cell::Message(content.text));
+                    if is_thought {
+                        self.transcript.push(Cell::Thought(content.text));
+                    } else {
+                        self.transcript.push(Cell::Message(content.text));
+                    }
                     self.streaming_msg = true;
                     self.streaming_msg_key = Some(key);
                 }
@@ -806,7 +814,7 @@ mod tests {
             "three consecutive chunks should produce one cell"
         );
         assert!(
-            matches!(app.transcript.last(), Some(Cell::Message(m)) if m == "Hello, world"),
+            matches!(app.transcript.last(), Some(Cell::Thought(m)) if m == "Hello, world"),
             "cell text should be the concatenation of all chunks"
         );
     }
@@ -845,6 +853,7 @@ mod tests {
             .iter()
             .filter_map(|c| match c {
                 Cell::Message(m) => Some(m.as_str()),
+                Cell::Thought(m) => Some(m.as_str()),
                 _ => None,
             })
             .collect();
@@ -881,10 +890,12 @@ mod tests {
             .iter()
             .filter_map(|c| match c {
                 Cell::Message(m) => Some(m.as_str()),
+                Cell::Thought(m) => Some(m.as_str()),
                 _ => None,
             })
             .collect();
         assert_eq!(messages, vec!["thinking", "final"]);
+        assert!(matches!(app.transcript[1], Cell::Thought(_)));
     }
 
     #[tokio::test]
@@ -919,7 +930,7 @@ mod tests {
             .await;
         }
         assert!(
-            matches!(app.transcript.last(), Some(Cell::Message(m)) if m == "foo bar"),
+            matches!(app.transcript.last(), Some(Cell::Thought(m)) if m == "foo bar"),
             "space fragment must not be dropped while streaming"
         );
     }
