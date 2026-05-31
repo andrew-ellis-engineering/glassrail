@@ -21,7 +21,7 @@ pub fn render<O: Outbound>(frame: &mut Frame, app: &App<O>) {
     .split(frame.area());
 
     render_status(frame, chunks[0], app.status);
-    render_body(frame, chunks[1], &app.plan, &app.transcript);
+    render_body(frame, chunks[1], &app.plan, &app.transcript, app.scrollback);
     render_composer(frame, chunks[2], &app.composer);
 
     match &app.mode {
@@ -55,15 +55,21 @@ fn render_status(frame: &mut Frame, area: Rect, status: Status) {
     frame.render_widget(Paragraph::new(line), area);
 }
 
-fn render_body(frame: &mut Frame, area: Rect, plan: &[PlanEntry], transcript: &[Cell]) {
+fn render_body(
+    frame: &mut Frame,
+    area: Rect,
+    plan: &[PlanEntry],
+    transcript: &[Cell],
+    scrollback: u16,
+) {
     if plan.is_empty() {
-        render_transcript(frame, area, transcript);
+        render_transcript(frame, area, transcript, scrollback);
         return;
     }
     let plan_h = (plan.len() as u16 + 2).min(area.height / 2).max(3);
     let parts = Layout::vertical([Constraint::Length(plan_h), Constraint::Min(1)]).split(area);
     render_plan(frame, parts[0], plan);
-    render_transcript(frame, parts[1], transcript);
+    render_transcript(frame, parts[1], transcript, scrollback);
 }
 
 fn render_plan(frame: &mut Frame, area: Rect, plan: &[PlanEntry]) {
@@ -84,7 +90,7 @@ fn plan_line(entry: &PlanEntry) -> Line<'static> {
     ])
 }
 
-fn render_transcript(frame: &mut Frame, area: Rect, transcript: &[Cell]) {
+fn render_transcript(frame: &mut Frame, area: Rect, transcript: &[Cell], scrollback: u16) {
     let mut lines: Vec<Line> = Vec::new();
     for cell in transcript {
         match cell {
@@ -117,9 +123,17 @@ fn render_transcript(frame: &mut Frame, area: Rect, transcript: &[Cell]) {
         lines.push(Line::raw(""));
     }
 
-    let block = Block::default().borders(Borders::ALL).title(" transcript ");
+    // Title hints when scrolled up from the tail.
+    let title = if scrollback > 0 {
+        " transcript (scrolled — ↓/PgDn for latest) ".to_string()
+    } else {
+        " transcript ".to_string()
+    };
+    let block = Block::default().borders(Borders::ALL).title(title);
     let inner_h = area.height.saturating_sub(2);
-    let scroll = (lines.len() as u16).saturating_sub(inner_h);
+    // Pin to the tail, then let scrollback move the window up (clamped at the top).
+    let max_scroll = (lines.len() as u16).saturating_sub(inner_h);
+    let scroll = max_scroll.saturating_sub(scrollback);
     let para = Paragraph::new(lines)
         .block(block)
         .wrap(Wrap { trim: false })

@@ -42,6 +42,8 @@ pub struct App<O: Outbound> {
     pub status: Status,
     pub mode: Mode,
     pub should_quit: bool,
+    /// Lines scrolled up from the tail; 0 follows the latest output.
+    pub scrollback: u16,
 
     permission: Option<PermissionState>,
     working: bool,
@@ -62,6 +64,7 @@ impl<O: Outbound> App<O> {
             status: Status::Ready,
             mode: Mode::Normal,
             should_quit: false,
+            scrollback: 0,
             permission: None,
             working: false,
             tool_idx: HashMap::new(),
@@ -109,6 +112,10 @@ impl<O: Outbound> App<O> {
             KeyCode::Backspace => {
                 self.composer.pop();
             }
+            KeyCode::Up => self.scrollback = self.scrollback.saturating_add(1),
+            KeyCode::Down => self.scrollback = self.scrollback.saturating_sub(1),
+            KeyCode::PageUp => self.scrollback = self.scrollback.saturating_add(10),
+            KeyCode::PageDown => self.scrollback = self.scrollback.saturating_sub(10),
             KeyCode::Char(c) => self.composer.push(c),
             _ => {}
         }
@@ -218,6 +225,7 @@ impl<O: Outbound> App<O> {
         self.transcript.push(Cell::Prompt(prompt.clone()));
         self.plan.clear();
         self.tool_idx.clear();
+        self.scrollback = 0; // jump back to the tail for the new turn
         self.working = true;
         self.status = Status::Working;
 
@@ -518,5 +526,30 @@ mod tests {
         let (mut app, _client, _rx) = app();
         app.on_key(key(KeyCode::Esc)).await;
         assert!(app.should_quit);
+    }
+
+    #[tokio::test]
+    async fn scroll_keys_adjust_scrollback() {
+        let (mut app, _client, _rx) = app();
+        app.on_key(key(KeyCode::PageUp)).await;
+        assert_eq!(app.scrollback, 10);
+        app.on_key(key(KeyCode::Up)).await;
+        assert_eq!(app.scrollback, 11);
+        app.on_key(key(KeyCode::Down)).await;
+        assert_eq!(app.scrollback, 10);
+        app.on_key(key(KeyCode::PageDown)).await;
+        assert_eq!(app.scrollback, 0);
+        // Saturates at the tail rather than underflowing.
+        app.on_key(key(KeyCode::Down)).await;
+        assert_eq!(app.scrollback, 0);
+    }
+
+    #[tokio::test]
+    async fn submitting_jumps_back_to_the_tail() {
+        let (mut app, _client, _rx) = app();
+        app.scrollback = 5;
+        app.composer = "go".into();
+        app.on_key(key(KeyCode::Enter)).await;
+        assert_eq!(app.scrollback, 0);
     }
 }
