@@ -40,6 +40,7 @@ class PlanTracker:
         self._desc: dict[int, str] = {}
         self._type: dict[int, str] = {}
         self._tool: dict[int, str | None] = {}
+        self._args: dict[int, dict[str, Any]] = {}
         self._order: list[int] = []
         self._status: dict[int, NodeStatus] = {}
         self._running: set[int] = set()
@@ -49,6 +50,7 @@ class PlanTracker:
         self._desc.clear()
         self._type.clear()
         self._tool.clear()
+        self._args.clear()
         self._order.clear()
         self._status.clear()
         self._running.clear()
@@ -63,6 +65,7 @@ class PlanTracker:
             kind: str = node.get("type", "node")
             self._type[node_id] = kind
             self._tool[node_id] = node.get("tool")
+            self._args[node_id] = node.get("args_template") or {}
             self._desc[node_id] = f"[{kind}] {node.get('description', '')}".strip()
 
     def node_type(self, node_id: int) -> str | None:
@@ -70,6 +73,9 @@ class PlanTracker:
 
     def tool_name(self, node_id: int) -> str | None:
         return self._tool.get(node_id)
+
+    def tool_input(self, node_id: int) -> dict[str, Any]:
+        return self._args.get(node_id, {})
 
     def description(self, node_id: int) -> str:
         return self._desc.get(node_id, "")

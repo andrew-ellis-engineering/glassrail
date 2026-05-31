@@ -105,14 +105,40 @@ fn render_transcript(frame: &mut Frame, area: Rect, transcript: &[Cell], scrollb
                     lines.push(Line::raw(raw.to_string()));
                 }
             }
-            Cell::Tool { title, status } => lines.push(Line::from(vec![
-                Span::styled("⚙ ", Style::default().fg(Color::Blue)),
-                Span::raw(title.clone()),
-                Span::styled(
+            Cell::Tool {
+                title,
+                args,
+                status,
+                output,
+            } => {
+                let mut spans = vec![
+                    Span::styled("⚙ ", Style::default().fg(Color::Blue)),
+                    Span::raw(title.clone()),
+                ];
+                if !args.is_empty() {
+                    spans.push(Span::styled(
+                        format!("  ({args})"),
+                        Style::default().fg(Color::DarkGray),
+                    ));
+                }
+                spans.push(Span::styled(
                     format!("  [{status}]"),
                     Style::default().fg(Color::DarkGray),
-                ),
-            ])),
+                ));
+                lines.push(Line::from(spans));
+                if let Some(out) = output {
+                    lines.push(Line::from(Span::styled(
+                        format!("  ↳ {out}"),
+                        Style::default().fg(Color::DarkGray),
+                    )));
+                }
+            }
+            Cell::Meta(text) => lines.push(Line::from(Span::styled(
+                format!("  {text}"),
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::DIM),
+            ))),
             Cell::Notice(text) => lines.push(Line::from(Span::styled(
                 text.clone(),
                 Style::default()

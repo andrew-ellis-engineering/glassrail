@@ -11,8 +11,15 @@ pub enum Cell {
     Prompt(String),
     /// An agent message chunk (think/summary/synthesis output, or the result).
     Message(String),
-    /// A tool call and its latest status.
-    Tool { title: String, status: String },
+    /// A tool call: its title, arguments, latest status, and (once done) output.
+    Tool {
+        title: String,
+        args: String,
+        status: String,
+        output: Option<String>,
+    },
+    /// A dim per-node metadata annotation (tier / confidence / flagged).
+    Meta(String),
     /// A status / branch / error notice.
     Notice(String),
 }

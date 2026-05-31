@@ -32,6 +32,19 @@ fn update(session: &str, update: Value) {
     sleep(Duration::from_millis(350));
 }
 
+fn node_meta(session: &str, node_type: &str, tier: u32, confidence: f64, flagged: bool) {
+    update(
+        session,
+        json!({
+            "sessionUpdate": "node_meta",
+            "nodeType": node_type,
+            "tier": tier,
+            "confidence": confidence,
+            "flagged": flagged,
+        }),
+    );
+}
+
 fn plan(statuses: [&str; 3]) -> Value {
     let titles = ["read the brief", "analyse the options", "write the answer"];
     let entries: Vec<Value> = titles
@@ -107,12 +120,19 @@ fn stream_result(session: &str, reply_id: &Value) {
             "title": "read the brief",
             "kind": "read",
             "status": "in_progress",
+            "rawInput": {"path": "brief.md"},
         }),
     );
     update(
         session,
-        json!({"sessionUpdate": "tool_call_update", "toolCallId": "node-1", "status": "completed"}),
+        json!({
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "node-1",
+            "status": "completed",
+            "rawOutput": {"output": "Budget: $42k. Deadline: Q3. Owner: Elena Voss."},
+        }),
     );
+    node_meta(session, "tool", 0, 1.0, false);
     update(session, plan(["completed", "in_progress", "pending"]));
     update(
         session,
@@ -121,6 +141,7 @@ fn stream_result(session: &str, reply_id: &Value) {
             "content": {"type": "text", "text": "Weighing the trade-offs of the three options…"},
         }),
     );
+    node_meta(session, "synthesis", 2, 0.74, true);
     update(session, plan(["completed", "completed", "in_progress"]));
     update(
         session,

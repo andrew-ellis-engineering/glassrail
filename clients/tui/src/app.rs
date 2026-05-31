@@ -195,24 +195,52 @@ impl<O: Outbound> App<O> {
                 tool_call_id,
                 title,
                 status,
+                raw_input,
             } => {
                 let idx = self.transcript.len();
-                self.transcript.push(Cell::Tool { title, status });
+                self.transcript.push(Cell::Tool {
+                    title,
+                    args: compact_args(&raw_input),
+                    status,
+                    output: None,
+                });
                 self.tool_idx.insert(tool_call_id, idx);
             }
             SessionUpdate::ToolCallUpdate {
                 tool_call_id,
                 status,
+                raw_output,
             } => {
                 if let Some(&idx) = self.tool_idx.get(&tool_call_id) {
-                    if let Some(Cell::Tool { status: s, .. }) = self.transcript.get_mut(idx) {
+                    if let Some(Cell::Tool {
+                        status: s, output, ..
+                    }) = self.transcript.get_mut(idx)
+                    {
                         *s = status;
+                        if let Some(text) = raw_output.as_ref().and_then(extract_output) {
+                            *output = Some(text);
+                        }
                     }
                 }
             }
             SessionUpdate::AgentMessageChunk { content } => {
                 if !content.text.trim().is_empty() {
                     self.transcript.push(Cell::Message(content.text));
+                }
+            }
+            SessionUpdate::NodeMeta {
+                node_type,
+                tier,
+                confidence,
+                flagged,
+            } => {
+                // The result node's metadata (always conf 1.0) is noise; skip it.
+                if node_type != "result" {
+                    let tier = tier.map(|t| t.to_string()).unwrap_or_else(|| "?".into());
+                    let flag = if flagged { "  ⚑ flagged" } else { "" };
+                    self.transcript.push(Cell::Meta(format!(
+                        "tier {tier} · conf {confidence:.2}{flag}"
+                    )));
                 }
             }
         }
@@ -287,6 +315,46 @@ fn reject(feedback: Option<String>) -> Value {
 
 fn cancel() -> Value {
     json!({"outcome": {"outcome": "cancelled"}})
+}
+
+const PREVIEW_MAX: usize = 120;
+
+/// Render a tool's raw input object as a compact `k=v, k=v` argument string.
+fn compact_args(raw: &Value) -> String {
+    let Some(obj) = raw.as_object() else {
+        return String::new();
+    };
+    let parts: Vec<String> = obj
+        .iter()
+        .map(|(k, v)| match v {
+            Value::String(s) => format!("{k}={s}"),
+            other => format!("{k}={other}"),
+        })
+        .collect();
+    truncate(&parts.join(", "))
+}
+
+/// Pull a tool's textual output from its rawOutput object (or stringify it).
+fn extract_output(raw: &Value) -> Option<String> {
+    let text = match raw.get("output") {
+        Some(Value::String(s)) => s.clone(),
+        Some(other) => other.to_string(),
+        None => raw.to_string(),
+    };
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(truncate(trimmed))
+    }
+}
+
+fn truncate(s: &str) -> String {
+    let one_line = s.replace('\n', " ");
+    match one_line.char_indices().nth(PREVIEW_MAX) {
+        Some((idx, _)) => format!("{}…", &one_line[..idx]),
+        None => one_line,
+    }
 }
 
 #[cfg(test)]
@@ -474,17 +542,56 @@ mod tests {
             tool_call_id: "node-1".into(),
             title: "read file".into(),
             status: "in_progress".into(),
+            raw_input: json!({"path": "/tmp/app.conf"}),
         }))
         .await;
         app.on_server(ServerMessage::Update(SessionUpdate::ToolCallUpdate {
             tool_call_id: "node-1".into(),
             status: "completed".into(),
+            raw_output: Some(json!({"output": "port=8443"})),
         }))
         .await;
-        assert!(app
-            .transcript
-            .iter()
-            .any(|c| matches!(c, Cell::Tool { title, status } if title == "read file" && status == "completed")));
+        assert!(app.transcript.iter().any(|c| matches!(
+            c,
+            Cell::Tool { title, status, args, output }
+                if title == "read file"
+                    && status == "completed"
+                    && args.contains("path=/tmp/app.conf")
+                    && output.as_deref() == Some("port=8443")
+        )));
+    }
+
+    #[tokio::test]
+    async fn node_meta_renders_tier_and_confidence() {
+        let (mut app, _client, _rx) = app();
+        app.on_server(ServerMessage::Update(SessionUpdate::NodeMeta {
+            node_type: "synthesis".into(),
+            tier: Some(2),
+            confidence: 0.78,
+            flagged: true,
+        }))
+        .await;
+        assert!(app.transcript.iter().any(
+            |c| matches!(c, Cell::Meta(m) if m.contains("tier 2") && m.contains("0.78") && m.contains("flagged"))
+        ));
+    }
+
+    #[tokio::test]
+    async fn node_meta_for_result_node_is_suppressed() {
+        let (mut app, _client, _rx) = app();
+        let before = app.transcript.len();
+        app.on_server(ServerMessage::Update(SessionUpdate::NodeMeta {
+            node_type: "result".into(),
+            tier: Some(0),
+            confidence: 1.0,
+            flagged: false,
+        }))
+        .await;
+        assert_eq!(
+            app.transcript.len(),
+            before,
+            "result-node meta is noise; skipped"
+        );
     }
 
     #[tokio::test]

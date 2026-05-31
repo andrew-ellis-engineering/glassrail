@@ -330,9 +330,18 @@ async def test_prompt_streams_plan_nodes_and_result() -> None:
     assert all(e["status"] == "completed" for e in plans[-1]["entries"])
 
     # The tool node produced a tool_call and a completed tool_call_update.
-    assert conn.updates_of("tool_call"), "expected a tool_call for the tool node"
+    tool_calls = conn.updates_of("tool_call")
+    assert tool_calls, "expected a tool_call for the tool node"
+    assert "rawInput" in tool_calls[0]
     tool_done = conn.updates_of("tool_call_update")
     assert tool_done and tool_done[-1]["status"] == "completed"
+    assert tool_done[-1]["rawOutput"]["output"] == "port=8443"
+
+    # Per-node tier/confidence is streamed as the node_meta extension.
+    metas = conn.updates_of("node_meta")
+    assert metas, "expected node_meta updates"
+    assert all("tier" in m and "confidence" in m for m in metas)
+    assert {m["nodeType"] for m in metas} == {"tool", "result"}
 
     # The final answer is streamed exactly once (via TaskCompleted, not the
     # result node) — no duplication.

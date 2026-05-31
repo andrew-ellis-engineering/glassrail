@@ -290,12 +290,14 @@ class AcpServer:
                         "title": tracker.description(event.node_id) or "tool",
                         "kind": _TOOL_KINDS.get(tracker.tool_name(event.node_id) or "", "other"),
                         "status": "in_progress",
+                        "rawInput": tracker.tool_input(event.node_id),
                     },
                 )
         elif isinstance(event, NodeFinished):
             tracker.finish(event.node_id, event.status)
             await self._update(session, {"sessionUpdate": "plan", "entries": tracker.entries()})
             await self._emit_node_output(session, tracker, event)
+            await self._emit_node_meta(session, tracker, event)
         elif isinstance(event, BranchDecided):
             if event.branch_taken:
                 await self._message(session, f"→ branch: {event.branch_taken}")
@@ -335,6 +337,29 @@ class AcpServer:
             text = _as_text(result.output)
             if text.strip():
                 await self._message(session, text)
+
+    async def _emit_node_meta(
+        self, session: Session, tracker: PlanTracker, event: NodeFinished
+    ) -> None:
+        """Stream per-node tier/confidence as a dagagent ACP extension.
+
+        ``node_meta`` is not a standard ACP update kind; a generic client ignores
+        it, while our TUI renders a dim tier/confidence annotation. Only emitted
+        for nodes that actually ran (completed or failed), not skipped ones.
+        """
+        if event.status not in (NodeStatus.COMPLETED, NodeStatus.FAILED):
+            return
+        await self._update(
+            session,
+            {
+                "sessionUpdate": "node_meta",
+                "nodeId": event.node_id,
+                "nodeType": tracker.node_type(event.node_id) or "node",
+                "tier": event.tier_used,
+                "confidence": event.confidence,
+                "flagged": event.flagged,
+            },
+        )
 
     # ── update helpers ────────────────────────────────────────────────────
 

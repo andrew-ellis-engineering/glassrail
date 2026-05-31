@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Richer TUI transcript: tool calls show their arguments and a result preview,
+  and each node carries a dim tier/confidence annotation (flagged when low). The
+  adapter sends tool `rawInput`/`rawOutput` and a `node_meta` extension update on
+  node completion; standard ACP clients ignore the extension.
 - Cancellation: a `cancelled` task status and a `TaskCancelled` terminal event.
   The orchestrator handles `asyncio.CancelledError` in run/resume/revise —
   marking the task cancelled, emitting the event, and persisting state — so an

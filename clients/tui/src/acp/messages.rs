@@ -6,6 +6,7 @@
 //! than erroring the stream.
 
 use serde::Deserialize;
+use serde_json::Value;
 
 /// One entry in an ACP plan update (re-sent in full on every change).
 /// Only the fields the TUI renders are modelled; `priority` etc. are ignored.
@@ -35,15 +36,31 @@ pub enum SessionUpdate {
         title: String,
         #[serde(default)]
         status: String,
+        #[serde(default, rename = "rawInput")]
+        raw_input: Value,
     },
     ToolCallUpdate {
         #[serde(rename = "toolCallId")]
         tool_call_id: String,
         #[serde(default)]
         status: String,
+        #[serde(default, rename = "rawOutput")]
+        raw_output: Option<Value>,
     },
     AgentMessageChunk {
         content: Content,
+    },
+    /// A dagagent extension: per-node tier/confidence metadata. Standard ACP
+    /// clients ignore unknown update kinds; ours renders a dim annotation.
+    NodeMeta {
+        #[serde(default, rename = "nodeType")]
+        node_type: String,
+        #[serde(default)]
+        tier: Option<u32>,
+        #[serde(default)]
+        confidence: f64,
+        #[serde(default)]
+        flagged: bool,
     },
 }
 
