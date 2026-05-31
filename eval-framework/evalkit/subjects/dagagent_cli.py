@@ -15,12 +15,22 @@ dagagent-specific parsing here beyond reading those fields.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from typing import Any
 
 from evalkit.subjects.base import RunResult
 
 _DEFAULT_COMMAND = ["dagagent", "run"]
+
+
+def _as_text(stream: str | bytes | None) -> str:
+    """Coerce a captured stream to str (TimeoutExpired may yield bytes)."""
+    if stream is None:
+        return ""
+    if isinstance(stream, bytes):
+        return stream.decode("utf-8", errors="replace")
+    return stream
 
 
 class DagAgentCliSubject:
@@ -33,6 +43,11 @@ class DagAgentCliSubject:
         cmd = config.get("command", _DEFAULT_COMMAND)
         self._command = list(cmd) if isinstance(cmd, (list, tuple)) else [str(cmd)]
         self._extra_args = [str(a) for a in config.get("args", [])]
+        # Optional env overrides layered onto the inherited environment, so the
+        # suite can pin the agent's tier config (e.g. a longer tier-0 timeout)
+        # without depending on the caller's shell.
+        raw_env = config.get("env") or {}
+        self._env_overrides = {str(k): str(v) for k, v in raw_env.items()}
 
     def run(self, *, prompt: str, model: str, max_turns: int, timeout_s: int) -> RunResult:
         cmd = [*self._command, prompt, "--json"]
@@ -41,17 +56,21 @@ class DagAgentCliSubject:
         if timeout_s:
             cmd += ["--timeout", str(timeout_s)]
         cmd += self._extra_args
+        env = {**os.environ, **self._env_overrides} if self._env_overrides else None
         try:
             proc = subprocess.run(  # noqa: S603 - argv from config, no shell
-                cmd, capture_output=True, text=True, timeout=timeout_s, check=False
+                cmd, capture_output=True, text=True, timeout=timeout_s, check=False, env=env
             )
         except subprocess.TimeoutExpired as exc:
+            # On timeout, CPython may hand back stdout/stderr as bytes even
+            # though text=True was requested — coerce before touching them, or
+            # `str + bytes` raises TypeError and masks the real timeout.
             return RunResult(
                 result_text="",
                 success=False,
                 error="timed out",
-                raw_stdout=exc.stdout or "",
-                raw_stderr=(exc.stderr or "") + "\n[timed out]",
+                raw_stdout=_as_text(exc.stdout),
+                raw_stderr=_as_text(exc.stderr) + "\n[timed out]",
             )
         except FileNotFoundError:
             return RunResult(
