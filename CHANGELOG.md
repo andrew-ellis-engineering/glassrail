@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selection keywords, adaptable skeletons, and adaptation notes. The planner
   injects one selected recipe as a scaffold rather than hardcoded prompt text
   or a verbatim template.
+
+### Changed
+- Tightened the default planner, decision, think, summary, synthesis, result,
+  and shape-check prompts to make node roles clearer, preserve downstream
+  information, and avoid over-compressed or invented outputs.
 - Plan validation now enforces node-type contracts before execution: tool
   nodes must name a tool, non-tool nodes cannot carry tool fields, decision
   nodes must declare a binary yes/no branch contract, and only subplan nodes
