@@ -19,6 +19,8 @@ default_timeout_s = 180
 promotion_threshold = 5  # consecutive clean runs to qualify for regression
 
 [backend]
-# How to invoke the agent. Ensure `dagagent` is on PATH (activate the venv) or
-# set this to ["uv", "run", "dagagent", "run"] when running from the repo.
-command = ["dagagent", "run"]
+# How to invoke the agent. Uses `uv run` so the suite works from the repo
+# without activating the venv (uv walks up to the project's pyproject.toml).
+# If `dagagent` is already on PATH (installed package / activated venv), you can
+# simplify this to ["dagagent", "run"].
+command = ["uv", "run", "dagagent", "run"]
