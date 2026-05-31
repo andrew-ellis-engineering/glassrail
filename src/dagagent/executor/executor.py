@@ -10,8 +10,9 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import NamedTuple, cast
+from typing import ClassVar, NamedTuple, cast
 
 from opentelemetry.trace import Status, StatusCode
 
@@ -32,12 +33,13 @@ from dagagent.events import (
     Event,
     EventBus,
     NodeFinished,
+    NodeOutputChunk,
     NodeStarted,
     TaskCompleted,
 )
 from dagagent.executor.context import assemble_context
 from dagagent.harness import ToolHarness
-from dagagent.providers import Message, TierRouter, collect
+from dagagent.providers import Chunk, Message, TierRouter, collect
 from dagagent.telemetry import (
     ATTR_NODE_CONFIDENCE,
     ATTR_NODE_ID,
@@ -73,6 +75,130 @@ _LLM_NODE_SPECS: dict[NodeType, _LLMNodeSpec] = {
     NodeType.SUMMARY: _LLMNodeSpec("Context to summarise:", "summary", 0.9),
     NodeType.RESULT: _LLMNodeSpec("Context from prior nodes:", "output", 0.9),
 }
+
+# Node types whose text output is streamed live as NodeOutputChunk events.
+# Mirrors the ACP adapter's _MESSAGE_NODE_TYPES (think / synthesis / summary);
+# the result node is excluded because its output surfaces via TaskCompleted.
+_STREAMING_NODE_TYPES: frozenset[NodeType] = frozenset(
+    {NodeType.THINK, NodeType.SYNTHESIS, NodeType.SUMMARY}
+)
+
+
+class JsonFieldStreamer:
+    """Incrementally extract a named JSON string field from a streaming text.
+
+    The provider streams raw JSON like ``{"reasoning": "...text...",
+    "confidence": 0.7}`` one small chunk at a time. This class buffers the
+    incoming bytes and emits the content of the named field as soon as each
+    character is available, without waiting for the full response.
+
+    Usage::
+
+        streamer = JsonFieldStreamer("reasoning")
+        async for chunk in provider.complete(...):
+            new_text = streamer.feed(chunk.text)
+            if new_text:
+                # emit or display new_text
+        # After the loop, check streamer.done to see if the field was found.
+    """
+
+    # Dict of simple single-char JSON escape sequences to their decoded values.
+    _ESCAPES: ClassVar[dict[str, str]] = {
+        "n": "\n",
+        "t": "\t",
+        "r": "\r",
+        '"': '"',
+        "\\": "\\",
+        "/": "/",
+    }
+
+    def __init__(self, field: str) -> None:
+        # Both "key": " (with space) and "key":" (without) are valid JSON.
+        self._marker = f'"{field}": "'
+        self._alt_marker = f'"{field}":"'
+        self._buf = ""
+        self._pos = 0
+        self._found = False
+        self._done = False
+        self._escape = False
+        # When not None, we are accumulating the 4 hex digits of a \uXXXX escape.
+        self._unicode_buf: str | None = None
+
+    def feed(self, chunk: str) -> str:
+        """Feed the next raw chunk; return any new field content to emit.
+
+        The streamed text matches the decoded content of the JSON field. Escape
+        sequences ``\\n``, ``\\t``, ``\\r``, ``\\"``, ``\\\\``, and ``\\uXXXX``
+        (BMP only) are decoded; surrogate pairs and unknown sequences pass
+        through as-is.
+        """
+        if self._done or not chunk:
+            return ""
+
+        self._buf += chunk
+
+        if not self._found and not self._scan_for_marker():
+            return ""
+
+        result: list[str] = []
+        while self._pos < len(self._buf):
+            c = self._buf[self._pos]
+            self._pos += 1
+            if self._unicode_buf is not None:
+                result.append(self._feed_unicode_digit(c))
+            elif self._escape:
+                if c == "u":
+                    self._unicode_buf = ""
+                else:
+                    result.append(self._ESCAPES.get(c, c))
+                self._escape = False
+            elif c == "\\":
+                self._escape = True
+            elif c == '"':
+                self._done = True
+                break
+            else:
+                result.append(c)
+
+        return "".join(result)
+
+    def _scan_for_marker(self) -> bool:
+        """Scan the accumulated buffer for the field marker.
+
+        Returns True and advances ``_pos`` to the start of the field's value
+        if found. Otherwise trims the buffer tail to avoid unbounded growth
+        (keeping enough for the marker to straddle a chunk boundary) and
+        returns False.
+        """
+        for marker in (self._marker, self._alt_marker):
+            idx = self._buf.find(marker)
+            if idx != -1:
+                self._pos = idx + len(marker)
+                self._found = True
+                return True
+        keep = len(self._marker) + 5
+        if len(self._buf) > keep:
+            self._buf = self._buf[-keep:]
+            self._pos = 0
+        return False
+
+    def _feed_unicode_digit(self, c: str) -> str:
+        """Accumulate one hex digit for a ``\\uXXXX`` escape; return decoded char when complete."""
+        assert self._unicode_buf is not None
+        self._unicode_buf += c
+        if len(self._unicode_buf) < 4:
+            return ""
+        try:
+            ch = chr(int(self._unicode_buf, 16))
+        except ValueError:
+            ch = "\\u" + self._unicode_buf
+        self._unicode_buf = None
+        return ch
+
+    @property
+    def done(self) -> bool:
+        """True once the closing quote of the field value has been seen."""
+        return self._done
 
 
 class Executor:
@@ -137,7 +263,7 @@ class Executor:
                     ),
                 )
                 t0 = time.monotonic()
-                result = await self._dispatch_node(node, state, tier, skipped)
+                result = await self._dispatch_node(node, state, tier, skipped, bus=bus)
                 result.execution_time_s = time.monotonic() - t0
                 result.tier_used = tier
 
@@ -185,6 +311,7 @@ class Executor:
         state: ExecutionState,
         tier: int,
         skipped: set[int],
+        bus: EventBus | None = None,
     ) -> NodeResult:
         if node.type is NodeType.TOOL:
             return await self._execute_tool(node, state, tier)
@@ -196,7 +323,7 @@ class Executor:
             return await self._execute_subplan(node, state)
         spec = _LLM_NODE_SPECS.get(node.type)
         if spec is not None:
-            return await self._execute_llm_node(node, state, tier, spec=spec)
+            return await self._execute_llm_node(node, state, tier, spec=spec, bus=bus)
         return NodeResult(
             node_id=node.id,
             status=NodeStatus.FAILED,
@@ -327,12 +454,18 @@ class Executor:
         tier: int,
         *,
         spec: _LLMNodeSpec,
+        bus: EventBus | None = None,
     ) -> NodeResult:
         """Run a single-LLM-call node (synthesis / think / summary / result).
 
         These node types differ only in their system prompt, the label they
         give the upstream context, which JSON field carries their output, and
         their default confidence — all supplied by ``spec``.
+
+        For streaming node types (think / synthesis / summary), each chunk of
+        the output field is published as a ``NodeOutputChunk`` event so
+        subscribers (e.g. the ACP adapter) can forward it to the client in
+        real time.
         """
         ctx = assemble_context(node, state.results)
         messages: list[Message] = [
@@ -342,15 +475,17 @@ class Executor:
                 "content": f"Task: {node.description}\n\n{spec.context_label}\n{ctx}",
             },
         ]
+        stream = self._router.complete(
+            messages,
+            min_tier=tier,
+            json_mode=True,
+            max_tokens=self._node_output_budget(node.type),
+        )
         try:
-            raw, tokens = await collect(
-                self._router.complete(
-                    messages,
-                    min_tier=tier,
-                    json_mode=True,
-                    max_tokens=self._node_output_budget(node.type),
-                )
-            )
+            if node.type in _STREAMING_NODE_TYPES and bus is not None:
+                raw, tokens = await self._stream_llm_node(node, state, stream, spec, bus)
+            else:
+                raw, tokens = await collect(stream)
             data = json.loads(raw)
             output = data.get(spec.output_key, raw)
             confidence = float(data.get("confidence", spec.default_confidence))
@@ -364,6 +499,36 @@ class Executor:
             confidence=confidence,
             tokens_used=tokens,
         )
+
+    async def _stream_llm_node(
+        self,
+        node: Node,
+        state: ExecutionState,
+        stream: AsyncIterator[Chunk],
+        spec: _LLMNodeSpec,
+        bus: EventBus,
+    ) -> tuple[str, int]:
+        """Collect a streaming LLM response, publishing NodeOutputChunk events.
+
+        Extracts the named output field from the streaming JSON and emits each
+        fragment as it arrives. Returns the full raw text and token count for
+        the caller to parse into a final NodeResult.
+        """
+        streamer = JsonFieldStreamer(spec.output_key)
+        parts: list[str] = []
+        tokens = 0
+        async for chunk in stream:
+            if chunk.text:
+                parts.append(chunk.text)
+                new_text = streamer.feed(chunk.text)
+                if new_text:
+                    await self._emit(
+                        bus,
+                        NodeOutputChunk(task_id=state.task_id, node_id=node.id, text=new_text),
+                    )
+            if chunk.tokens_used is not None:
+                tokens = chunk.tokens_used
+        return "".join(parts), tokens
 
     async def _execute_subplan(
         self,

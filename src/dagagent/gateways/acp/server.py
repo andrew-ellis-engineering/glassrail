@@ -25,9 +25,11 @@ from dagagent.events import (
     BranchDecided,
     Event,
     NodeFinished,
+    NodeOutputChunk,
     NodeStarted,
     PlanFailed,
     PlanReady,
+    PlanRejected,
     TaskCancelled,
     TaskCompleted,
     TaskFailed,
@@ -58,6 +60,8 @@ _TOOL_KINDS: dict[str, str] = {
 # Node types whose intermediate output is worth streaming as a message chunk.
 # "result" is excluded: its text is the task's final_output, which TaskCompleted
 # already streams — emitting both would duplicate the answer.
+# Must mirror executor._STREAMING_NODE_TYPES (same three types, as strings here).
+# If one changes, update the other; the test_acp_adapter tests guard this.
 _MESSAGE_NODE_TYPES = frozenset({"think", "summary", "synthesis"})
 
 
@@ -275,25 +279,14 @@ class AcpServer:
 
     async def _translate(self, session: Session, tracker: PlanTracker, event: Event) -> str | None:
         """Emit session/update(s) for one event; return a stop reason if terminal."""
-        if isinstance(event, PlanReady) and event.plan is not None:
+        if isinstance(event, NodeOutputChunk):
+            await self._message(session, event.text)
+        elif isinstance(event, PlanReady) and event.plan is not None:
             tracker.load(event.plan)
             await self._update(session, {"sessionUpdate": "plan", "entries": tracker.entries()})
             await self._update(session, _plan_graph(event.plan))
         elif isinstance(event, NodeStarted):
-            tracker.start(event.node_id)
-            await self._update(session, {"sessionUpdate": "plan", "entries": tracker.entries()})
-            if event.node_type.value == "tool":
-                await self._update(
-                    session,
-                    {
-                        "sessionUpdate": "tool_call",
-                        "toolCallId": _tool_call_id(event.node_id),
-                        "title": tracker.description(event.node_id) or "tool",
-                        "kind": _TOOL_KINDS.get(tracker.tool_name(event.node_id) or "", "other"),
-                        "status": "in_progress",
-                        "rawInput": tracker.tool_input(event.node_id),
-                    },
-                )
+            await self._translate_node_started(session, tracker, event)
         elif isinstance(event, NodeFinished):
             tracker.finish(event.node_id, event.status)
             await self._update(session, {"sessionUpdate": "plan", "entries": tracker.entries()})
@@ -302,17 +295,44 @@ class AcpServer:
         elif isinstance(event, BranchDecided):
             if event.branch_taken:
                 await self._message(session, f"→ branch: {event.branch_taken}")
-        elif isinstance(event, TaskCompleted):
+        else:
+            return await self._translate_terminal(session, event)
+        return None
+
+    async def _translate_node_started(
+        self, session: Session, tracker: PlanTracker, event: NodeStarted
+    ) -> None:
+        tracker.start(event.node_id)
+        await self._update(session, {"sessionUpdate": "plan", "entries": tracker.entries()})
+        if event.node_type.value == "tool":
+            await self._update(
+                session,
+                {
+                    "sessionUpdate": "tool_call",
+                    "toolCallId": _tool_call_id(event.node_id),
+                    "title": tracker.description(event.node_id) or "tool",
+                    "kind": _TOOL_KINDS.get(tracker.tool_name(event.node_id) or "", "other"),
+                    "status": "in_progress",
+                    "rawInput": tracker.tool_input(event.node_id),
+                },
+            )
+
+    async def _translate_terminal(self, session: Session, event: Event) -> str | None:
+        """Handle terminal and no-op events; return a stop reason or None."""
+        if isinstance(event, TaskCompleted):
             if event.final_output:
                 await self._message(session, event.final_output)
             return "end_turn"
-        elif isinstance(event, TaskFailed):
+        if isinstance(event, TaskFailed):
             await self._message(session, f"Task failed: {event.error}")
             return "end_turn"
-        elif isinstance(event, PlanFailed):
+        if isinstance(event, PlanFailed):
             await self._message(session, f"Planning failed: {event.error}")
             return "end_turn"
-        elif isinstance(event, TaskCancelled):
+        if isinstance(event, PlanRejected):
+            await self._message(session, f"Task rejected: {event.reason}")
+            return "end_turn"
+        if isinstance(event, TaskCancelled):
             return "cancelled"
         return None
 
@@ -334,10 +354,8 @@ class AcpServer:
                     "rawOutput": {"output": _as_text(result.output)},
                 },
             )
-        elif node_type in _MESSAGE_NODE_TYPES and result.output is not None:
-            text = _as_text(result.output)
-            if text.strip():
-                await self._message(session, text)
+        elif node_type in _MESSAGE_NODE_TYPES:
+            pass  # output was already streamed live via NodeOutputChunk events
 
     async def _emit_node_meta(
         self, session: Session, tracker: PlanTracker, event: NodeFinished

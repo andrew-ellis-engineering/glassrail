@@ -64,6 +64,10 @@ pub struct App<O: Outbound> {
     history: Vec<String>,
     /// Position while browsing history; `None` when editing a fresh line.
     history_pos: Option<usize>,
+    /// True while consecutive AgentMessageChunks are accumulating into the
+    /// last transcript cell. Any other update kind resets this to false so
+    /// the next chunk starts a fresh cell.
+    streaming_msg: bool,
 }
 
 /// Spinner frames shown in the status line while a turn runs.
@@ -94,6 +98,7 @@ impl<O: Outbound> App<O> {
             tool_idx: HashMap::new(),
             history: Vec::new(),
             history_pos: None,
+            streaming_msg: false,
         }
     }
 
@@ -317,6 +322,11 @@ impl<O: Outbound> App<O> {
     }
 
     fn on_update(&mut self, update: SessionUpdate) {
+        // Any update that is not a chunk closes the current streaming sequence
+        // so the next chunk starts a fresh transcript cell.
+        if !matches!(update, SessionUpdate::AgentMessageChunk { .. }) {
+            self.streaming_msg = false;
+        }
         match update {
             SessionUpdate::Plan { entries } => {
                 // Plan entries and graph nodes share the topological order, so
@@ -360,8 +370,20 @@ impl<O: Outbound> App<O> {
                 }
             }
             SessionUpdate::AgentMessageChunk { content } => {
+                if self.streaming_msg && !content.text.is_empty() {
+                    // Append any non-empty fragment — including whitespace-only
+                    // ones — so fine-grained streaming preserves word boundaries.
+                    // Fall back to a new cell if the last cell was replaced by
+                    // something else (shouldn't happen, but be safe).
+                    if let Some(Cell::Message(s)) = self.transcript.last_mut() {
+                        s.push_str(&content.text);
+                        return;
+                    }
+                }
+                // Not yet streaming: only open a new cell for visible content.
                 if !content.text.trim().is_empty() {
                     self.transcript.push(Cell::Message(content.text));
+                    self.streaming_msg = true;
                 }
             }
             SessionUpdate::NodeMeta {
@@ -745,6 +767,96 @@ mod tests {
         }))
         .await;
         assert!(matches!(app.transcript.last(), Some(Cell::Message(m)) if m == "the answer"));
+    }
+
+    #[tokio::test]
+    async fn consecutive_chunks_accumulate_into_one_cell() {
+        let (mut app, _client, _rx) = app();
+        let len_before = app.transcript.len();
+        for word in ["Hello", ", ", "world"] {
+            app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
+                content: Content { text: word.into() },
+            }))
+            .await;
+        }
+        assert_eq!(
+            app.transcript.len(),
+            len_before + 1,
+            "three consecutive chunks should produce one cell"
+        );
+        assert!(
+            matches!(app.transcript.last(), Some(Cell::Message(m)) if m == "Hello, world"),
+            "cell text should be the concatenation of all chunks"
+        );
+    }
+
+    #[tokio::test]
+    async fn plan_update_between_chunks_starts_new_cell() {
+        let (mut app, _client, _rx) = app();
+        app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
+            content: Content {
+                text: "first".into(),
+            },
+        }))
+        .await;
+        // A plan update in between closes the streaming sequence.
+        app.on_server(ServerMessage::Update(SessionUpdate::Plan {
+            entries: vec![PlanEntry {
+                content: "node".into(),
+                status: "completed".into(),
+            }],
+        }))
+        .await;
+        app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
+            content: Content {
+                text: "second".into(),
+            },
+        }))
+        .await;
+        let messages: Vec<_> = app
+            .transcript
+            .iter()
+            .filter_map(|c| match c {
+                Cell::Message(m) => Some(m.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            messages,
+            vec!["first", "second"],
+            "should be two separate cells"
+        );
+    }
+
+    #[tokio::test]
+    async fn whitespace_only_chunk_does_not_open_streaming_cell() {
+        let (mut app, _client, _rx) = app();
+        let len_before = app.transcript.len();
+        app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
+            content: Content { text: "  ".into() },
+        }))
+        .await;
+        assert_eq!(
+            app.transcript.len(),
+            len_before,
+            "whitespace chunk is ignored"
+        );
+        assert!(!app.streaming_msg, "streaming_msg should not be set");
+    }
+
+    #[tokio::test]
+    async fn whitespace_chunk_within_stream_preserves_word_boundaries() {
+        let (mut app, _client, _rx) = app();
+        for word in ["foo", " ", "bar"] {
+            app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
+                content: Content { text: word.into() },
+            }))
+            .await;
+        }
+        assert!(
+            matches!(app.transcript.last(), Some(Cell::Message(m)) if m == "foo bar"),
+            "space fragment must not be dropped while streaming"
+        );
     }
 
     #[tokio::test]

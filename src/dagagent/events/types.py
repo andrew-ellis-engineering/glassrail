@@ -43,6 +43,11 @@ class PlanFailed(_BaseEvent):
     attempts: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class PlanRejected(_BaseEvent):
+    type: Literal["plan_rejected"] = "plan_rejected"
+    reason: str
+
+
 class AwaitingConfirmation(_BaseEvent):
     type: Literal["awaiting_confirmation"] = "awaiting_confirmation"
     node_count: int
@@ -63,6 +68,19 @@ class NodeFinished(_BaseEvent):
     flagged: bool
     tier_used: int | None = None
     error: str | None = None
+
+
+class NodeOutputChunk(_BaseEvent):
+    """A streaming fragment of a node's text output, emitted as it is generated.
+
+    Only emitted for node types whose output is shown as an agent message
+    (think, synthesis, summary). The ACP adapter forwards these as
+    ``agent_message_chunk`` notifications so the TUI can render reasoning live.
+    """
+
+    type: Literal["node_output_chunk"] = "node_output_chunk"
+    node_id: int
+    text: str
 
 
 class BranchDecided(_BaseEvent):
@@ -91,8 +109,10 @@ Event = (
     PlanningStarted
     | PlanReady
     | PlanFailed
+    | PlanRejected
     | AwaitingConfirmation
     | NodeStarted
+    | NodeOutputChunk
     | NodeFinished
     | BranchDecided
     | TaskCompleted
@@ -104,5 +124,12 @@ Event = (
 # Events that mark the end of a task's lifecycle. A subscriber streaming one
 # task's events can stop once it sees one of these.
 TERMINAL_EVENT_TYPES: frozenset[str] = frozenset(
-    {"task_completed", "task_failed", "plan_failed", "awaiting_confirmation", "task_cancelled"}
+    {
+        "task_completed",
+        "task_failed",
+        "plan_failed",
+        "plan_rejected",
+        "awaiting_confirmation",
+        "task_cancelled",
+    }
 )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from collections.abc import Sequence as _Sequence
@@ -18,7 +19,9 @@ from dagagent.core import (
     TaskStatus,
     new_task_id,
 )
+from dagagent.events import EventBus, NodeOutputChunk, TaskCompleted
 from dagagent.executor import Executor
+from dagagent.executor.executor import JsonFieldStreamer
 from dagagent.harness import ToolHarness, register_builtins
 from dagagent.providers import Chunk, Message, TierRouter
 
@@ -415,3 +418,200 @@ async def test_content_node_uses_configured_prompt() -> None:
 
     await executor.execute(state)
     assert provider.system_seen == ["CUSTOM SUMMARY PROMPT"]
+
+
+# ── JsonFieldStreamer unit tests ─────────────────────────────────────────────
+
+
+def test_streamer_extracts_full_value_in_one_chunk() -> None:
+    s = JsonFieldStreamer("reasoning")
+    result = s.feed('{"reasoning": "hello world", "confidence": 0.7}')
+    assert result == "hello world"
+    assert s.done
+
+
+def test_streamer_extracts_value_across_chunks() -> None:
+    s = JsonFieldStreamer("reasoning")
+    out = ""
+    for chunk in ['{"reas', 'oning"', ': "hel', "lo wor", 'ld"}']:
+        out += s.feed(chunk)
+    assert out == "hello world"
+    assert s.done
+
+
+def test_streamer_marker_straddles_chunks() -> None:
+    """The key-colon-quote marker itself may be split across two chunks."""
+    s = JsonFieldStreamer("reasoning")
+    out = s.feed('{"reas')
+    assert out == ""
+    out += s.feed('oning": "content"}')
+    assert out == "content"
+
+
+def test_streamer_handles_escaped_quote() -> None:
+    s = JsonFieldStreamer("reasoning")
+    result = s.feed('{"reasoning": "say \\"hi\\"", "confidence": 0.5}')
+    assert result == 'say "hi"'
+    assert s.done
+
+
+def test_streamer_handles_escaped_newline_and_tab() -> None:
+    s = JsonFieldStreamer("reasoning")
+    result = s.feed('{"reasoning": "line1\\nline2\\tend"}')
+    assert result == "line1\nline2\tend"
+    assert s.done
+
+
+def test_streamer_no_space_after_colon() -> None:
+    """JSON without a space between : and the opening quote is also valid."""
+    s = JsonFieldStreamer("reasoning")
+    result = s.feed('{"reasoning":"compact"}')
+    assert result == "compact"
+    assert s.done
+
+
+def test_streamer_field_not_present_returns_empty() -> None:
+    s = JsonFieldStreamer("reasoning")
+    result = s.feed('{"output": "something else"}')
+    assert result == ""
+    assert not s.done
+
+
+def test_streamer_handles_unicode_escape() -> None:
+    s = JsonFieldStreamer("reasoning")
+    result = s.feed('{"reasoning": "caf\\u00e9"}')
+    assert result == "café"
+    assert s.done
+
+
+def test_streamer_handles_unicode_escape_across_chunks() -> None:
+    s = JsonFieldStreamer("reasoning")
+    out = s.feed('{"reasoning": "a\\u00')
+    out += s.feed('41b"}')
+    assert out == "aAb"
+
+
+def test_streamer_returns_empty_after_done() -> None:
+    s = JsonFieldStreamer("k")
+    s.feed('{"k": "done"}')
+    assert s.done
+    assert s.feed('{"k": "more"}') == ""
+
+
+# ── NodeOutputChunk streaming integration ────────────────────────────────────
+
+
+class _ChunkingProvider:
+    """Fake provider that emits a response one character at a time."""
+
+    def __init__(self, response: str, *, tier: int = 0) -> None:
+        self._response = response
+        self._tier = tier
+
+    @property
+    def name(self) -> str:
+        return "chunking"
+
+    @property
+    def tier(self) -> int:
+        return self._tier
+
+    async def complete(
+        self,
+        messages: list[Message],
+        *,
+        json_mode: bool = False,
+        max_tokens: int = 1024,
+        timeout_s: float | None = None,
+    ) -> AsyncIterator[Chunk]:
+        del messages, json_mode, max_tokens, timeout_s
+        for char in self._response[:-1]:
+            yield Chunk(text=char)
+        yield Chunk(text=self._response[-1], tokens_used=len(self._response))
+
+
+async def test_think_node_emits_output_chunks() -> None:
+    """A THINK node emits NodeOutputChunk events as the response streams in."""
+    payload = json.dumps({"reasoning": "step one two three", "confidence": 0.8})
+    provider = _ChunkingProvider(payload, tier=2)
+    bus = EventBus()
+    executor = Executor(
+        router=TierRouter([provider]),
+        harness=ToolHarness(),
+        settings=Settings(),
+        event_bus=bus,
+    )
+    plan = Plan(nodes=[Node(id=1, type=NodeType.THINK, description="reason")])
+    state = _state(plan)
+
+    chunks: list[str] = []
+    async with bus.subscribe() as sub:
+
+        async def collect_think() -> None:
+            async for event in sub:
+                if isinstance(event, NodeOutputChunk):
+                    chunks.append(event.text)
+                elif isinstance(event, TaskCompleted):
+                    break
+
+        await asyncio.gather(executor.execute(state), collect_think())
+
+    assert "".join(chunks) == "step one two three"
+
+
+async def test_synthesis_node_emits_output_chunks() -> None:
+    """A SYNTHESIS node also emits streaming NodeOutputChunk events."""
+    payload = json.dumps({"output": "the result", "confidence": 0.9})
+    provider = _ChunkingProvider(payload)
+    bus = EventBus()
+    executor = Executor(
+        router=TierRouter([provider]),
+        harness=ToolHarness(),
+        settings=Settings(),
+        event_bus=bus,
+    )
+    plan = Plan(nodes=[Node(id=1, type=NodeType.SYNTHESIS, description="combine")])
+    state = _state(plan)
+
+    chunks: list[str] = []
+    async with bus.subscribe() as sub:
+
+        async def collect_synth() -> None:
+            async for event in sub:
+                if isinstance(event, NodeOutputChunk):
+                    chunks.append(event.text)
+                elif isinstance(event, TaskCompleted):
+                    break
+
+        await asyncio.gather(executor.execute(state), collect_synth())
+
+    assert "".join(chunks) == "the result"
+
+
+async def test_result_node_does_not_emit_output_chunks() -> None:
+    """RESULT nodes are not streamed; their output surfaces via TaskCompleted."""
+    payload = json.dumps({"output": "final answer", "confidence": 0.95})
+    bus = EventBus()
+    executor = Executor(
+        router=TierRouter([_ChunkingProvider(payload)]),
+        harness=ToolHarness(),
+        settings=Settings(),
+        event_bus=bus,
+    )
+    plan = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="final")])
+    state = _state(plan)
+
+    seen_output_chunk = False
+    async with bus.subscribe() as sub:
+
+        async def collect_events() -> None:
+            nonlocal seen_output_chunk
+            async for event in sub:
+                if isinstance(event, NodeOutputChunk):
+                    seen_output_chunk = True
+                if isinstance(event, TaskCompleted):
+                    break
+
+        await asyncio.gather(executor.execute(state), collect_events())
+
+    assert not seen_output_chunk, "RESULT nodes must not emit NodeOutputChunk"
