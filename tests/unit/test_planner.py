@@ -87,8 +87,8 @@ async def test_plan_round_trips_simple_payload(harness: ToolHarness, settings: S
 class _CapturingProvider(_FixedProvider):
     """Records the ``max_tokens`` and messages of each call."""
 
-    def __init__(self, *, payload: str) -> None:
-        super().__init__(payload=payload)
+    def __init__(self, *, payload: str, tier: int = 0) -> None:
+        super().__init__(payload=payload, tier=tier)
         self.max_tokens_seen: list[int] = []
         self.system_seen: list[str] = []
         self.user_seen: list[str] = []
@@ -148,6 +148,37 @@ async def test_planner_tells_model_the_node_limits(harness: ToolHarness) -> None
     assert "At most 24 nodes" in user_msg
     assert "At most 2 subplan node(s)" in user_msg
     assert "at most 12 nodes" in user_msg
+
+
+async def test_planner_tells_model_the_tier_surface(harness: ToolHarness) -> None:
+    """The planner sees which tiers are eligible/configured before shaping a plan."""
+    payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
+    provider = _CapturingProvider(payload=payload, tier=1)
+    settings = Settings(prompts=NodePrompts(planner="CUSTOM"))
+    planner = _planner_from(provider, harness, settings)
+
+    await planner.plan_attempt("anything", attempt=0, min_tier=1)
+    user_msg = provider.user_seen[0]
+    assert "Tier routing context:" in user_msg
+    assert "tier 0:" in user_msg
+    assert "below min_tier=1" in user_msg
+    assert "tier 1:" in user_msg
+    assert "not configured (missing API key)" in user_msg
+    assert "Think nodes and reasoning_required=true nodes start at tier 2" in user_msg
+
+
+async def test_planner_includes_plan_cookbook(harness: ToolHarness) -> None:
+    """The planner receives reusable plan patterns even with a custom system prompt."""
+    payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
+    provider = _CapturingProvider(payload=payload)
+    settings = Settings(prompts=NodePrompts(planner="CUSTOM"))
+    planner = _planner_from(provider, harness, settings)
+
+    await planner.plan("anything")
+    user_msg = provider.user_seen[0]
+    assert "Planning cookbook:" in user_msg
+    assert "Single tool task: tool -> result" in user_msg
+    assert "Missing capability: emit a rejection" in user_msg
 
 
 async def test_feedback_is_woven_into_the_planning_prompt(

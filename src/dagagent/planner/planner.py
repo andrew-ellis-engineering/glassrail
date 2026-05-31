@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any, cast
+from urllib.parse import urlparse
 
 from dagagent.config import Settings
 from dagagent.core import Plan, PlanningAttempt, PlanRejectedError, PlanValidationError
@@ -19,6 +20,8 @@ from dagagent.telemetry import ATTR_MIN_TIER, ATTR_PLAN_NODE_COUNT, SPAN_PLAN, g
 from dagagent.validator import PlanValidator
 
 log = logging.getLogger(__name__)
+
+_LOCAL_TIER_HOSTS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::1"})
 
 
 class Planner:
@@ -68,6 +71,69 @@ class Planner:
             "related steps into one node rather than exceeding the limit."
         )
 
+    def _tier_block(self, *, min_tier: int) -> str:
+        """Describe the runtime routing surface the plan will execute on.
+
+        The planner does not route nodes at execution time, but it needs to
+        know which tiers are plausibly usable so it does not casually emit
+        high-reasoning nodes when only the local tier is configured.
+        """
+        lines = [
+            "Tier routing context:",
+            "- The executor chooses tiers deterministically; do not use node "
+            "types as a way to pick a model.",
+            "- Leave forced_tier null unless the user explicitly asks for a "
+            "specific tier or a node truly cannot run on the default route.",
+        ]
+        for index, tier in enumerate(self._settings.tiers):
+            status = self._tier_status(index=index, min_tier=min_tier)
+            lines.append(f"- tier {index}: model={tier.model}, endpoint={tier.base_url}, {status}")
+        lines.extend(
+            [
+                "- Default routing: tool, decision, summary, synthesis, and result "
+                "nodes start at tier 0.",
+                "- Think nodes and reasoning_required=true nodes start at tier 2. "
+                "Use them only for real multi-step reasoning, and prefer ordinary "
+                "summary/synthesis/result nodes when tier 2+ are not configured.",
+                "- If you set forced_tier, choose only an eligible configured tier "
+                "from the list above.",
+            ]
+        )
+        return "\n".join(lines)
+
+    def _tier_status(self, *, index: int, min_tier: int) -> str:
+        tier = self._settings.tiers[index]
+        if index < min_tier:
+            return f"ineligible for this call (below min_tier={min_tier})"
+        if tier.api_key:
+            return "configured"
+        hostname = urlparse(tier.base_url).hostname or ""
+        if hostname in _LOCAL_TIER_HOSTS:
+            return "configured local endpoint"
+        return "not configured (missing API key)"
+
+    def _cookbook_block(self) -> str:
+        """Planner patterns we want the model to reach for before improvising."""
+        return (
+            "Planning cookbook:\n"
+            "- Direct answer: use a single result node when no tool or "
+            "intermediate reasoning is needed.\n"
+            "- Single tool task: tool -> result. The result node depends on the "
+            "tool node and turns tool output into the user-facing answer.\n"
+            "- Web/research task: search/fetch tool nodes -> optional summary "
+            "node for noisy source text -> synthesis/result. Do not invent web "
+            "tools; use only registered tool names.\n"
+            "- Compare or aggregate: create independent tool nodes for the "
+            "independent facts, then one synthesis node to combine them, then "
+            "a result node if the synthesis is not already final.\n"
+            "- Conditional work: tool or context node -> one decision node with "
+            "a binary condition -> branch-specific nodes -> result.\n"
+            "- Subplan: use only for a self-contained 3+ step sub-task that "
+            "would clutter the main plan; never wrap a single tool call.\n"
+            "- Missing capability: emit a rejection instead of fabricating "
+            "tools, hidden state, browsing, filesystem, or external access."
+        )
+
     async def plan_attempt(
         self,
         request: str,
@@ -87,7 +153,9 @@ class Planner:
             span.set_attribute(ATTR_MIN_TIER, min_tier)
             tool_schemas_str = json.dumps(self._harness.all_schemas(), indent=2)
             user_content = (
-                f"{self._limits_block()}\n"
+                f"{self._limits_block()}\n\n"
+                f"{self._tier_block(min_tier=min_tier)}\n\n"
+                f"{self._cookbook_block()}\n\n"
                 f"Available tools:\n{tool_schemas_str}\n\n"
                 f"User request: {request}"
             )

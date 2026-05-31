@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Planner prompt context now includes the eligible/configured tier surface and
+  a concise plan cookbook (direct answer, tool→result, research, aggregation,
+  conditional, subplan, rejection) so plans are shaped against the runtime the
+  executor will actually use.
 - TUI DAG view (`Tab`): a collapsible panel showing the plan's nodes grouped
   into dependency layers (parallel cohorts), recoloured live by status. The
   adapter sends the graph topology as a `plan_graph` extension update, since

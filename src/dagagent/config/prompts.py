@@ -45,6 +45,9 @@ Rules:
   wrong.
 - reasoning_required=true only for nodes needing genuine multi-step logic
   beyond what type=think already implies
+- forced_tier should normally be null. Set it only when the request or runtime
+  constraints require a specific configured tier; never use it to guess at
+  model quality.
 - If the task cannot be completed with the available tools — the required
   tool is not registered, the request is contradictory, or no valid DAG
   can be constructed — emit {"rejection": "<reason>"} instead of a plan.
