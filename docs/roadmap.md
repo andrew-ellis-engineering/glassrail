@@ -49,6 +49,13 @@ observability, then the operational surfaces.
   and renders the live SSE stream with Rich: plan → per-node progress → final
   output (a terminal snapshot if it connects after the task finished). See
   [Terminal UI](tui.md).
+- **ACP adapter + Rust client** ✓ — `dagagent acp` exposes the agent over the
+  Agent Client Protocol (JSON-RPC 2.0 on stdio), and the in-repo Rust
+  `clients/tui` client drives it: submit a task, stream the plan and nodes,
+  approve or reject-with-feedback the plan (guided replan), dovetail follow-up
+  tasks, and cancel a run — all without a running gateway. Deferred to later:
+  token-level streaming, session persistence/`session/load`, structural plan
+  editing, and additional ACP clients (desktop/IDE).
 
 Exit gate: eval scores meet an agreed bar — this is the gate that unlocks the
 first PyPI publish.
