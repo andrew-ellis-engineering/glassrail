@@ -25,6 +25,7 @@ class PlanValidator:
         """Run every check; populate and return ``plan.sorted_node_ids``."""
         self._check_node_limit(plan, is_subplan=False)
         self._check_tool_names(plan)
+        self._check_forced_tiers(plan)
         sorted_ids = self._topological_sort(plan)
         self._check_decision_nesting(plan)
         self._check_branch_references(plan)
@@ -45,6 +46,17 @@ class PlanValidator:
         unknown = self._harness.unknown_names(tool_names)
         if unknown:
             raise PlanValidationError(f"Plan references unknown tools: {unknown}")
+
+    def _check_forced_tiers(self, plan: Plan) -> None:
+        max_tier = len(self._settings.tiers) - 1
+        for node in plan.nodes:
+            if node.forced_tier is None:
+                continue
+            if node.forced_tier < 0 or node.forced_tier > max_tier:
+                raise PlanValidationError(
+                    f"Node {node.id} forced_tier={node.forced_tier} is outside "
+                    f"configured tier range 0..{max_tier}"
+                )
 
     def _topological_sort(self, plan: Plan) -> list[int]:
         """Kahn's algorithm with deterministic tie-breaking (ascending id).
@@ -128,6 +140,7 @@ class PlanValidator:
                 raise PlanValidationError(f"SUBPLAN node {node.id} has no nested plan attached")
             self._check_node_limit(node.subplan, is_subplan=True)
             self._check_tool_names(node.subplan)
+            self._check_forced_tiers(node.subplan)
             sub_sorted = self._topological_sort(node.subplan)
             self._check_decision_nesting(node.subplan)
             self._check_branch_references(node.subplan)

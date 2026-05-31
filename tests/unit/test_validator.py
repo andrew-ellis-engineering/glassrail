@@ -98,6 +98,29 @@ def test_unknown_tool_raises(validator: PlanValidator) -> None:
         validator.validate(plan)
 
 
+def test_forced_tier_outside_configured_range_raises(validator: PlanValidator) -> None:
+    plan = Plan(
+        nodes=[
+            Node(id=1, type=NodeType.RESULT, description="answer", forced_tier=99),
+        ],
+    )
+    with pytest.raises(PlanValidationError, match=r"configured tier range 0\.\.3"):
+        validator.validate(plan)
+
+
+def test_subplan_forced_tier_outside_configured_range_raises(
+    validator: PlanValidator,
+) -> None:
+    nested = Plan(
+        nodes=[
+            Node(id=1, type=NodeType.RESULT, description="nested answer", forced_tier=-1),
+        ],
+    )
+    plan = Plan(nodes=[_subplan_node(1, nested)])
+    with pytest.raises(PlanValidationError, match="forced_tier=-1"):
+        validator.validate(plan)
+
+
 def test_missing_context_dep_raises(validator: PlanValidator) -> None:
     plan = Plan(nodes=[_tool_node(1, ctx=[99])])
     with pytest.raises(PlanValidationError, match="doesn't exist"):

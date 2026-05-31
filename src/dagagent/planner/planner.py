@@ -142,12 +142,17 @@ class Planner:
         min_tier: int = 0,
         feedback: str | None = None,
         prior_reasoning: str | None = None,
+        validation_feedback: str | None = None,
     ) -> PlanningAttempt:
         """Generate one plan attempt and retain raw output plus validation errors.
 
         ``prior_reasoning`` carries accumulated output from a previous attempt
         that failed to emit valid JSON (a reasoning stall), so the next attempt
         can build on it rather than starting from scratch.
+
+        ``validation_feedback`` carries the validator/schema failure from the
+        immediately preceding attempt, letting the model correct a concrete plan
+        defect instead of retrying cold.
         """
         with get_tracer().start_as_current_span(SPAN_PLAN) as span:
             span.set_attribute(ATTR_MIN_TIER, min_tier)
@@ -171,6 +176,13 @@ class Planner:
                     "but did not emit a valid plan. Build on it rather than starting "
                     "from scratch:\n"
                     f"<prior_reasoning>\n{prior_reasoning}\n</prior_reasoning>"
+                )
+            if validation_feedback:
+                user_content += (
+                    "\n\nA previous planning attempt failed schema or structural "
+                    "validation. Produce a corrected plan that fixes this exact "
+                    "problem while preserving the user's intent:\n"
+                    f"<validation_feedback>\n{validation_feedback}\n</validation_feedback>"
                 )
             messages: list[Message] = [
                 {"role": "system", "content": self._settings.prompts.planner},

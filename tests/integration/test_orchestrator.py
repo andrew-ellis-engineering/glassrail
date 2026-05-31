@@ -404,6 +404,37 @@ async def test_short_invalid_json_does_not_carry_prior_reasoning() -> None:
     assert "<prior_reasoning>" not in provider.user_messages[1]
 
 
+async def test_validation_error_passes_feedback_to_next_attempt() -> None:
+    invalid_plan = json.dumps(
+        {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "result",
+                    "description": "bad dependency",
+                    "context_needed": [99],
+                }
+            ]
+        }
+    )
+    orch, store, provider = _build_capturing(
+        [invalid_plan, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT],
+        settings=Settings(max_replan_attempts=1),
+    )
+    state = await _seed_task(store)
+
+    await orch.run(state.task_id)
+    result = await store.load_task(state.task_id)
+
+    assert result is not None
+    assert result.status is TaskStatus.COMPLETED
+    assert result.planning_attempts[0].error_type == "validation"
+    assert len(provider.user_messages) >= 2
+    assert "<validation_feedback>" in provider.user_messages[1]
+    assert "context_needed=99" in provider.user_messages[1]
+    assert "<prior_reasoning>" not in provider.user_messages[1]
+
+
 async def test_exactly_stall_threshold_does_not_trigger_passthrough() -> None:
     # Exactly 500 chars (== _STALL_MIN_CHARS, not >) must NOT trigger passthrough.
     at_threshold = "x" * 500

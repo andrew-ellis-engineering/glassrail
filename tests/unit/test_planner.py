@@ -297,6 +297,23 @@ async def test_prior_reasoning_injected_into_user_message(
     assert "Step 1: consider X" in user_msg
 
 
+async def test_validation_feedback_injected_into_user_message(
+    harness: ToolHarness, settings: Settings
+) -> None:
+    payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
+    provider = _CapturingProvider(payload=payload)
+    planner = _planner_from(provider, harness, settings)
+
+    await planner.plan_attempt(
+        "do a thing",
+        attempt=1,
+        validation_feedback="Node 2 declares context_needed=99 which doesn't exist",
+    )
+    user_msg = provider.user_seen[0]
+    assert "validation_feedback" in user_msg
+    assert "context_needed=99" in user_msg
+
+
 async def test_no_prior_reasoning_leaves_prompt_clean(
     harness: ToolHarness, settings: Settings
 ) -> None:
@@ -306,3 +323,14 @@ async def test_no_prior_reasoning_leaves_prompt_clean(
 
     await planner.plan_attempt("do a thing", attempt=0)
     assert "prior_reasoning" not in provider.user_seen[0]
+
+
+async def test_no_validation_feedback_leaves_prompt_clean(
+    harness: ToolHarness, settings: Settings
+) -> None:
+    payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
+    provider = _CapturingProvider(payload=payload)
+    planner = _planner_from(provider, harness, settings)
+
+    await planner.plan_attempt("do a thing", attempt=0)
+    assert "validation_feedback" not in provider.user_seen[0]

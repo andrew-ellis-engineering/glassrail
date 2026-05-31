@@ -106,6 +106,11 @@ Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, reasoning mo
 - **Token-level streaming in TUI** — surface token-by-token output in the Rust
   client as the model generates, giving a live sense of progress. Currently
   deferred in the ACP adapter.
+- **Markdown rendering in the TUI output pane** — render common Markdown
+  structure (headings, bullets, block quotes, code fences, emphasis, links)
+  instead of displaying raw Markdown text. This should pair with the planned
+  wrap-aware/freeform scrolling work so formatted output does not clip or make
+  copy/selection worse.
 
 ## Phase 2.5 — Dreaming
 

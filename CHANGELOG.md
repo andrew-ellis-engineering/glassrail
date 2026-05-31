@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Planning retries now feed schema/validation failures back into the next
+  planner attempt, so the model can repair a concrete invalid DAG instead of
+  retrying blind.
+- Plan validation now rejects `forced_tier` values outside the configured tier
+  range, including inside nested subplans, so planner mistakes fail before
+  execution.
 - Planner prompt context now includes the eligible/configured tier surface and
   a concise plan cookbook (direct answer, tool→result, research, aggregation,
   conditional, subplan, rejection) so plans are shaped against the runtime the

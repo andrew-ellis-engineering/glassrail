@@ -281,6 +281,7 @@ class Orchestrator:
         # Carries raw output from a previous attempt that failed to emit valid
         # JSON (likely a reasoning stall), so the next attempt can build on it.
         prior_reasoning: str | None = None
+        validation_feedback: str | None = None
 
         for attempt in range(attempts):
             try:
@@ -289,6 +290,7 @@ class Orchestrator:
                     attempt=attempt,
                     feedback=feedback,
                     prior_reasoning=prior_reasoning,
+                    validation_feedback=validation_feedback,
                 )
                 state.replan_count = attempt
                 state.planning_attempts.append(plan_attempt)
@@ -317,6 +319,11 @@ class Orchestrator:
                     and len(plan_attempt.raw_output) > _STALL_MIN_CHARS
                 )
                 prior_reasoning = plan_attempt.raw_output if is_stall else None
+                validation_feedback = (
+                    plan_attempt.error
+                    if plan_attempt.error_type in ("schema", "validation")
+                    else None
+                )
 
                 last_error = plan_attempt.error
                 log.warning(
@@ -328,6 +335,7 @@ class Orchestrator:
             except (PlanValidationError, ValueError) as exc:
                 last_error = str(exc)
                 prior_reasoning = None
+                validation_feedback = str(exc)
                 log.warning(
                     "[%s] Plan invalid (attempt %d): %s",
                     state.task_id,
