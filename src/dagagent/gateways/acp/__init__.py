@@ -22,10 +22,11 @@ __all__ = ["run_acp"]
 
 
 def _settings_for_acp() -> Settings:
-    # M0 runs straight through; the plan-approval gate (request_permission)
-    # arrives in M1, at which point this flips to confirm_plans=True.
+    # The adapter drives the HITL plan gate over ACP session/request_permission,
+    # so confirmation is on: the orchestrator pauses at AWAITING_CONFIRMATION and
+    # the client approves or rejects-with-feedback (guided replan).
     settings = get_settings()
-    return settings.model_copy(update={"confirm_plans": False})
+    return settings.model_copy(update={"confirm_plans": True})
 
 
 async def run_acp() -> None:

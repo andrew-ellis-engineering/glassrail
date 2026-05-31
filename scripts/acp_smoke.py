@@ -40,13 +40,26 @@ async def main(prompt: str) -> int:
         await proc.stdin.drain()
 
     async def await_response(expect_id: int) -> dict[str, Any]:
-        """Read until the response with the given id, printing notifications."""
+        """Read until the response with the given id, printing notifications.
+
+        Auto-approves any plan-permission request so the run proceeds unattended.
+        """
         while True:
             msg = await _read_message(proc.stdout)
             if msg is None:
                 raise RuntimeError("adapter closed stdout unexpectedly")
             if msg.get("id") == expect_id and "method" not in msg:
                 return msg
+            if msg.get("method") == "session/request_permission" and "id" in msg:
+                print("  [gate] auto-approving plan")
+                await send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": msg["id"],
+                        "result": {"outcome": {"outcome": "selected", "optionId": "approve"}},
+                    }
+                )
+                continue
             if msg.get("method") == "session/update":
                 update = msg["params"]["update"]
                 kind = update.get("sessionUpdate")

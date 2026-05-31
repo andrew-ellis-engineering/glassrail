@@ -13,7 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ACP clients. Implements `initialize`, `session/new`, `session/prompt`, and
   `session/cancel`, bridging the EventBus into `session/update` notifications
   (plan, tool calls, message chunks). `fs/*`, `terminal/*`, and `session/load`
-  are intentionally unsupported.
+  are intentionally unsupported. The adapter drives the HITL plan gate over
+  `session/request_permission`: clients approve a plan or reject it with
+  free-text feedback to trigger a guided replan.
+- Guided replan in the engine: `Planner.plan`/`plan_attempt` accept `feedback`
+  that is woven into the planning prompt, and `Orchestrator.revise(task_id,
+  feedback)` re-plans a task paused at the confirmation gate and re-enters the
+  gate.
 - Package skeleton (src-layout) with subpackages for core, config, events,
   providers, state, harness, validator, planner, executor, channels,
   gateways, and cli.

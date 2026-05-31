@@ -37,9 +37,13 @@ class Planner:
         self._validator = validator
         self._settings = settings
 
-    async def plan(self, request: str, *, min_tier: int = 0) -> Plan:
-        """Generate and validate a plan for ``request``."""
-        attempt = await self.plan_attempt(request, attempt=0, min_tier=min_tier)
+    async def plan(self, request: str, *, min_tier: int = 0, feedback: str | None = None) -> Plan:
+        """Generate and validate a plan for ``request``.
+
+        ``feedback`` (set on a guided replan after a user rejects a plan) is
+        woven into the planning prompt so the next plan addresses it.
+        """
+        attempt = await self.plan_attempt(request, attempt=0, min_tier=min_tier, feedback=feedback)
         if attempt.plan is not None:
             return attempt.plan
         if attempt.error_type == "validation":
@@ -68,21 +72,26 @@ class Planner:
         *,
         attempt: int,
         min_tier: int = 0,
+        feedback: str | None = None,
     ) -> PlanningAttempt:
         """Generate one plan attempt and retain raw output plus validation errors."""
         with get_tracer().start_as_current_span(SPAN_PLAN) as span:
             span.set_attribute(ATTR_MIN_TIER, min_tier)
             tool_schemas_str = json.dumps(self._harness.all_schemas(), indent=2)
+            user_content = (
+                f"{self._limits_block()}\n"
+                f"Available tools:\n{tool_schemas_str}\n\n"
+                f"User request: {request}"
+            )
+            if feedback:
+                user_content += (
+                    "\n\nA previous plan for this request was rejected. Produce a "
+                    "revised plan that addresses this feedback:\n"
+                    f"{feedback}"
+                )
             messages: list[Message] = [
                 {"role": "system", "content": self._settings.prompts.planner},
-                {
-                    "role": "user",
-                    "content": (
-                        f"{self._limits_block()}\n"
-                        f"Available tools:\n{tool_schemas_str}\n\n"
-                        f"User request: {request}"
-                    ),
-                },
+                {"role": "user", "content": user_content},
             ]
 
             stream = self._router.complete(

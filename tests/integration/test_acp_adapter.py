@@ -22,6 +22,7 @@ from dagagent.core import (
     TaskStatus,
 )
 from dagagent.events import (
+    AwaitingConfirmation,
     EventBus,
     NodeFinished,
     NodeStarted,
@@ -47,15 +48,29 @@ _PLAN: dict[str, Any] = {
 class _RecordingConnection(Connection):
     """A Connection that records outbound traffic instead of writing to a pipe."""
 
-    def __init__(self, incoming: list[dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        incoming: list[dict[str, Any]],
+        *,
+        permissions: list[dict[str, Any]] | None = None,
+    ) -> None:
         self._queued = incoming
+        self._permissions = list(permissions or [])
         self.responses: list[tuple[Any, Any]] = []
         self.errors: list[tuple[Any, int, str]] = []
         self.notifications: list[dict[str, Any]] = []
+        self.requests: list[tuple[str, Any]] = []
 
     async def incoming(self) -> AsyncIterator[dict[str, Any]]:
         for msg in self._queued:
             yield msg
+
+    async def request(self, method: str, params: Any) -> Any:
+        """Answer an agent→client request from the scripted queue."""
+        self.requests.append((method, params))
+        if not self._permissions:
+            raise AssertionError(f"unexpected outbound request: {method}")
+        return self._permissions.pop(0)
 
     async def respond(self, request_id: Any, result: Any) -> None:
         self.responses.append((request_id, result))
@@ -137,6 +152,137 @@ def _build_server(conn: Connection) -> AcpServer:
         settings=get_settings(),
     )
     return AcpServer(runtime, conn)
+
+
+class _GatingOrchestrator(Orchestrator):
+    """Pauses at a plan gate, then completes on resume or re-gates on revise."""
+
+    def __init__(self, *, event_bus: EventBus, store: InMemoryStateStore) -> None:
+        self._bus = event_bus
+        self._store = store
+        self.revise_feedback: list[str] = []
+
+    async def _present(self, task_id: TaskId, description: str) -> None:
+        plan = {
+            "nodes": [{"id": 1, "type": "result", "description": description}],
+            "sorted_node_ids": [1],
+        }
+        state = await self._store.load_task(task_id)
+        assert state is not None
+        state.status = TaskStatus.AWAITING_CONFIRMATION
+        await self._store.save_task(state)
+        await self._bus.publish(PlanReady(task_id=task_id, node_count=1, plan=plan))
+        await self._bus.publish(AwaitingConfirmation(task_id=task_id, node_count=1))
+
+    async def run(self, task_id: TaskId) -> None:  # type: ignore[override]
+        await self._present(task_id, "draft the answer")
+
+    async def revise(self, task_id: TaskId, feedback: str) -> None:  # type: ignore[override]
+        self.revise_feedback.append(feedback)
+        await self._present(task_id, "revised: draft the answer")
+
+    async def resume(self, task_id: TaskId) -> None:  # type: ignore[override]
+        state = await self._store.load_task(task_id)
+        assert state is not None
+        await self._bus.publish(
+            NodeStarted(task_id=task_id, node_id=1, node_type=NodeType.RESULT, tier=0)
+        )
+        state.results[1] = NodeResult(
+            node_id=1, status=NodeStatus.COMPLETED, output="42.", tier_used=0
+        )
+        state.final_output = "42."
+        state.status = TaskStatus.COMPLETED
+        await self._store.save_task(state)
+        await self._bus.publish(
+            NodeFinished(
+                task_id=task_id,
+                node_id=1,
+                status=NodeStatus.COMPLETED,
+                confidence=1.0,
+                flagged=False,
+                tier_used=0,
+            )
+        )
+        await self._bus.publish(TaskCompleted(task_id=task_id, final_output="42."))
+
+
+def _build_gating_server(conn: Connection) -> tuple[AcpServer, _GatingOrchestrator]:
+    bus = EventBus()
+    store = InMemoryStateStore()
+    orchestrator = _GatingOrchestrator(event_bus=bus, store=store)
+    runtime = Runtime(
+        orchestrator=orchestrator,
+        store=store,
+        harness=ToolHarness(),
+        event_bus=bus,
+        settings=get_settings(),
+    )
+    return AcpServer(runtime, conn), orchestrator
+
+
+_APPROVE: dict[str, Any] = {"outcome": {"outcome": "selected", "optionId": "approve"}}
+_REJECT: dict[str, Any] = {"outcome": {"outcome": "selected", "optionId": "reject"}}
+_CANCEL: dict[str, Any] = {"outcome": {"outcome": "cancelled"}}
+
+
+def _reject_with(feedback: str) -> dict[str, Any]:
+    return {"outcome": {"outcome": "selected", "optionId": "reject"}, "feedback": feedback}
+
+
+async def _prompt(server: AcpServer, conn: _RecordingConnection) -> dict[str, Any]:
+    sid = (await server.dispatch("session/new", {}))["sessionId"]
+    return await server.dispatch(
+        "session/prompt", {"sessionId": sid, "prompt": [{"type": "text", "text": "go"}]}
+    )
+
+
+async def test_gate_approve_runs_to_completion() -> None:
+    conn = _RecordingConnection([], permissions=[_APPROVE])
+    server, _ = _build_gating_server(conn)
+
+    result = await _prompt(server, conn)
+
+    assert result["stopReason"] == "end_turn"
+    assert [m for m, _ in conn.requests] == ["session/request_permission"]
+    perm = conn.requests[0][1]
+    assert {o["optionId"] for o in perm["options"]} == {"approve", "reject"}
+    assert any(u["content"]["text"] == "42." for u in conn.updates_of("agent_message_chunk"))
+
+
+async def test_gate_reject_with_feedback_revises_then_approves() -> None:
+    conn = _RecordingConnection([], permissions=[_reject_with("make it shorter"), _APPROVE])
+    server, orch = _build_gating_server(conn)
+
+    result = await _prompt(server, conn)
+
+    assert result["stopReason"] == "end_turn"
+    assert orch.revise_feedback == ["make it shorter"]
+    # Two gates: the initial plan and the revised plan.
+    assert [m for m, _ in conn.requests] == [
+        "session/request_permission",
+        "session/request_permission",
+    ]
+    plans = conn.updates_of("plan")
+    assert any("revised" in e["content"] for p in plans for e in p["entries"])
+
+
+async def test_gate_reject_without_feedback_refuses() -> None:
+    conn = _RecordingConnection([], permissions=[_REJECT])
+    server, orch = _build_gating_server(conn)
+
+    result = await _prompt(server, conn)
+
+    assert result["stopReason"] == "refusal"
+    assert orch.revise_feedback == []
+
+
+async def test_gate_cancel_outcome_cancels_turn() -> None:
+    conn = _RecordingConnection([], permissions=[_CANCEL])
+    server, _ = _build_gating_server(conn)
+
+    result = await _prompt(server, conn)
+
+    assert result["stopReason"] == "cancelled"
 
 
 async def test_initialize_advertises_protocol_and_capabilities() -> None:

@@ -136,6 +136,67 @@ async def test_confirm_gate_pauses_and_resume_finishes() -> None:
     assert done.final_output == "nothing scheduled."
 
 
+_PLAN_REVISED = json.dumps(
+    {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "tool",
+                "description": "get today",
+                "tool": "calendar_get",
+                "args_template": {"date": "2026-05-27"},
+                "context_needed": [],
+            },
+            {
+                "id": 2,
+                "type": "synthesis",
+                "description": "revised summary in bullet points",
+                "context_needed": [1],
+            },
+        ]
+    }
+)
+
+
+async def test_revise_replans_and_re_enters_the_gate() -> None:
+    orch, store = _build(
+        [_PLAN_PAYLOAD, _PLAN_REVISED, _SHAPE_OK, _SYNTH_OUT],
+        settings=Settings(confirm_plans=True),
+    )
+    state = await _seed_task(store)
+
+    await orch.run(state.task_id)
+    paused = await store.load_task(state.task_id)
+    assert paused is not None
+    assert paused.status is TaskStatus.AWAITING_CONFIRMATION
+    assert paused.plan is not None
+    assert paused.plan.nodes[1].description == "summarise"
+
+    await orch.revise(state.task_id, "use bullet points")
+    repaused = await store.load_task(state.task_id)
+    assert repaused is not None
+    # Re-planned with the new payload, and paused at the gate again.
+    assert repaused.status is TaskStatus.AWAITING_CONFIRMATION
+    assert repaused.plan is not None
+    assert repaused.plan.nodes[1].description == "revised summary in bullet points"
+
+    # The revised plan can then be approved and executed.
+    await orch.resume(state.task_id)
+    done = await store.load_task(state.task_id)
+    assert done is not None
+    assert done.status is TaskStatus.COMPLETED
+    assert done.final_output == "nothing scheduled."
+
+
+async def test_revise_on_non_paused_task_is_noop() -> None:
+    orch, store = _build([])
+    state = await _seed_task(store)
+    await orch.revise(state.task_id, "feedback")
+    reloaded = await store.load_task(state.task_id)
+    assert reloaded is not None
+    assert reloaded.status is TaskStatus.PLANNING
+
+
 async def test_failed_planning_marks_task_failed() -> None:
     orch, store = _build(["this isn't even close to JSON", "still not JSON"])
     state = await _seed_task(store)

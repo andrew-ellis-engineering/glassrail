@@ -19,12 +19,14 @@ import contextlib
 import logging
 from typing import Any, cast
 
-from dagagent.core import ExecutionState, NodeStatus, new_task_id
+from dagagent.core import ExecutionState, NodeStatus, TaskId, new_task_id
 from dagagent.events import (
+    AwaitingConfirmation,
     BranchDecided,
     Event,
     NodeFinished,
     NodeStarted,
+    PlanFailed,
     PlanReady,
     TaskCompleted,
     TaskFailed,
@@ -66,6 +68,7 @@ class AcpServer:
         self._conn = conn
         self._sessions = SessionRegistry()
         self._runs: dict[str, asyncio.Task[None]] = {}
+        self._cancels: dict[str, asyncio.Event] = {}
 
     async def serve(self) -> None:
         """Read messages until stdin closes, dispatching each."""
@@ -142,7 +145,12 @@ class AcpServer:
 
     def _session_cancel(self, params: dict[str, Any]) -> None:
         session_id = params.get("sessionId")
-        run = self._runs.get(session_id) if isinstance(session_id, str) else None
+        if not isinstance(session_id, str):
+            return
+        cancel = self._cancels.get(session_id)
+        if cancel is not None:
+            cancel.set()
+        run = self._runs.get(session_id)
         if run is not None and not run.done():
             run.cancel()
 
@@ -170,47 +178,102 @@ class AcpServer:
         session.active_task = task_id
 
         tracker = PlanTracker()
+        cancel = asyncio.Event()
+        self._cancels[session.id] = cancel
         stop_reason = "end_turn"
+        # The currently-driving orchestrator coroutine. It is replaced when the
+        # plan gate resolves (resume on approve, revise on reject-with-feedback);
+        # the turn is driven entirely by the events these emit, never by the
+        # task's completion, so a pause at the gate doesn't look like an ending.
+        current = asyncio.create_task(self._rt.orchestrator.run(task_id))
+        self._runs[session.id] = current
         async with self._rt.event_bus.subscribe() as sub:
-            run = asyncio.create_task(self._rt.orchestrator.run(task_id))
-            self._runs[session.id] = run
             try:
                 while True:
-                    next_event: asyncio.Task[Event] = asyncio.ensure_future(sub.__anext__())
-                    done, _ = await asyncio.wait(
-                        {next_event, run}, return_when=asyncio.FIRST_COMPLETED
-                    )
-                    if next_event in done:
-                        try:
-                            event = next_event.result()
-                        except StopAsyncIteration:
+                    event = await self._next_event(sub, cancel)
+                    if event is None:
+                        stop_reason = "cancelled"
+                        break
+                    if event.task_id != task_id:
+                        continue
+                    if isinstance(event, AwaitingConfirmation):
+                        outcome = await self._handle_gate(session, tracker, task_id)
+                        if isinstance(outcome, str):
+                            stop_reason = outcome
                             break
-                        if event.task_id != task_id:
-                            continue
-                        terminal = await self._translate(session, tracker, event)
-                        if terminal is not None:
-                            stop_reason = terminal
-                            break
-                    else:
-                        # The run ended without a terminal event reaching us —
-                        # cancellation or an unexpected stop. Drop the pending read.
-                        next_event.cancel()
-                        stop_reason = "cancelled" if run.cancelled() else "end_turn"
+                        current = outcome
+                        self._runs[session.id] = current
+                        continue
+                    terminal = await self._translate(session, tracker, event)
+                    if terminal is not None:
+                        stop_reason = terminal
                         break
             finally:
                 session.active_task = None
                 self._runs.pop(session.id, None)
-                if not run.done():
-                    run.cancel()
-                # Drain the run; its own failures already surfaced as TaskFailed,
-                # and cancellation is expected on a client-driven session/cancel.
+                self._cancels.pop(session.id, None)
+                if not current.done():
+                    current.cancel()
+                # Drain the driver: its own failures already surfaced as
+                # TaskFailed, and cancellation is the expected session/cancel path.
                 with contextlib.suppress(asyncio.CancelledError, Exception):
-                    await run
+                    await current
 
         final = await store.load_task(task_id)
         if final is not None and final.final_output:
             session.carried_context = final.final_output
         return stop_reason
+
+    async def _next_event(self, sub: Any, cancel: asyncio.Event) -> Event | None:
+        """Await the next task event, or ``None`` if cancellation fires first."""
+        event_task: asyncio.Task[Event] = asyncio.ensure_future(sub.__anext__())
+        cancel_task = asyncio.ensure_future(cancel.wait())
+        try:
+            await asyncio.wait({event_task, cancel_task}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            if not cancel_task.done():
+                cancel_task.cancel()
+        if not event_task.done():
+            event_task.cancel()
+            return None
+        try:
+            return event_task.result()
+        except StopAsyncIteration:
+            return None
+
+    async def _handle_gate(
+        self, session: Session, tracker: PlanTracker, task_id: TaskId
+    ) -> asyncio.Task[None] | str:
+        """Ask the client to approve the plan; return the next driver or a stop reason.
+
+        Approve → resume the task. Reject with feedback → guided replan (loops
+        back to the gate). Reject without feedback → ``"refusal"``; cancel →
+        ``"cancelled"``. The free-text ``feedback`` is our extension to the ACP
+        permission response; a generic client that omits it gets a plain reject.
+        """
+        outcome = await self._conn.request(
+            "session/request_permission",
+            {
+                "sessionId": session.id,
+                "plan": {"entries": tracker.entries()},
+                "options": [
+                    {
+                        "optionId": "approve",
+                        "name": "Approve and run this plan",
+                        "kind": "allow_once",
+                    },
+                    {"optionId": "reject", "name": "Reject the plan", "kind": "reject_once"},
+                ],
+            },
+        )
+        choice, feedback = _parse_permission(outcome)
+        if choice == "approve":
+            return asyncio.create_task(self._rt.orchestrator.resume(task_id))
+        if choice == "reject" and feedback:
+            return asyncio.create_task(self._rt.orchestrator.revise(task_id, feedback))
+        if choice == "reject":
+            return "refusal"
+        return "cancelled"
 
     async def _translate(self, session: Session, tracker: PlanTracker, event: Event) -> str | None:
         """Emit session/update(s) for one event; return a stop reason if terminal."""
@@ -244,6 +307,9 @@ class AcpServer:
             return "end_turn"
         elif isinstance(event, TaskFailed):
             await self._message(session, f"Task failed: {event.error}")
+            return "end_turn"
+        elif isinstance(event, PlanFailed):
+            await self._message(session, f"Planning failed: {event.error}")
             return "end_turn"
         return None
 
@@ -296,6 +362,28 @@ def _prompt_text(prompt: Any) -> str:
             if block.get("type") == "text" and isinstance(text, str):
                 parts.append(text)
     return "\n".join(parts).strip()
+
+
+def _parse_permission(outcome: Any) -> tuple[str, str | None]:
+    """Read an ACP request_permission response into (choice, feedback).
+
+    Accepts the nested ``{"outcome": {"outcome": "selected", "optionId": ...}}``
+    shape and a flattened ``{"outcome": "selected", "optionId": ...}`` variant,
+    and reads our optional free-text ``feedback`` from either level. Anything
+    unrecognised is treated as a cancel.
+    """
+    if not isinstance(outcome, dict):
+        return "cancelled", None
+    top = cast("dict[str, Any]", outcome)
+    inner = top.get("outcome")
+    body: dict[str, Any] = inner if isinstance(inner, dict) else top
+    kind = body.get("outcome") if isinstance(inner, dict) else inner
+    if kind != "selected":
+        return "cancelled", None
+    option = body.get("optionId")
+    raw_feedback = body.get("feedback") or top.get("feedback")
+    feedback = raw_feedback if isinstance(raw_feedback, str) and raw_feedback.strip() else None
+    return (str(option), feedback)
 
 
 def _tool_call_id(node_id: int) -> str:

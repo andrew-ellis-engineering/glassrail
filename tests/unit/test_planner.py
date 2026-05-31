@@ -150,6 +150,30 @@ async def test_planner_tells_model_the_node_limits(harness: ToolHarness) -> None
     assert "at most 12 nodes" in user_msg
 
 
+async def test_feedback_is_woven_into_the_planning_prompt(
+    harness: ToolHarness, settings: Settings
+) -> None:
+    """On a guided replan, the user's feedback is injected into the request."""
+    payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
+    provider = _CapturingProvider(payload=payload)
+    planner = _planner_from(provider, harness, settings)
+
+    await planner.plan("summarise the doc", feedback="use bullet points, not prose")
+    user_msg = provider.user_seen[0]
+    assert "previous plan" in user_msg.lower()
+    assert "use bullet points, not prose" in user_msg
+
+
+async def test_no_feedback_leaves_prompt_clean(harness: ToolHarness, settings: Settings) -> None:
+    """Without feedback the revision block is absent from the prompt."""
+    payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
+    provider = _CapturingProvider(payload=payload)
+    planner = _planner_from(provider, harness, settings)
+
+    await planner.plan("summarise the doc")
+    assert "previous plan was rejected" not in provider.user_seen[0].lower()
+
+
 async def test_invalid_json_raises_value_error(harness: ToolHarness, settings: Settings) -> None:
     planner = _planner_from(_FixedProvider(payload="not json at all"), harness, settings)
     with pytest.raises(ValueError, match="invalid JSON"):

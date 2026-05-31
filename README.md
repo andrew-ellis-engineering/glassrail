@@ -98,8 +98,11 @@ uv run dagagent acp                            # JSON-RPC over stdin/stdout; log
 
 It implements `initialize`, `session/new`, `session/prompt`, and
 `session/cancel`; the plan and per-node execution arrive as `session/update`
-notifications. (`fs/*` and `terminal/*` are intentionally unsupported — the
-agent runs its own tools server-side.)
+notifications. Before executing, the agent pauses at a plan gate and asks the
+client to approve via `session/request_permission` — a client may approve, or
+reject with free-text feedback to trigger a guided replan. (`fs/*` and
+`terminal/*` are intentionally unsupported — the agent runs its own tools
+server-side.)
 
 **REST API directly** — `POST /task` returns a `task_id`; follow it over
 Server-Sent Events or a WebSocket at `/task/{id}/events`, or poll
