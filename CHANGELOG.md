@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- TUI responsiveness: an animated spinner and a live elapsed-time readout while
+  a turn runs (the turn-ended notice reports how long it took), plus
+  mouse-wheel scrolling of the transcript.
 - Richer TUI transcript: tool calls show their arguments and a result preview,
   and each node carries a dim tier/confidence annotation (flagged when low). The
   adapter sends tool `rawInput`/`rawOutput` and a `node_meta` extension update on

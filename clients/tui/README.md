@@ -44,7 +44,7 @@ Submit any task, then approve (`a`), revise (`e`), or reject (`r`) the plan.
 | `a` | approve the plan (at the gate) |
 | `e` | reject with feedback → guided replan |
 | `r` | reject the plan |
-| `↑` / `↓`, `PgUp` / `PgDn` | scroll the transcript (jumps back to the tail on a new task) |
+| `↑` / `↓`, `PgUp` / `PgDn`, mouse wheel | scroll the transcript (jumps back to the tail on a new task) |
 | `Esc` | cancel a running turn, else quit |
 | `Ctrl-C` | quit |
 

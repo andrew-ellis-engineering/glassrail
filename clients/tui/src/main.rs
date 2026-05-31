@@ -9,8 +9,14 @@ mod app;
 mod transcript;
 mod ui;
 
+use std::io::stdout;
+use std::time::Duration;
+
 use anyhow::{Context, Result};
-use crossterm::event::{Event, EventStream, KeyEventKind};
+use crossterm::event::{
+    DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyEventKind, MouseEventKind,
+};
+use crossterm::execute;
 use futures::StreamExt;
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -28,8 +34,10 @@ async fn main() -> Result<()> {
     let session_id = handshake(&client).await?;
 
     let mut terminal = ratatui::init();
+    let _ = execute!(stdout(), EnableMouseCapture);
     let mut app = App::new(client, tx, session_id);
     let result = run(&mut terminal, &mut app, &mut rx).await;
+    let _ = execute!(stdout(), DisableMouseCapture);
     ratatui::restore();
 
     let _ = child.start_kill();
@@ -66,6 +74,8 @@ async fn run<O: Outbound>(
     rx: &mut mpsc::UnboundedReceiver<ServerMessage>,
 ) -> Result<()> {
     let mut events = EventStream::new();
+    // A steady tick animates the spinner and keeps the elapsed timer live.
+    let mut ticker = tokio::time::interval(Duration::from_millis(100));
     loop {
         terminal.draw(|frame| ui::render(frame, app))?;
         if app.should_quit {
@@ -74,6 +84,11 @@ async fn run<O: Outbound>(
         tokio::select! {
             maybe_event = events.next() => match maybe_event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => app.on_key(key).await,
+                Some(Ok(Event::Mouse(m))) => match m.kind {
+                    MouseEventKind::ScrollUp => app.scroll(true, 3),
+                    MouseEventKind::ScrollDown => app.scroll(false, 3),
+                    _ => {}
+                },
                 Some(Ok(_)) => {}
                 Some(Err(_)) | None => app.should_quit = true,
             },
@@ -81,6 +96,7 @@ async fn run<O: Outbound>(
                 Some(message) => app.on_server(message).await,
                 None => app.should_quit = true,
             },
+            _ = ticker.tick() => app.tick_if_working(),
         }
     }
     Ok(())

@@ -9,7 +9,7 @@ use ratatui::Frame;
 
 use crate::acp::messages::{PermOption, PlanEntry};
 use crate::acp::Outbound;
-use crate::app::{App, Mode, Status};
+use crate::app::{App, Mode, Status, SPINNER};
 use crate::transcript::Cell;
 
 pub fn render<O: Outbound>(frame: &mut Frame, app: &App<O>) {
@@ -20,7 +20,9 @@ pub fn render<O: Outbound>(frame: &mut Frame, app: &App<O>) {
     ])
     .split(frame.area());
 
-    render_status(frame, chunks[0], app.status);
+    let spinner = SPINNER[app.spinner % SPINNER.len()];
+    let elapsed = app.turn_start.map(|t| t.elapsed().as_secs());
+    render_status(frame, chunks[0], app.status, spinner, elapsed);
     render_body(frame, chunks[1], &app.plan, &app.transcript, app.scrollback);
     render_composer(frame, chunks[2], &app.composer);
 
@@ -35,11 +37,20 @@ pub fn render<O: Outbound>(frame: &mut Frame, app: &App<O>) {
     }
 }
 
-fn render_status(frame: &mut Frame, area: Rect, status: Status) {
+fn render_status(
+    frame: &mut Frame,
+    area: Rect,
+    status: Status,
+    spinner: &str,
+    elapsed: Option<u64>,
+) {
     let (label, color) = match status {
-        Status::Ready => ("● ready", Color::Green),
-        Status::Working => ("◐ working…", Color::Yellow),
-        Status::AwaitingApproval => ("⏸ awaiting approval", Color::Magenta),
+        Status::Ready => ("● ready".to_string(), Color::Green),
+        Status::Working => {
+            let secs = elapsed.unwrap_or(0);
+            (format!("{spinner} working… {secs}s"), Color::Yellow)
+        }
+        Status::AwaitingApproval => ("⏸ awaiting approval".to_string(), Color::Magenta),
     };
     let line = Line::from(vec![
         Span::styled(

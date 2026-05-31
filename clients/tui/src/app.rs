@@ -2,6 +2,7 @@
 //! and agent messages. Rendering lives in `ui`; the wire lives in `acp`.
 
 use std::collections::HashMap;
+use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde_json::{json, Value};
@@ -44,11 +45,18 @@ pub struct App<O: Outbound> {
     pub should_quit: bool,
     /// Lines scrolled up from the tail; 0 follows the latest output.
     pub scrollback: u16,
+    /// Spinner animation frame, advanced on each tick while working.
+    pub spinner: usize,
+    /// When the current turn started, for the elapsed-time readout.
+    pub turn_start: Option<Instant>,
 
     permission: Option<PermissionState>,
     working: bool,
     tool_idx: HashMap<String, usize>,
 }
+
+/// Spinner frames shown in the status line while a turn runs.
+pub const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 impl<O: Outbound> App<O> {
     pub fn new(client: O, tx: mpsc::UnboundedSender<ServerMessage>, session_id: String) -> Self {
@@ -65,6 +73,8 @@ impl<O: Outbound> App<O> {
             mode: Mode::Normal,
             should_quit: false,
             scrollback: 0,
+            spinner: 0,
+            turn_start: None,
             permission: None,
             working: false,
             tool_idx: HashMap::new(),
@@ -79,6 +89,27 @@ impl<O: Outbound> App<O> {
     /// The plan attached to the pending permission request (for the overlay).
     pub fn permission_plan(&self) -> Option<&[PlanEntry]> {
         self.permission.as_ref().map(|p| p.plan.as_slice())
+    }
+
+    /// Advance the spinner one frame (called on the UI tick while working).
+    pub fn tick(&mut self) {
+        self.spinner = self.spinner.wrapping_add(1);
+    }
+
+    /// Tick only while a turn is running, so the spinner is still when idle.
+    pub fn tick_if_working(&mut self) {
+        if self.status == Status::Working {
+            self.tick();
+        }
+    }
+
+    /// Scroll the transcript up (toward older output) or down (toward the tail).
+    pub fn scroll(&mut self, up: bool, lines: u16) {
+        self.scrollback = if up {
+            self.scrollback.saturating_add(lines)
+        } else {
+            self.scrollback.saturating_sub(lines)
+        };
     }
 
     // ── input ────────────────────────────────────────────────────────────
@@ -112,10 +143,10 @@ impl<O: Outbound> App<O> {
             KeyCode::Backspace => {
                 self.composer.pop();
             }
-            KeyCode::Up => self.scrollback = self.scrollback.saturating_add(1),
-            KeyCode::Down => self.scrollback = self.scrollback.saturating_sub(1),
-            KeyCode::PageUp => self.scrollback = self.scrollback.saturating_add(10),
-            KeyCode::PageDown => self.scrollback = self.scrollback.saturating_sub(10),
+            KeyCode::Up => self.scroll(true, 1),
+            KeyCode::Down => self.scroll(false, 1),
+            KeyCode::PageUp => self.scroll(true, 10),
+            KeyCode::PageDown => self.scroll(false, 10),
             KeyCode::Char(c) => self.composer.push(c),
             _ => {}
         }
@@ -170,12 +201,15 @@ impl<O: Outbound> App<O> {
                 self.status = Status::AwaitingApproval;
             }
             ServerMessage::TurnEnded(reason) => {
+                let elapsed = self.turn_start.take().map(|t| t.elapsed().as_secs());
                 self.working = false;
                 self.status = Status::Ready;
+                let suffix = elapsed.map(|s| format!(" in {s}s")).unwrap_or_default();
                 self.transcript
-                    .push(Cell::Notice(format!("— turn ended ({reason}) —")));
+                    .push(Cell::Notice(format!("— turn ended ({reason}){suffix} —")));
             }
             ServerMessage::Error(err) => {
+                self.turn_start = None;
                 self.working = false;
                 self.status = Status::Ready;
                 self.transcript.push(Cell::Notice(format!("error: {err}")));
@@ -256,6 +290,7 @@ impl<O: Outbound> App<O> {
         self.scrollback = 0; // jump back to the tail for the new turn
         self.working = true;
         self.status = Status::Working;
+        self.turn_start = Some(Instant::now());
 
         let client = self.client.clone();
         let tx = self.tx.clone();
@@ -649,6 +684,32 @@ mod tests {
         // Saturates at the tail rather than underflowing.
         app.on_key(key(KeyCode::Down)).await;
         assert_eq!(app.scrollback, 0);
+    }
+
+    #[tokio::test]
+    async fn spinner_advances_only_while_working() {
+        let (mut app, _client, _rx) = app();
+        app.tick_if_working();
+        assert_eq!(app.spinner, 0, "idle: spinner is still");
+        app.composer = "go".into();
+        app.on_key(key(KeyCode::Enter)).await; // Working
+        app.tick_if_working();
+        assert_eq!(app.spinner, 1, "working: spinner advances");
+    }
+
+    #[tokio::test]
+    async fn turn_end_reports_elapsed_time() {
+        let (mut app, _client, _rx) = app();
+        app.composer = "go".into();
+        app.on_key(key(KeyCode::Enter)).await;
+        assert!(app.turn_start.is_some());
+        app.on_server(ServerMessage::TurnEnded("end_turn".into()))
+            .await;
+        assert!(app.turn_start.is_none());
+        assert!(app
+            .transcript
+            .iter()
+            .any(|c| matches!(c, Cell::Notice(n) if n.contains("end_turn") && n.contains('s'))));
     }
 
     #[tokio::test]
