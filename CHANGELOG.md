@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- TUI composer editing: in-place cursor movement (`←`/`→`, `Home`/`End`,
+  `Backspace`/`Del`) with a visible cursor, and submitted-task history recall via
+  `Ctrl-P`/`Ctrl-N`. (Multi-line entry is not yet supported.)
 - TUI responsiveness: an animated spinner and a live elapsed-time readout while
   a turn runs (the turn-ended notice reports how long it took), plus
   mouse-wheel scrolling of the transcript.

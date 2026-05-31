@@ -40,6 +40,8 @@ pub struct App<O: Outbound> {
     pub transcript: Vec<Cell>,
     pub plan: Vec<PlanEntry>,
     pub composer: String,
+    /// Cursor position in the composer, as a character index.
+    pub cursor: usize,
     pub status: Status,
     pub mode: Mode,
     pub should_quit: bool,
@@ -53,6 +55,10 @@ pub struct App<O: Outbound> {
     permission: Option<PermissionState>,
     working: bool,
     tool_idx: HashMap<String, usize>,
+    /// Submitted prompts, oldest first, for Ctrl-P/Ctrl-N recall.
+    history: Vec<String>,
+    /// Position while browsing history; `None` when editing a fresh line.
+    history_pos: Option<usize>,
 }
 
 /// Spinner frames shown in the status line while a turn runs.
@@ -69,6 +75,7 @@ impl<O: Outbound> App<O> {
             )],
             plan: Vec::new(),
             composer: String::new(),
+            cursor: 0,
             status: Status::Ready,
             mode: Mode::Normal,
             should_quit: false,
@@ -78,6 +85,8 @@ impl<O: Outbound> App<O> {
             permission: None,
             working: false,
             tool_idx: HashMap::new(),
+            history: Vec::new(),
+            history_pos: None,
         }
     }
 
@@ -127,6 +136,7 @@ impl<O: Outbound> App<O> {
     }
 
     async fn on_key_normal(&mut self, key: KeyEvent) {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Esc => {
                 if self.working {
@@ -140,15 +150,91 @@ impl<O: Outbound> App<O> {
                     self.submit().await;
                 }
             }
-            KeyCode::Backspace => {
-                self.composer.pop();
-            }
+            KeyCode::Char('p') if ctrl => self.history_prev(),
+            KeyCode::Char('n') if ctrl => self.history_next(),
+            KeyCode::Char(c) => self.insert_char(c),
+            KeyCode::Backspace => self.backspace(),
+            KeyCode::Delete => self.delete(),
+            KeyCode::Left => self.cursor = self.cursor.saturating_sub(1),
+            KeyCode::Right => self.cursor = (self.cursor + 1).min(self.char_count()),
+            KeyCode::Home => self.cursor = 0,
+            KeyCode::End => self.cursor = self.char_count(),
             KeyCode::Up => self.scroll(true, 1),
             KeyCode::Down => self.scroll(false, 1),
             KeyCode::PageUp => self.scroll(true, 10),
             KeyCode::PageDown => self.scroll(false, 10),
-            KeyCode::Char(c) => self.composer.push(c),
             _ => {}
+        }
+    }
+
+    // ── composer editing ─────────────────────────────────────────────────
+
+    fn char_count(&self) -> usize {
+        self.composer.chars().count()
+    }
+
+    /// Byte offset of the cursor's character index (end if past the last char).
+    fn cursor_byte(&self) -> usize {
+        self.composer
+            .char_indices()
+            .nth(self.cursor)
+            .map(|(b, _)| b)
+            .unwrap_or(self.composer.len())
+    }
+
+    fn insert_char(&mut self, c: char) {
+        let at = self.cursor_byte();
+        self.composer.insert(at, c);
+        self.cursor += 1;
+        self.history_pos = None;
+    }
+
+    fn backspace(&mut self) {
+        if self.cursor == 0 {
+            return;
+        }
+        self.cursor -= 1;
+        let at = self.cursor_byte();
+        self.composer.remove(at);
+        self.history_pos = None;
+    }
+
+    fn delete(&mut self) {
+        if self.cursor < self.char_count() {
+            let at = self.cursor_byte();
+            self.composer.remove(at);
+            self.history_pos = None;
+        }
+    }
+
+    fn set_composer(&mut self, text: String) {
+        self.composer = text;
+        self.cursor = self.char_count();
+    }
+
+    fn history_prev(&mut self) {
+        if self.history.is_empty() {
+            return;
+        }
+        let pos = match self.history_pos {
+            None => self.history.len() - 1,
+            Some(p) => p.saturating_sub(1),
+        };
+        self.history_pos = Some(pos);
+        self.set_composer(self.history[pos].clone());
+    }
+
+    fn history_next(&mut self) {
+        let Some(pos) = self.history_pos else {
+            return;
+        };
+        if pos + 1 < self.history.len() {
+            self.history_pos = Some(pos + 1);
+            self.set_composer(self.history[pos + 1].clone());
+        } else {
+            // Past the newest entry: back to an empty fresh line.
+            self.history_pos = None;
+            self.set_composer(String::new());
         }
     }
 
@@ -284,6 +370,9 @@ impl<O: Outbound> App<O> {
 
     async fn submit(&mut self) {
         let prompt = std::mem::take(&mut self.composer);
+        self.cursor = 0;
+        self.history.push(prompt.clone());
+        self.history_pos = None;
         self.transcript.push(Cell::Prompt(prompt.clone()));
         self.plan.clear();
         self.tool_idx.clear();
@@ -661,6 +750,59 @@ mod tests {
         let notes = client.notifications.lock().unwrap();
         assert_eq!(notes[0].0, "session/cancel");
         assert!(!app.should_quit);
+    }
+
+    #[tokio::test]
+    async fn cursor_editing_inserts_and_deletes_in_place() {
+        let (mut app, _client, _rx) = app();
+        for c in "helo".chars() {
+            app.on_key(key(KeyCode::Char(c))).await;
+        }
+        // Move left one and insert the missing 'l': "hel|o" -> "hell|o".
+        app.on_key(key(KeyCode::Left)).await;
+        app.on_key(key(KeyCode::Char('l'))).await;
+        assert_eq!(app.composer, "hello");
+        assert_eq!(app.cursor, 4);
+
+        // Home, then Delete removes the first char.
+        app.on_key(key(KeyCode::Home)).await;
+        app.on_key(key(KeyCode::Delete)).await;
+        assert_eq!(app.composer, "ello");
+        assert_eq!(app.cursor, 0);
+
+        // End, then Backspace removes the last char.
+        app.on_key(key(KeyCode::End)).await;
+        app.on_key(key(KeyCode::Backspace)).await;
+        assert_eq!(app.composer, "ell");
+        assert_eq!(app.cursor, 3);
+    }
+
+    fn ctrl(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::CONTROL)
+    }
+
+    #[tokio::test]
+    async fn history_recall_with_ctrl_p_and_ctrl_n() {
+        let (mut app, _client, _rx) = app();
+        for prompt in ["first", "second"] {
+            app.composer = prompt.into();
+            app.cursor = app.char_count();
+            app.on_key(key(KeyCode::Enter)).await;
+            // End the turn so the next submit isn't blocked by `working`.
+            app.on_server(ServerMessage::TurnEnded("end_turn".into()))
+                .await;
+        }
+        // Ctrl-P walks back from newest to oldest.
+        app.on_key(ctrl(KeyCode::Char('p'))).await;
+        assert_eq!(app.composer, "second");
+        assert_eq!(app.cursor, 6);
+        app.on_key(ctrl(KeyCode::Char('p'))).await;
+        assert_eq!(app.composer, "first");
+        // Ctrl-N walks forward, then off the end to an empty line.
+        app.on_key(ctrl(KeyCode::Char('n'))).await;
+        assert_eq!(app.composer, "second");
+        app.on_key(ctrl(KeyCode::Char('n'))).await;
+        assert_eq!(app.composer, "");
     }
 
     #[tokio::test]

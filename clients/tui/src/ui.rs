@@ -24,7 +24,7 @@ pub fn render<O: Outbound>(frame: &mut Frame, app: &App<O>) {
     let elapsed = app.turn_start.map(|t| t.elapsed().as_secs());
     render_status(frame, chunks[0], app.status, spinner, elapsed);
     render_body(frame, chunks[1], &app.plan, &app.transcript, app.scrollback);
-    render_composer(frame, chunks[2], &app.composer);
+    render_composer(frame, chunks[2], &app.composer, app.cursor);
 
     match &app.mode {
         Mode::Approval => render_approval(
@@ -178,14 +178,23 @@ fn render_transcript(frame: &mut Frame, area: Rect, transcript: &[Cell], scrollb
     frame.render_widget(para, area);
 }
 
-fn render_composer(frame: &mut Frame, area: Rect, composer: &str) {
+fn render_composer(frame: &mut Frame, area: Rect, composer: &str, cursor: usize) {
     let block = Block::default().borders(Borders::ALL).title(" task ");
-    let body = Line::from(vec![
+    let chars: Vec<char> = composer.chars().collect();
+    let at = cursor.min(chars.len());
+    let cursor_style = Style::default().add_modifier(Modifier::REVERSED);
+
+    let mut spans = vec![
         Span::styled("> ", Style::default().fg(Color::Cyan)),
-        Span::raw(composer.to_string()),
-        Span::styled("▏", Style::default().fg(Color::Cyan)),
-    ]);
-    frame.render_widget(Paragraph::new(body).block(block), area);
+        Span::raw(chars[..at].iter().collect::<String>()),
+    ];
+    if at < chars.len() {
+        spans.push(Span::styled(chars[at].to_string(), cursor_style));
+        spans.push(Span::raw(chars[at + 1..].iter().collect::<String>()));
+    } else {
+        spans.push(Span::styled(" ", cursor_style)); // block at end of line
+    }
+    frame.render_widget(Paragraph::new(Line::from(spans)).block(block), area);
 }
 
 fn render_approval(frame: &mut Frame, plan: &[PlanEntry], options: &[PermOption]) {

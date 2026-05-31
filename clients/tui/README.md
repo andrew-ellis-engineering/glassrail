@@ -41,12 +41,16 @@ Submit any task, then approve (`a`), revise (`e`), or reject (`r`) the plan.
 | Key | Action |
 |-----|--------|
 | type + `Enter` | submit a task |
+| `←` / `→`, `Home` / `End` | move the cursor; `Backspace` / `Del` edit in place |
+| `Ctrl-P` / `Ctrl-N` | recall previous / next submitted task |
 | `a` | approve the plan (at the gate) |
 | `e` | reject with feedback → guided replan |
 | `r` | reject the plan |
 | `↑` / `↓`, `PgUp` / `PgDn`, mouse wheel | scroll the transcript (jumps back to the tail on a new task) |
 | `Esc` | cancel a running turn, else quit |
 | `Ctrl-C` | quit |
+
+Multi-line task entry isn't supported yet (the composer is a single line).
 
 ## Dovetailing
 
