@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Rust terminal client (`clients/tui`, `dagagent-tui`): a ratatui app that
+  spawns `dagagent acp`, submits tasks, streams the plan and node execution,
+  and drives the plan-approval gate (approve / reject / reject-with-feedback).
+  Polyglot monorepo: a dedicated `rust-tui` CI job runs fmt/clippy/build/test.
 - ACP adapter (`dagagent acp`): a JSON-RPC 2.0 server over stdio exposing the
   agent via the Agent Client Protocol, for the forthcoming Rust TUI and other
   ACP clients. Implements `initialize`, `session/new`, `session/prompt`, and

@@ -96,6 +96,14 @@ subprocess, submit tasks, and watch the plan and nodes stream back:
 uv run dagagent acp                            # JSON-RPC over stdin/stdout; logs to stderr
 ```
 
+The in-repo Rust terminal client speaks this protocol — submit a task, watch the
+plan stream, approve or revise it, all in the terminal. See
+[clients/tui](./clients/tui/README.md):
+
+```bash
+cd clients/tui && cargo run -- uv run dagagent acp
+```
+
 It implements `initialize`, `session/new`, `session/prompt`, and
 `session/cancel`; the plan and per-node execution arrive as `session/update`
 notifications. Before executing, the agent pauses at a plan gate and asks the

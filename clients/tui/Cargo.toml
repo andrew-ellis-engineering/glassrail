@@ -1,0 +1,23 @@
+[package]
+name = "dagagent-tui"
+version = "0.1.0"
+edition = "2021"
+description = "A fast terminal client for the dagagent agent, over the Agent Client Protocol."
+license = "Apache-2.0"
+publish = false
+
+[[bin]]
+name = "dagagent-tui"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util", "sync", "time"] }
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+futures = "0.3"
+
+[profile.release]
+lto = true

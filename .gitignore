@@ -72,6 +72,9 @@ logs/
 .env.*
 !.env.example
 
+# Rust (clients/tui)
+target/
+
 # Local runtime config & state
 config.toml
 !eval-framework/**/config.toml

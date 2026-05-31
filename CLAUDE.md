@@ -116,6 +116,24 @@ src/dagagent/
 `core/` must not import from any other `dagagent` subpackage. Everything may
 import `core`.
 
+## Polyglot: `clients/`
+
+The repo is a polyglot monorepo. `clients/tui/` is a **Rust** crate
+(`dagagent-tui`) — the terminal client built on ratatui, talking to the agent
+over ACP by spawning `dagagent acp`. The Python agent core is unchanged; the
+client is a separate binary behind the protocol seam. Requires a Rust toolchain
+(`rustup`, stable). Its own check sweep, run from `clients/tui/`:
+
+```bash
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo build --locked
+cargo test --locked
+```
+
+CI runs these in a dedicated `rust-tui` job; the Python jobs are unchanged. See
+`clients/tui/README.md`.
+
 ## Tests
 
 `asyncio_mode = "auto"` — write `async def test_...` directly, no marker needed.
