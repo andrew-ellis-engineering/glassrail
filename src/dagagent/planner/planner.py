@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
+from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlparse
 
@@ -43,6 +45,10 @@ class Planner:
         self._validator = validator
         self._settings = settings
         self._cookbook = cookbook or PlannerCookbook.load_default()
+        # Failed planning attempts are written here for post-mortem inspection.
+        # Relative paths resolve against CWD (the project root when running via
+        # the CLI). Override via subclass or constructor injection if needed.
+        self._failed_plan_dir = Path("failed_plans")
 
     async def plan(self, request: str, *, min_tier: int = 0, feedback: str | None = None) -> Plan:
         """Generate and validate a plan for ``request``.
@@ -50,7 +56,15 @@ class Planner:
         ``feedback`` (set on a guided replan after a user rejects a plan) is
         woven into the planning prompt so the next plan addresses it.
         """
-        attempt = await self.plan_attempt(request, attempt=0, min_tier=min_tier, feedback=feedback)
+        attempt = await self.plan_attempt(
+            request,
+            attempt=0,
+            min_tier=min_tier,
+            feedback=feedback,
+        )
+
+        if attempt.filepath:
+            log.warning("Plan failed, written to %s", attempt.filepath)
         if attempt.plan is not None:
             return attempt.plan
         if attempt.error_type == "rejection":
@@ -115,6 +129,32 @@ class Planner:
         if hostname in _LOCAL_TIER_HOSTS:
             return "configured local endpoint"
         return "not configured (missing API key)"
+
+    def _failed(self, attempt: PlanningAttempt) -> PlanningAttempt:
+        """Write ``attempt`` to disk and return a copy with ``filepath`` set."""
+        try:
+            fp = self._write_failed_attempt(attempt)
+            return attempt.model_copy(update={"filepath": fp})
+        except Exception:
+            log.exception("Could not write failed plan attempt to disk")
+            return attempt
+
+    def _write_failed_attempt(self, attempt: PlanningAttempt) -> str:
+        """Write a failed planning attempt to a JSON file and return the path."""
+        filename = f"failed_plan_{attempt.attempt}_{uuid.uuid4().hex[:8]}.json"
+        filepath = self._failed_plan_dir / filename
+        self._failed_plan_dir.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "attempt": attempt.attempt,
+            "error_type": attempt.error_type,
+            "error": attempt.error,
+            "raw_output": attempt.raw_output,
+            "parsed": attempt.parsed,
+            "tokens_used": attempt.tokens_used,
+        }
+        with filepath.open("w") as f:
+            json.dump(payload, f, indent=2)
+        return str(filepath)
 
     async def plan_attempt(
         self,
@@ -190,21 +230,25 @@ class Planner:
             try:
                 data = json.loads(raw)
             except json.JSONDecodeError as exc:
-                return PlanningAttempt(
-                    attempt=attempt,
-                    raw_output=raw,
-                    error=f"Planner returned invalid JSON: {exc}",
-                    error_type="json",
-                    tokens_used=tokens,
+                return self._failed(
+                    PlanningAttempt(
+                        attempt=attempt,
+                        raw_output=raw,
+                        error=f"Planner returned invalid JSON: {exc}",
+                        error_type="json",
+                        tokens_used=tokens,
+                    )
                 )
 
             if not isinstance(data, dict):
-                return PlanningAttempt(
-                    attempt=attempt,
-                    raw_output=raw,
-                    error=f"Planner returned {type(data).__name__}, expected JSON object",
-                    error_type="schema",
-                    tokens_used=tokens,
+                return self._failed(
+                    PlanningAttempt(
+                        attempt=attempt,
+                        raw_output=raw,
+                        error=f"Planner returned {type(data).__name__}, expected JSON object",
+                        error_type="schema",
+                        tokens_used=tokens,
+                    )
                 )
             parsed = cast("dict[str, Any]", data)
 
@@ -213,35 +257,41 @@ class Planner:
             if "rejection" in parsed:
                 reason = str(parsed["rejection"])
                 log.info("Planner rejected task: %s", reason)
-                return PlanningAttempt(
-                    attempt=attempt,
-                    raw_output=raw,
-                    parsed=parsed,
-                    error=reason,
-                    error_type="rejection",
-                    tokens_used=tokens,
+                return self._failed(
+                    PlanningAttempt(
+                        attempt=attempt,
+                        raw_output=raw,
+                        parsed=parsed,
+                        error=reason,
+                        error_type="rejection",
+                        tokens_used=tokens,
+                    )
                 )
 
             try:
                 plan = Plan.model_validate(parsed)
                 self._validator.validate(plan)
             except PlanValidationError as exc:
-                return PlanningAttempt(
-                    attempt=attempt,
-                    raw_output=raw,
-                    parsed=parsed,
-                    error=str(exc),
-                    error_type="validation",
-                    tokens_used=tokens,
+                return self._failed(
+                    PlanningAttempt(
+                        attempt=attempt,
+                        raw_output=raw,
+                        parsed=parsed,
+                        error=str(exc),
+                        error_type="validation",
+                        tokens_used=tokens,
+                    )
                 )
             except ValueError as exc:
-                return PlanningAttempt(
-                    attempt=attempt,
-                    raw_output=raw,
-                    parsed=parsed,
-                    error=str(exc),
-                    error_type="schema",
-                    tokens_used=tokens,
+                return self._failed(
+                    PlanningAttempt(
+                        attempt=attempt,
+                        raw_output=raw,
+                        parsed=parsed,
+                        error=str(exc),
+                        error_type="schema",
+                        tokens_used=tokens,
+                    )
                 )
             span.set_attribute(ATTR_PLAN_NODE_COUNT, len(plan.nodes))
             return PlanningAttempt(

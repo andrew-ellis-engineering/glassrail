@@ -219,11 +219,18 @@ class Orchestrator:
         if state.status is TaskStatus.REJECTED:
             await self._emit(PlanRejected(task_id=state.task_id, reason=state.error or "rejected"))
         else:
+            # Surface the filepath from the last attempt that was written to disk,
+            # so the TUI (and logs) can tell the user where to find the raw output.
+            last_filepath = next(
+                (a.filepath for a in reversed(state.planning_attempts) if a.filepath),
+                None,
+            )
             await self._emit(
                 PlanFailed(
                     task_id=state.task_id,
                     error=state.error or "planning failed",
                     attempts=[a.model_dump(mode="json") for a in state.planning_attempts],
+                    filepath=last_filepath,
                 )
             )
 

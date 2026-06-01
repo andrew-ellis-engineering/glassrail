@@ -41,6 +41,7 @@ class PlanFailed(_BaseEvent):
     type: Literal["plan_failed"] = "plan_failed"
     error: str
     attempts: list[dict[str, Any]] = Field(default_factory=list)
+    filepath: str | None = None
 
 
 class PlanRejected(_BaseEvent):

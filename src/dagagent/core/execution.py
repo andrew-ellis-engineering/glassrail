@@ -71,6 +71,7 @@ class PlanningAttempt(BaseModel):
     error_type: str | None = None
     tokens_used: int = 0
     created_at: datetime = Field(default_factory=_utcnow)
+    filepath: str | None = None
 
     @property
     def valid(self) -> bool:

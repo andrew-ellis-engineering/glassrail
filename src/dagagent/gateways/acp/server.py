@@ -333,7 +333,10 @@ class AcpServer:
             await self._message(session, f"Task failed: {event.error}")
             return "end_turn"
         if isinstance(event, PlanFailed):
-            await self._message(session, f"Planning failed: {event.error}")
+            msg = f"Planning failed: {event.error}"
+            if event.filepath:
+                msg += f"\nFailed plan written to: {event.filepath}"
+            await self._message(session, msg)
             return "end_turn"
         if isinstance(event, PlanRejected):
             await self._message(session, f"Task rejected: {event.reason}")
