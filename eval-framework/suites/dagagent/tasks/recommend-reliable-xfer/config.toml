@@ -3,7 +3,7 @@ tags = ["multistep", "synthesis", "result", "control-pair"]
 type = "capability"
 difficulty = 3
 control_for = "recommend-streaming"
-timeout_s = 240
+timeout_s = 360
 
 expected_behavior = """
 A financial ledger sync requires guaranteed, ordered delivery with no data

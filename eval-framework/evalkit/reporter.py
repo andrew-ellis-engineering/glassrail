@@ -125,6 +125,33 @@ def load_trial(path: Path) -> Trial:
     )
 
 
+def save_task_scores(run_dir: Path, result: TaskResult) -> None:
+    """Persist re-graded scores without touching trial/stdout/stderr artifacts."""
+    task_dir = run_dir / result.task.id
+    _write_json(
+        task_dir / "task_metadata.json",
+        {
+            "id": result.task.id,
+            "name": result.task.name,
+            "suite": result.task.suite,
+            "path": str(result.task.path),
+            "type": result.task.type,
+            "difficulty": result.task.difficulty,
+            "backend": result.task.backend,
+            "model": result.task.model,
+            "control_for": result.task.control_for,
+            "tags": result.task.tags,
+            "num_criteria": len(result.task.criteria),
+            "pass_at_k": result.pass_at_k,
+            "pass_pow_k": result.pass_pow_k,
+            "mean_pass_rate": result.mean_pass_rate,
+        },
+    )
+    for trial, score in zip(result.trials, result.scores, strict=False):
+        td = task_dir / f"trial-{trial.run_number:02d}"
+        _write_json(td / "score.json", score)
+
+
 def load_archived_trials(task_results_dir: Path) -> list[Trial]:
     trials: list[Trial] = []
     for trial_dir in sorted(task_results_dir.glob("trial-*")):

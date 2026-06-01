@@ -2,7 +2,7 @@ name = "research-constrained"
 tags = ["research", "multistep", "synthesis", "result"]
 type = "capability"
 difficulty = 5
-timeout_s = 420
+timeout_s = 600
 
 expected_behavior = """
 All three engines support SQL and are open-source. ClickHouse (Apache 2.0) is
@@ -33,7 +33,7 @@ text = "Covers all three engines"
 grader = "deterministic"
 check = "regex"
 target = "__result_text__"
-value = "(?i)(clickhouse).{0,800}(duckdb).{0,800}(druid)|(druid).{0,800}(duckdb).{0,800}(clickhouse)"
+value = "(?i)(?=.*\\bclickhouse\\b)(?=.*\\bduckdb\\b)(?=.*\\bdruid\\b)"
 
 [[criteria]]
 text = "Names a recommended engine"

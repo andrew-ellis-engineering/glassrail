@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Eval framework CLI.
 
-Subcommands: task, suite, list, score, promote, demote, candidates.
+Subcommands: task, suite, list, score, score-suite, promote, demote, candidates.
 
 Exit codes: 0 = success, 1 = a regression task had pass^k = 0 (CI gating
 signal), 2 = framework error.
@@ -237,6 +237,52 @@ def cmd_score(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_score_suite(args: argparse.Namespace) -> int:
+    """Re-grade every task in an archived run directory against current criteria."""
+    import json
+
+    run_dir = Path(args.results_path).resolve()
+    run_meta_path = run_dir / "run_metadata.json"
+    if not run_meta_path.exists():
+        print(f"No run_metadata.json in {run_dir}", file=sys.stderr)
+        return EXIT_ERROR
+
+    run_meta = json.loads(run_meta_path.read_text(encoding="utf-8"))
+    print(
+        f"Re-grading run '{run_meta.get('run_name', run_dir.name)}' "
+        f"(suite={run_meta.get('suite_name', '?')})  …"
+    )
+
+    task_dirs = sorted(
+        p for p in run_dir.iterdir() if p.is_dir() and (p / "task_metadata.json").exists()
+    )
+    if not task_dirs:
+        print(f"No graded task directories found under {run_dir}", file=sys.stderr)
+        return EXIT_ERROR
+
+    task_results: list[TaskResult] = []
+    for task_dir in task_dirs:
+        task_meta = json.loads((task_dir / "task_metadata.json").read_text(encoding="utf-8"))
+        suite_meta, task = loader.load_task_with_suite(Path(task_meta["path"]))
+        judge = _make_judge(suite_meta, args)
+        trials = reporter.load_archived_trials(task_dir)
+        if not trials:
+            print(f"  ! {task.id}: no archived trials, skipping", file=sys.stderr)
+            continue
+        scores = [graders.grade(task, trial, judge=judge) for trial in trials]
+        result = build_task_result(task, trials, scores)
+        reporter.save_task_scores(run_dir, result)
+        reporter.print_task_result(result)
+        task_results.append(result)
+
+    # Print aggregate summary
+    total = len(task_results)
+    passing = sum(1 for r in task_results if r.pass_at_k == 1.0)
+    print(f"\nRe-grade complete: {passing}/{total} tasks pass@k=1.0")
+    print(f"Artifacts updated in {run_dir}")
+    return EXIT_OK
+
+
 def _resolve_task_config(arg: str) -> Path:
     p = Path(arg)
     if p.suffix == ".toml" and p.exists():
@@ -365,6 +411,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_score.add_argument("--grader-model", default=None)
     p_score.add_argument("--grader-backend", default=None, help="judge backend (claude-cli | openai-compat)")
     p_score.set_defaults(func=cmd_score)
+
+    p_score_suite = sub.add_parser("score-suite", help="re-grade all tasks in an archived run")
+    p_score_suite.add_argument("results_path", help="path to a run directory (contains run_metadata.json)")
+    p_score_suite.add_argument("--grader-model", default=None)
+    p_score_suite.add_argument("--grader-backend", default=None, help="judge backend (claude-cli | openai-compat)")
+    p_score_suite.set_defaults(func=cmd_score_suite)
 
     p_promote = sub.add_parser("promote", help="capability → regression")
     p_promote.add_argument("task")

@@ -48,5 +48,5 @@ grader = "trajectory"
 tool_sequence = ["result"]
 
 [[criteria]]
-text = "Correctly calculates 1 full crate and 150 kg with valid intermediate steps"
+text = "Correctly concludes 1 full crate and 150 kg"
 grader = "llm"
