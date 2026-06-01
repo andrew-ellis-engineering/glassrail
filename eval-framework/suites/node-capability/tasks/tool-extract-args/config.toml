@@ -1,0 +1,52 @@
+name = "tool-extract-args"
+tags = ["tool", "node-capability", "arg-extraction"]
+type = "capability"
+difficulty = 3
+
+expected_behavior = """
+The executor's _extract_args micro-call must derive the correct file path from
+the upstream context and pass it to the tool.  The path is embedded in a
+noisier sentence rather than given as a bare path string, so simple substring
+matching in args_template is insufficient.
+
+A correct run calls file_read with exactly /tmp/dagagent-eval/backup.conf
+(not /tmp/dagagent-eval/app.conf or any other path) and reports 30.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+"/tmp/dagagent-eval/app.conf" = "app.conf"
+"/tmp/dagagent-eval/backup.conf" = "backup.conf"
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Reports retention_days as 30"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b30\\b"
+
+[[criteria]]
+text = "Does not report the app.conf port (8443) — reading the wrong file"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "\\b8443\\b"
+
+[[criteria]]
+text = "Used file_read on the correct backup config path"
+grader = "trajectory"
+tool_sequence = ["file_read"]
+target = "/tmp/dagagent-eval/backup.conf"
+
+[[criteria]]
+text = "Reports 30 days of retention sourced from the backup config, not the app config"
+grader = "llm"

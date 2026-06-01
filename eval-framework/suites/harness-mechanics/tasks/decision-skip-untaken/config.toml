@@ -1,0 +1,35 @@
+name = "decision-skip-untaken"
+tags = ["decision", "harness-mechanics", "branch-propagation"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When a DECISION node takes the 'no' branch:
+- The 'yes'-branch body nodes must run (COMPLETED).
+- The 'no'-branch body nodes must be SKIPPED.
+- A BranchDecided event must record branch='no'.
+- A branch_log entry must be present.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Decision node took the 'no' branch"
+grader = "trajectory"
+node_id = 1
+expect_branch = "no"
+
+[[criteria]]
+text = "Yes-branch body node (id=2) was skipped"
+grader = "trajectory"
+node_id = 2
+expect_status = "skipped"
+
+[[criteria]]
+text = "No-branch body node (id=3) completed"
+grader = "trajectory"
+node_id = 3
+expect_status = "completed"

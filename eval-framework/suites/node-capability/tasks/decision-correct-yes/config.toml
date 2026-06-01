@@ -1,0 +1,46 @@
+name = "decision-correct-yes"
+tags = ["decision", "node-capability", "control-pair"]
+type = "capability"
+difficulty = 3
+
+expected_behavior = """
+For an even number (246), the decision node must take the 'yes' branch
+("is it even?") and the result must report half of 246 (123).
+Control twin of decision-correct-no — together they guard both always-yes and
+always-no degenerate strategies.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Reports 123 (half of the even number 246)"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b123\\b"
+
+[[criteria]]
+text = "Identifies 246 as even"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)\\beven\\b"
+
+[[criteria]]
+text = "Plan used a decision node to branch on the even/odd condition"
+grader = "trajectory"
+tool_sequence = ["decision"]
+
+[[criteria]]
+text = "Correctly took the even branch and reported half as 123"
+grader = "llm"

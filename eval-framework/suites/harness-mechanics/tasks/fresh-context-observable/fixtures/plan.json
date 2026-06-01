@@ -1,0 +1,46 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "synthesis",
+      "description": "Produce an upstream output that contains a sentinel value",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    },
+    {
+      "id": 2,
+      "type": "synthesis",
+      "description": "Echo whatever context you receive — context_needed=[1] so should see sentinel",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [1],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    },
+    {
+      "id": 3,
+      "type": "result",
+      "description": "Produce output from empty context — context_needed=[] so must NOT see node 1's sentinel",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    }
+  ]
+}

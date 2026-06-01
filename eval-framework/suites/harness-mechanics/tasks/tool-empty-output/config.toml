@@ -1,0 +1,33 @@
+name = "tool-empty-output"
+tags = ["tool", "harness-mechanics"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When a tool returns an empty result ({}, [], or None), the executor must mark
+the node status as EMPTY — not COMPLETED and not FAILED.
+
+Infrastructure note: none of the built-in stubs (file_read, calendar_get,
+memory_search) return {}/[]/None — they all return populated dicts even on
+error.  This task requires one of:
+  (a) An eval-only `eval_noop` tool registered by the scripted exec-plan
+      backend that always returns {}; OR
+  (b) Tool-return scripting in the provider (an extension to §4.2, which
+      currently only scripts LLM call responses, not tool return values).
+
+Until that infra lands this task will produce COMPLETED (not EMPTY) and the
+criterion will detect the gap.  The plan uses a hypothetical `eval_noop` tool
+that the exec-plan backend must register.  Do not change the criterion to match
+COMPLETED — it must stay `empty` so the regression fires until the tool is wired.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Tool node has EMPTY status when tool returns an empty result"
+grader = "trajectory"
+node_id = 1
+expect_status = "empty"

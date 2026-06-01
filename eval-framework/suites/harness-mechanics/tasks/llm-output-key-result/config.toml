@@ -1,0 +1,28 @@
+name = "llm-output-key-result"
+tags = ["llm-node", "harness-mechanics", "output-key"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+A RESULT node reads the 'output' field from the model response and that
+becomes the final_output of the task.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Result text contains the scripted output sentinel"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "scripted result sentinel"

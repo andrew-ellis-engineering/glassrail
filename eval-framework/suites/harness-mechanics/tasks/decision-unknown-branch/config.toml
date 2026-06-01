@@ -1,0 +1,27 @@
+name = "decision-unknown-branch"
+tags = ["decision", "harness-mechanics", "fallback"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When the decision model returns a branch label that is not in node.branches,
+the executor must fall back to node.default_branch rather than crashing.
+The node must still complete and a branch must be recorded.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Decision node fell back to default branch 'yes'"
+grader = "trajectory"
+node_id = 1
+expect_branch = "yes"
+
+[[criteria]]
+text = "Decision node completed (did not fail on unknown branch)"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"

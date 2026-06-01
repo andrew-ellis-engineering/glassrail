@@ -1,0 +1,18 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "think",
+      "description": "Only a think node — no result or synthesis follows",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": true,
+      "forced_tier": null,
+      "subplan": null
+    }
+  ]
+}

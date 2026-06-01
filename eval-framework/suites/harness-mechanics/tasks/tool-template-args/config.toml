@@ -1,0 +1,52 @@
+name = "tool-template-args"
+tags = ["tool", "harness-mechanics"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When a TOOL node has args_template set, the executor must pass those args
+verbatim to the tool — it must NOT call _extract_args (no extra LLM call).
+The trajectory step must show args_used == args_template, status COMPLETED,
+confidence 1.0, tier 0, and not flagged.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+"/tmp/dagagent-eval/test.conf" = "test.conf"
+
+[[criteria]]
+text = "Tool node completed successfully"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"
+
+[[criteria]]
+text = "Tool node ran at tier 0"
+grader = "trajectory"
+node_id = 1
+expect_tier = 0
+
+[[criteria]]
+text = "Tool node was not flagged"
+grader = "trajectory"
+node_id = 1
+expect_flagged = false
+
+[[criteria]]
+text = "Tool received the exact templated path"
+grader = "trajectory"
+node_id = 1
+expect_args_contains = "/tmp/dagagent-eval/test.conf"
+
+[[criteria]]
+text = "Result node completed"
+grader = "trajectory"
+node_id = 2
+expect_status = "completed"
+
+[[criteria]]
+text = "Plan terminates on a result node"
+grader = "trajectory"
+tool_sequence = ["result"]

@@ -1,0 +1,19 @@
+name = "synthesis-tier0"
+tags = ["llm-node", "harness-mechanics", "tier-routing"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+SYNTHESIS nodes must run at tier 0 per the deterministic tier-routing table.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Synthesis node ran at tier 0"
+grader = "trajectory"
+node_id = 1
+expect_tier = 0

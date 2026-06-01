@@ -1,0 +1,32 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "tool",
+      "description": "Read the test config file to get its contents",
+      "tool": "file_read",
+      "args_template": {"path": "/tmp/dagagent-eval/test.conf"},
+      "context_needed": [],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    },
+    {
+      "id": 2,
+      "type": "result",
+      "description": "Report the file contents read by node 1",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [1],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    }
+  ]
+}

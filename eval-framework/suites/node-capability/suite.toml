@@ -1,0 +1,35 @@
+[suite]
+name = "node-capability"
+description = """
+Model+harness capability evals: isolated per-node model behaviour with a real
+LLM but a fixed injected plan (no planner in the loop).  Each task exercises
+one node type in isolation so failures localise to model quality on that node,
+not planning quality.
+
+Infrastructure required (see HARNESS_NODE_EVAL_SPEC.md §4):
+  - `dagagent exec-plan <plan.json> --json` CLI command
+
+Until that lands these tasks use `dagagent run` as a fallback with prompts
+designed to produce a predictable plan shape (planner is in the loop).
+Tasks will be migrated to exec-plan once it exists.
+"""
+default_backend = "dagagent-cli"
+default_model = "qwen3.6-35b-moe"
+default_type = "capability"
+default_timeout_s = 300
+promotion_threshold = 5
+
+default_grader_model = "haiku"
+default_grader_backend = "claude-cli"
+
+[backend]
+command = ["uv", "run", "dagagent", "run"]
+
+[backend.env]
+DAGAGENT_TIER0__TIMEOUT_S = "600"
+DAGAGENT_TIER1__BASE_URL = "http://localhost:8080/v1"
+DAGAGENT_TIER1__MODEL = "qwen3.6-35b-moe"
+DAGAGENT_TIER1__TIMEOUT_S = "600"
+DAGAGENT_TIER2__BASE_URL = "http://localhost:8080/v1"
+DAGAGENT_TIER2__MODEL = "qwen3.6-35b-moe"
+DAGAGENT_TIER2__TIMEOUT_S = "600"

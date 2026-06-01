@@ -1,0 +1,27 @@
+name = "subplan-bubbles-output"
+tags = ["subplan", "harness-mechanics"]
+type = "regression"
+difficulty = 2
+
+expected_behavior = """
+The SUBPLAN node's output must equal the nested plan's final_output.
+The outer result node must receive that value via context and surface it.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Subplan node completed"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"
+
+[[criteria]]
+text = "Outer result contains the subplan's output sentinel"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "subplan output sentinel"

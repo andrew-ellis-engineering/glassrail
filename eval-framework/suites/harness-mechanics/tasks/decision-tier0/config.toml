@@ -1,0 +1,20 @@
+name = "decision-tier0"
+tags = ["decision", "harness-mechanics", "tier-routing"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+DECISION nodes must always run at tier 0 regardless of any global defaults.
+Tier routing is deterministic and the model never influences it.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Decision node ran at tier 0"
+grader = "trajectory"
+node_id = 1
+expect_tier = 0

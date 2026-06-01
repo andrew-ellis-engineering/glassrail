@@ -1,0 +1,49 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "subplan",
+      "description": "Run a nested plan to look up a value",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": {
+        "nodes": [
+          {
+            "id": 1,
+            "type": "result",
+            "description": "Produce the nested result",
+            "tool": null,
+            "args_template": null,
+            "context_needed": [],
+            "condition": null,
+            "branches": null,
+            "default_branch": null,
+            "reasoning_required": false,
+            "forced_tier": null,
+            "subplan": null
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "type": "result",
+      "description": "Report the subplan's output to the user",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [1],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    }
+  ]
+}

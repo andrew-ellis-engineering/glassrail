@@ -27,9 +27,17 @@ class Criterion:
     check: str | None = None        # deterministic: file_exists, file_absent,
                                     # contains, not_contains, regex, not_regex,
                                     # json_field, line_count, file_unchanged
-    target: str | None = None       # path or "__result_text__"
+    target: str | None = None       # path, "__result_text__", or "node:<id>"
     value: Any = None               # check-specific
     tool_sequence: list[str] | None = None  # for trajectory
+    # Node-targeted criteria (harness-mechanics suite).
+    # Resolved against the trajectory step whose node_id matches.
+    node_id: int | None = None               # target a specific trajectory node
+    expect_branch: str | None = None         # assert branch label taken
+    expect_status: str | None = None         # assert node status string
+    expect_tier: int | None = None           # assert tier_used value
+    expect_flagged: bool | None = None       # assert flagged state
+    expect_args_contains: str | None = None  # assert string present in args_used
 
 
 @dataclass

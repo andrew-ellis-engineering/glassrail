@@ -1,0 +1,22 @@
+name = "final-output-none"
+tags = ["execution-model", "harness-mechanics", "final-output"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When a plan has neither a RESULT node nor a SYNTHESIS node, final_output must
+be null. The task status must still be COMPLETED (not an error), and the result
+text must be empty.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Result text is empty when no result/synthesis node present"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "^\\s*$"

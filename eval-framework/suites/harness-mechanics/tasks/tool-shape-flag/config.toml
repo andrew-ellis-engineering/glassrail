@@ -1,0 +1,28 @@
+name = "tool-shape-flag"
+tags = ["tool", "harness-mechanics", "shape-check"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When the shape-check gate returns matches_expectation=false, the executor
+must still mark the node COMPLETED but set flagged=true and lower confidence
+to 0.5 — it must NOT fail the node.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+"/tmp/dagagent-eval/test.conf" = "test.conf"
+
+[[criteria]]
+text = "Tool node is COMPLETED despite shape mismatch"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"
+
+[[criteria]]
+text = "Tool node is flagged when shape-check fails"
+grader = "trajectory"
+node_id = 1
+expect_flagged = true

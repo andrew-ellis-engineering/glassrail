@@ -1,0 +1,46 @@
+name = "decision-correct-no"
+tags = ["decision", "node-capability", "control-pair"]
+type = "capability"
+difficulty = 3
+control_for = "decision-correct-yes"
+
+expected_behavior = """
+For an odd number (247), the decision node must take the 'no' branch
+("is it even?") and the result must report the next even number (248).
+Control twin of decision-correct-yes.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Reports 248 (the next even number after the odd 247)"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b248\\b"
+
+[[criteria]]
+text = "Identifies 247 as odd"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)\\bodd\\b"
+
+[[criteria]]
+text = "Plan used a decision node to branch on the even/odd condition"
+grader = "trajectory"
+tool_sequence = ["decision"]
+
+[[criteria]]
+text = "Correctly took the odd branch and reported the next even number as 248"
+grader = "llm"

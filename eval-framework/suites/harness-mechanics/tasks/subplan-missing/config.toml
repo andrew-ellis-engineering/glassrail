@@ -1,0 +1,23 @@
+name = "subplan-missing"
+tags = ["subplan", "harness-mechanics", "error-path"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+A SUBPLAN node with subplan=null must fail with status FAILED.
+Injected with --no-validate since the PlanValidator would reject this first.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[backend_config]
+args = ["--no-validate"]
+
+[[criteria]]
+text = "Subplan node with null subplan has FAILED status"
+grader = "trajectory"
+node_id = 1
+expect_status = "failed"

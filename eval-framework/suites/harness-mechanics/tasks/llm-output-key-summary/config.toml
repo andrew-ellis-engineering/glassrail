@@ -1,0 +1,31 @@
+name = "llm-output-key-summary"
+tags = ["llm-node", "harness-mechanics", "output-key"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+NOTE: the "node:<id> output" criterion below requires the §4.3 envelope enrichment
+(per-node `output` field on trajectory steps). Until that lands, the regex check
+will fail because `_resolve("node:1")` returns (None, False) → regex returns False.
+This is the expected "not yet runnable" state; fix will flow automatically once
+the `output` field is surfaced in the trajectory envelope.
+A SUMMARY node reads the 'summary' field (not 'output') from the model response.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Summary node completed"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"
+
+[[criteria]]
+text = "Summary output contains the scripted text"
+grader = "deterministic"
+check = "regex"
+target = "node:1"
+value = "scripted summary sentinel"

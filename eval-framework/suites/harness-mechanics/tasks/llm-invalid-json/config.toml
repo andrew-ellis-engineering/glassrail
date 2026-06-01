@@ -1,0 +1,21 @@
+name = "llm-invalid-json"
+tags = ["llm-node", "harness-mechanics", "error-path"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When a SYNTHESIS/THINK/SUMMARY/RESULT node receives a model response that
+cannot be parsed as JSON (even after fence/think-block stripping and the
+JsonFieldStreamer salvage attempt), the node must have status FAILED.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Synthesis node fails when model returns unparseable output"
+grader = "trajectory"
+node_id = 1
+expect_status = "failed"

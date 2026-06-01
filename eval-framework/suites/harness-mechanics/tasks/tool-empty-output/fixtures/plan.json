@@ -1,0 +1,18 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "tool",
+      "description": "Call eval_noop which always returns {} — this tool must be registered by the exec-plan backend",
+      "tool": "eval_noop",
+      "args_template": {},
+      "context_needed": [],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    }
+  ]
+}

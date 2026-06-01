@@ -1,0 +1,32 @@
+name = "order-topological"
+tags = ["execution-model", "harness-mechanics", "ordering"]
+type = "regression"
+difficulty = 2
+
+expected_behavior = """
+Nodes must execute in topological order (plan.sorted_node_ids).  For a diamond
+DAG (1 → 2, 1 → 3, 2 → 4, 3 → 4) the trajectory must show node 1 before
+nodes 2 and 3, and those before node 4.  Parallelism is allowed between 2 and 3.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Node 1 (root) appears before node 4 (sink)"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"
+
+[[criteria]]
+text = "Node 4 (sink) appears after both branches"
+grader = "trajectory"
+node_id = 4
+expect_status = "completed"
+
+[[criteria]]
+text = "Plan terminates on a result node"
+grader = "trajectory"
+tool_sequence = ["result"]

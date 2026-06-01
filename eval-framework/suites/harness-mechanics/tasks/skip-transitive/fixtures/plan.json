@@ -1,0 +1,60 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "decision",
+      "description": "Is the condition true?",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [],
+      "condition": "Is the condition true?",
+      "branches": {"yes": [2], "no": [3]},
+      "default_branch": "yes",
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    },
+    {
+      "id": 2,
+      "type": "synthesis",
+      "description": "Yes-branch body",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    },
+    {
+      "id": 3,
+      "type": "synthesis",
+      "description": "No-branch body",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    },
+    {
+      "id": 4,
+      "type": "result",
+      "description": "Downstream of node 3 but not listed in either branch — behaviour under test",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [3],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+name = "think-tier2"
+tags = ["llm-node", "harness-mechanics", "tier-routing"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+THINK nodes must run at tier 2 per the deterministic tier-routing table,
+regardless of any global defaults. reasoning_required=true nodes also run at
+tier 2 for the same reason.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Think node ran at tier 2"
+grader = "trajectory"
+node_id = 1
+expect_tier = 2

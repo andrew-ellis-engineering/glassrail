@@ -1,0 +1,34 @@
+[suite]
+name = "harness-mechanics"
+description = """
+Deterministic regression wall for the dagagent executor.  Every task injects a
+fixed plan (no planner in the loop) against a scripted model (no real LLM
+calls) and asserts execution-model behaviour at the envelope level.  A single
+trial is a proof — pass@1 == pass^1 — so failures diagnose executor bugs, not
+model variance.
+
+Infrastructure required (not yet built; see HARNESS_NODE_EVAL_SPEC.md §4):
+  - `dagagent exec-plan <plan.json> --json` CLI command
+  - A `scripted` provider kind (DAGAGENT_TIER0__KIND=scripted) that replays
+    a JSONL file of canned model responses in call order
+  - Envelope enrichments: `args_used` and per-node `output` on each
+    trajectory step
+
+Until that infrastructure lands, tasks in this suite will not run but their
+config and fixtures encode the full spec as a ready-to-execute artefact.
+"""
+default_backend = "dagagent-exec-plan"
+default_model = "scripted"
+default_type = "regression"
+default_timeout_s = 30
+promotion_threshold = 1   # deterministic — no ratchet needed, regression from creation
+
+[backend]
+# `dagagent exec-plan <plan_fixture> --json` skips the planner and runs the
+# executor directly with the injected plan.  The scripted provider replays the
+# JSONL responses file in call order so the run is fully model-free.
+command = ["uv", "run", "dagagent", "exec-plan"]
+
+[backend.env]
+DAGAGENT_TIER0__KIND = "scripted"
+# DAGAGENT_TIER0__SCRIPTED_PATH is set per-task via task-level backend_config.

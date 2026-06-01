@@ -1,0 +1,4 @@
+{"reasoning": "root reasoning", "confidence": 0.9}
+{"output": "left branch output", "confidence": 0.9}
+{"output": "right branch output", "confidence": 0.9}
+{"output": "combined final answer", "confidence": 0.9}

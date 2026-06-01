@@ -1,0 +1,60 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "think",
+      "description": "Root node — gather initial context",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": true,
+      "forced_tier": null,
+      "subplan": null
+    },
+    {
+      "id": 2,
+      "type": "synthesis",
+      "description": "Left branch — process first half",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [1],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    },
+    {
+      "id": 3,
+      "type": "synthesis",
+      "description": "Right branch — process second half",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [1],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    },
+    {
+      "id": 4,
+      "type": "result",
+      "description": "Sink — combine both branches",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [2, 3],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    }
+  ]
+}

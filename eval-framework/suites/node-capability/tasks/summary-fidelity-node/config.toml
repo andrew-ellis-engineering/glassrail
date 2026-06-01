@@ -1,0 +1,59 @@
+name = "summary-fidelity-node"
+tags = ["summary", "node-capability", "fidelity"]
+type = "capability"
+difficulty = 3
+
+expected_behavior = """
+The SUMMARY node must preserve the planted needles (42%, Dr. Elena Voss, 99.7%)
+when summarising the source document and pass them downstream to the result node
+so they appear in the final output.  This tests the summary node in isolation
+from the planner's document-choice decisions — the path is given explicitly.
+
+A correct run reads the document, summarises it preserving all three needles,
+and produces a final answer that includes them.  It must NOT fabricate 99.9%
+uptime (the document says 99.7%).
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+"/tmp/dagagent-eval/brief.md" = "brief.md"
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Preserves the 42% latency reduction needle"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b42%"
+
+[[criteria]]
+text = "Preserves Dr. Elena Voss's name"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)elena\\s+voss"
+
+[[criteria]]
+text = "Does not fabricate 99.9% uptime (document says 99.7%)"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "99\\.9%"
+
+[[criteria]]
+text = "Used file_read on the source document"
+grader = "trajectory"
+tool_sequence = ["file_read"]
+target = "/tmp/dagagent-eval/brief.md"
+
+[[criteria]]
+text = "Summary is faithful to the source — preserves needles and does not fabricate"
+grader = "llm"

@@ -1,0 +1,26 @@
+name = "tool-missing-name"
+tags = ["tool", "harness-mechanics", "error-path"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+A TOOL node with tool=null must fail with status FAILED and an error mentioning
+that the tool name is missing.  Injected with --no-validate to bypass the
+PlanValidator (which would reject this plan before it reaches the executor).
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+# Passes --no-validate to exec-plan so the executor's own error handling is
+# tested, not the validator's.
+[backend_config]
+args = ["--no-validate"]
+
+[[criteria]]
+text = "Tool node with null tool name has FAILED status"
+grader = "trajectory"
+node_id = 1
+expect_status = "failed"

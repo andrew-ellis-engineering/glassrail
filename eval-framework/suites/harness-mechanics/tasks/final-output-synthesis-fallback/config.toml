@@ -1,0 +1,21 @@
+name = "final-output-synthesis-fallback"
+tags = ["execution-model", "harness-mechanics", "final-output"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When a plan has no RESULT node, final_output must fall back to the last
+completed SYNTHESIS node's output.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Final result text comes from the synthesis fallback"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "synthesis fallback sentinel"

@@ -1,0 +1,27 @@
+name = "decision-skip-no-start"
+tags = ["decision", "harness-mechanics", "branch-propagation", "events"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+Skipped nodes must emit NodeFinished(SKIPPED) but must NOT emit NodeStarted.
+The trajectory entry for a skipped node should show status=skipped.
+This is the event-stream companion to decision-skip-untaken.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Skipped node (id=2) shows as skipped in trajectory"
+grader = "trajectory"
+node_id = 2
+expect_status = "skipped"
+
+[[criteria]]
+text = "Taken branch node (id=3) completed"
+grader = "trajectory"
+node_id = 3
+expect_status = "completed"

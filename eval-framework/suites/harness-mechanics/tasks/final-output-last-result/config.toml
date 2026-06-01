@@ -1,0 +1,28 @@
+name = "final-output-last-result"
+tags = ["execution-model", "harness-mechanics", "final-output"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When a plan has two RESULT nodes, the task's final_output must equal the LAST
+completed RESULT node's output, not the first.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Final result text is from the second (last) result node"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "second result sentinel"
+
+[[criteria]]
+text = "Final result text does not contain only the first result node's text"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^first result sentinel$"

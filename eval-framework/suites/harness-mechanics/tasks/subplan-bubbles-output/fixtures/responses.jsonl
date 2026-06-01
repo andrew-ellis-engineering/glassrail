@@ -1,0 +1,2 @@
+{"output": "subplan output sentinel", "confidence": 0.9}
+{"output": "outer answer using subplan output sentinel", "confidence": 0.9}

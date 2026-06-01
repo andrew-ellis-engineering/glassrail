@@ -1,0 +1,32 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "summary",
+      "description": "Summarise the context for downstream consumption",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    },
+    {
+      "id": 2,
+      "type": "result",
+      "description": "Report the summary",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [1],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    }
+  ]
+}

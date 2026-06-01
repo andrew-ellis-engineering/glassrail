@@ -1,0 +1,26 @@
+name = "llm-flag-low-confidence"
+tags = ["llm-node", "harness-mechanics", "confidence", "flagging"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When a model response returns confidence < 0.75 (the default threshold), the
+executor must mark the node as COMPLETED but set flagged=true.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Synthesis node is flagged when confidence is 0.5"
+grader = "trajectory"
+node_id = 1
+expect_flagged = true
+
+[[criteria]]
+text = "Synthesis node is still COMPLETED despite low confidence"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"

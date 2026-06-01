@@ -1,0 +1,46 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "decision",
+      "description": "Is the input value greater than 100?",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [],
+      "condition": "Is the value greater than 100?",
+      "branches": {"yes": [2], "no": [3]},
+      "default_branch": "no",
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    },
+    {
+      "id": 2,
+      "type": "result",
+      "description": "Report: value is large",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    },
+    {
+      "id": 3,
+      "type": "result",
+      "description": "Report: value is small",
+      "tool": null,
+      "args_template": null,
+      "context_needed": [],
+      "condition": null,
+      "branches": null,
+      "default_branch": null,
+      "reasoning_required": false,
+      "forced_tier": null,
+      "subplan": null
+    }
+  ]
+}

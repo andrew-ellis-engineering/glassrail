@@ -1,0 +1,37 @@
+name = "fresh-context-observable"
+tags = ["execution-model", "harness-mechanics", "fresh-context"]
+type = "regression"
+difficulty = 2
+
+expected_behavior = """
+Node B (context_needed=[1]) receives only node 1's output in its context.
+Node C (context_needed=[] — empty) must NOT see node 1's output.
+
+The scripted model echoes its context back as the output.  We assert that C's
+output does NOT contain node 1's sentinel, proving fresh-context isolation is
+observable at the envelope level.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Node 2 (with context from node 1) completed"
+grader = "trajectory"
+node_id = 2
+expect_status = "completed"
+
+[[criteria]]
+text = "Node 3 (empty context_needed) completed"
+grader = "trajectory"
+node_id = 3
+expect_status = "completed"
+
+[[criteria]]
+text = "Node 3 output does not contain node 1's upstream sentinel"
+grader = "deterministic"
+check = "not_regex"
+target = "node:3"
+value = "upstream context sentinel"

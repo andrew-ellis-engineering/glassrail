@@ -1,0 +1,35 @@
+name = "subplan-id-isolation"
+tags = ["subplan", "harness-mechanics", "event-isolation"]
+type = "regression"
+difficulty = 2
+
+expected_behavior = """
+Nested subplan node IDs must NOT appear in the parent trajectory.  The parent
+trajectory should only contain the outer nodes (id=1 subplan, id=2 result).
+Inner node ids (id=1 in the nested plan) must not leak.
+
+The parent and subplan share node id=1; the trajectory must not show two
+separate completions for id=1 — the nested run uses emit=False.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Parent subplan node (id=1) completed"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"
+
+[[criteria]]
+text = "Outer result node (id=2) completed"
+grader = "trajectory"
+node_id = 2
+expect_status = "completed"
+
+[[criteria]]
+text = "Plan terminates on a result node"
+grader = "trajectory"
+tool_sequence = ["result"]

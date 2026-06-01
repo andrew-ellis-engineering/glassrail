@@ -1,0 +1,20 @@
+name = "subplan-empty"
+tags = ["subplan", "harness-mechanics", "error-path"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When a subplan's nested execution produces no final_output (e.g. no result
+node completes), the SUBPLAN node must have status EMPTY, not FAILED.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Subplan node has EMPTY status when nested plan yields no final_output"
+grader = "trajectory"
+node_id = 1
+expect_status = "empty"

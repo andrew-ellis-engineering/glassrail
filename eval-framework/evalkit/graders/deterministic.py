@@ -19,10 +19,25 @@ def _resolve(criterion: Criterion, trial: Trial) -> tuple[str | None, bool]:
 
     ``present`` is False when the target file was never captured or came back
     absent (None). ``__result_text__`` is always present.
+
+    ``node:<id>`` targets the ``output`` field of the matching trajectory step,
+    enabling per-node output assertions in the harness-mechanics suite.
     """
     target = criterion.target
     if target == RESULT_TEXT_TARGET:
         return trial.result_text, True
+    if target is not None and target.startswith("node:"):
+        try:
+            nid = int(target[5:])
+        except ValueError:
+            return None, False
+        for step in trial.trajectory:
+            if step.get("node_id") == nid:
+                output = step.get("output")
+                if output is None:
+                    return None, False
+                return str(output), True
+        return None, False
     if target is None:
         return None, False
     content = trial.side_effects.get(target)

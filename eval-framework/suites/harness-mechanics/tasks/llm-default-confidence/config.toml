@@ -1,0 +1,27 @@
+name = "llm-default-confidence"
+tags = ["llm-node", "harness-mechanics", "confidence"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When a model response omits the 'confidence' field, the executor applies
+per-type defaults: think=0.7, all others=0.9. A node with default confidence
+0.9 is above the 0.75 threshold so it must NOT be flagged.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Synthesis node with no confidence field is not flagged"
+grader = "trajectory"
+node_id = 1
+expect_flagged = false
+
+[[criteria]]
+text = "Synthesis node completed"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"
