@@ -37,9 +37,10 @@ target = "__result_text__"
 value = "(?i)\\beven\\b"
 
 [[criteria]]
-text = "Plan used a decision node to branch on the even/odd condition"
+text = "Plan used a decision node and it took the 'yes' (even) branch"
 grader = "trajectory"
 tool_sequence = ["decision"]
+expect_branch_taken = "yes"
 
 [[criteria]]
 text = "Correctly took the even branch and reported half as 123"

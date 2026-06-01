@@ -1,0 +1,52 @@
+name = "synthesis-fuse-inputs"
+tags = ["synthesis", "node-capability"]
+type = "capability"
+difficulty = 3
+
+expected_behavior = """
+A synthesis (or result) node receiving two independent facts must include BOTH
+in its output — it must not drop one of its context_needed inputs.  The two
+facts are given explicitly in the prompt; a plan that reads any file or uses
+any tool is over-engineering the task.
+
+The guard here is against a SYNTHESIS node that silently drops one upstream
+input when combining: both the 73% cache hit rate AND the 42ms response time
+must survive into the final answer.  Under exec-plan this would assert on the
+synthesis node's own output (node:<id>); today it grades __result_text__.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Preserves the 73% cache hit rate figure"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b73%"
+
+[[criteria]]
+text = "Preserves the 42ms response time figure"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b42\\s*ms"
+
+[[criteria]]
+text = "Did not call file_read (no files involved)"
+grader = "trajectory"
+tool_sequence = ["file_read"]
+value = "absent"
+
+[[criteria]]
+text = "Combines both figures in a single coherent statement without inventing new numbers"
+grader = "llm"

@@ -1,0 +1,28 @@
+name = "forced-tier-override"
+tags = ["llm-node", "harness-mechanics", "tier-routing"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+forced_tier must win over all type-based routing rules.  A THINK node normally
+routes to tier 2 (reasoning path); with forced_tier=0 it must run at tier 0
+instead.  This pins the highest-priority branch of _select_tier (executor.py)
+which is otherwise completely untested.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Think node with forced_tier=0 ran at tier 0 (overrides THINK default of tier 2)"
+grader = "trajectory"
+node_id = 1
+expect_tier = 0
+
+[[criteria]]
+text = "Think node completed"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"

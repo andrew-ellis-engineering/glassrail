@@ -2,7 +2,8 @@
 
 Presence mode (default): the expected ``tool_sequence`` must appear as a
 subsequence (order preserved, gaps allowed). If ``target`` is given, one of
-those tool calls must reference that path.
+those tool calls must reference that path.  If ``expect_branch_taken`` is
+given, the first step matching the sequence is checked for that branch label.
 
 Absent mode (``value = "absent"``): NONE of ``tool_sequence`` may appear — or,
 if no ``tool_sequence`` is given, the trajectory must be entirely empty. This
@@ -11,7 +12,8 @@ is the primary check for no-tool commands; never mistake it for a missing
 
 Node-targeted mode (``node_id`` set): asserts per-step envelope fields
 (``expect_branch``, ``expect_status``, ``expect_tier``, ``expect_flagged``,
-``expect_args_contains``) on the specific node identified by ``node_id``.
+``expect_args_contains``, ``expect_before``, ``expect_after``) on the specific
+node identified by ``node_id``.
 """
 
 from __future__ import annotations
@@ -72,9 +74,48 @@ def _find_node(trajectory: list[dict[str, Any]], node_id: int) -> dict[str, Any]
     return None
 
 
+def _find_node_index(trajectory: list[dict[str, Any]], node_id: int) -> int | None:
+    for i, step in enumerate(trajectory):
+        if step.get("node_id") == node_id:
+            return i
+    return None
+
+
 def _grade_node_targeted(criterion: Criterion, trial: Trial) -> CriterionResult:
     """Handle node_id-targeted assertions on a single trajectory step."""
     assert criterion.node_id is not None
+
+    if criterion.expect_before is not None or criterion.expect_after is not None:
+        my_idx = _find_node_index(trial.trajectory, criterion.node_id)
+        if my_idx is None:
+            return _result(criterion, False, f"node {criterion.node_id} not found in trajectory")
+
+        if criterion.expect_before is not None:
+            violations = [
+                nid for nid in criterion.expect_before
+                if (other := _find_node_index(trial.trajectory, nid)) is not None
+                and other <= my_idx
+            ]
+            ok = len(violations) == 0
+            return _result(
+                criterion, ok,
+                (f"node {criterion.node_id} precedes all of {criterion.expect_before}" if ok
+                 else f"node(s) {violations} ran at or before node {criterion.node_id}"),
+            )
+
+        if criterion.expect_after is not None:
+            violations = [
+                nid for nid in criterion.expect_after
+                if (other := _find_node_index(trial.trajectory, nid)) is not None
+                and other >= my_idx
+            ]
+            ok = len(violations) == 0
+            return _result(
+                criterion, ok,
+                (f"node {criterion.node_id} follows all of {criterion.expect_after}" if ok
+                 else f"node(s) {violations} ran at or after node {criterion.node_id}"),
+            )
+
     step = _find_node(trial.trajectory, criterion.node_id)
     if step is None:
         return _result(criterion, False, f"node {criterion.node_id} not found in trajectory")
@@ -149,4 +190,22 @@ def grade(criterion: Criterion, trial: Trial) -> CriterionResult:
         return _result(criterion, False, f"expected subsequence {seq} not found in {names}")
     if criterion.target is not None and not _references_target(trial.trajectory, seq, criterion.target):
         return _result(criterion, False, f"no {seq} call referenced {criterion.target}")
-    return _result(criterion, True, f"{seq} present" + (f" on {criterion.target}" if criterion.target else ""))
+
+    # Optional: check branch_taken on the first step matching the sequence.
+    if criterion.expect_branch_taken is not None:
+        match = next((s for s in trial.trajectory if str(s.get("tool", "")) in seq), None)
+        if match is None:
+            return _result(criterion, False, "no matching step found for branch_taken check")
+        actual = match.get("branch_taken")
+        if actual != criterion.expect_branch_taken:
+            return _result(
+                criterion, False,
+                f"branch_taken={actual!r}, want {criterion.expect_branch_taken!r}",
+            )
+
+    return _result(
+        criterion, True,
+        f"{seq} present"
+        + (f" on {criterion.target}" if criterion.target else "")
+        + (f" branch_taken={criterion.expect_branch_taken!r}" if criterion.expect_branch_taken else ""),
+    )

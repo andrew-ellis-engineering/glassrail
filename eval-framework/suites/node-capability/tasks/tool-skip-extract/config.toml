@@ -1,0 +1,44 @@
+name = "tool-skip-extract"
+tags = ["tool", "node-capability", "control-pair"]
+type = "capability"
+difficulty = 3
+control_for = "tool-extract-args"
+
+expected_behavior = """
+When a question is answerable from general knowledge, the agent must NOT call
+file_read.  The answer (HTTPS default port 443) is a well-known fact; reading
+a config file would be unnecessary and wrong.
+
+Control twin of tool-extract-args: together they guard both the always-reads
+and never-reads degenerate strategies.  A model that always calls file_read
+fails this task; one that never calls file_read fails tool-extract-args.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Reports 443"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b443\\b"
+
+[[criteria]]
+text = "Did not call file_read (answer comes from general knowledge)"
+grader = "trajectory"
+tool_sequence = ["file_read"]
+value = "absent"
+
+[[criteria]]
+text = "Answers 443 from general knowledge without reading any file"
+grader = "llm"

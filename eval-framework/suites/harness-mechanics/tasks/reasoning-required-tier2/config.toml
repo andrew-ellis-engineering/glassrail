@@ -1,0 +1,28 @@
+name = "reasoning-required-tier2"
+tags = ["llm-node", "harness-mechanics", "tier-routing"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+A SYNTHESIS node with reasoning_required=true must route to tier 2 per
+_select_tier (executor.py).  This is a SEPARATE branch from THINK→tier 2:
+_select_tier checks reasoning_required AFTER the node-type check, so a bug
+that collapses or reorders those branches would pass think-tier2 but fail here.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Synthesis node with reasoning_required=true ran at tier 2"
+grader = "trajectory"
+node_id = 1
+expect_tier = 2
+
+[[criteria]]
+text = "Synthesis node completed"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"

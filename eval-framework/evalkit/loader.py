@@ -55,6 +55,8 @@ def _parse_criteria(raw: list[dict[str, Any]], task_dir: Path) -> list[Criterion
         if grader not in ("deterministic", "trajectory", "llm"):
             raise LoaderError(f"{task_dir}: criterion '{c['text']}' has unknown grader '{grader}'")
         raw_flagged = c.get("expect_flagged")
+        raw_before = c.get("expect_before")
+        raw_after = c.get("expect_after")
         criteria.append(
             Criterion(
                 text=str(c["text"]),
@@ -69,6 +71,9 @@ def _parse_criteria(raw: list[dict[str, Any]], task_dir: Path) -> list[Criterion
                 expect_tier=int(c["expect_tier"]) if c.get("expect_tier") is not None else None,
                 expect_flagged=bool(raw_flagged) if raw_flagged is not None else None,
                 expect_args_contains=c.get("expect_args_contains"),
+                expect_before=[int(x) for x in raw_before] if raw_before is not None else None,
+                expect_after=[int(x) for x in raw_after] if raw_after is not None else None,
+                expect_branch_taken=c.get("expect_branch_taken"),
             )
         )
     return criteria

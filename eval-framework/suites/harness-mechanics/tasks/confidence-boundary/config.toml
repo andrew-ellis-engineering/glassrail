@@ -1,0 +1,29 @@
+name = "confidence-boundary"
+tags = ["llm-node", "harness-mechanics", "confidence"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+The confidence flagging threshold is strict-less-than 0.75 (executor.py).
+A node returning exactly confidence=0.75 must NOT be flagged.
+This pins the boundary: an off-by-one change (<= instead of <) would flip this.
+Companion to llm-flag-low-confidence (0.5 → flagged) and
+llm-default-confidence (absent → default 0.9 → not flagged).
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Synthesis node with confidence=0.75 is NOT flagged (threshold is strict <)"
+grader = "trajectory"
+node_id = 1
+expect_flagged = false
+
+[[criteria]]
+text = "Synthesis node completed"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"

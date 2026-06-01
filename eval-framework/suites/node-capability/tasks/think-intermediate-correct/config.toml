@@ -1,0 +1,44 @@
+name = "think-intermediate-correct"
+tags = ["think", "node-capability"]
+type = "capability"
+difficulty = 4
+
+expected_behavior = """
+A chained arithmetic problem where an error in an intermediate step propagates
+to the final answer.  The plan should include a think or reasoning node for the
+multi-step calculation.  Both the intermediate value (24 bays total) and the
+final value (600 shipments/day) must be correct — a model that guesses or
+short-circuits the intermediate step will produce a wrong final answer.
+
+Under exec-plan this would assert expect_tier=2 on the think node and check
+the intermediate via node:<id>.  Today it checks the trajectory for a think
+step and grades the final answer for both values.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Reports the correct final capacity of 600 shipments per day"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b600\\b"
+
+[[criteria]]
+text = "Plan included a think or reasoning node for the multi-step calculation"
+grader = "trajectory"
+tool_sequence = ["think"]
+
+[[criteria]]
+text = "Correctly computes total bays (24) and total capacity (600) with correct intermediate steps"
+grader = "llm"

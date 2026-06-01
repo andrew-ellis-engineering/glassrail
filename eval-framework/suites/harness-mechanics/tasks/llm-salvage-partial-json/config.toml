@@ -1,0 +1,39 @@
+name = "llm-salvage-partial-json"
+tags = ["llm-node", "harness-mechanics", "error-path", "salvage"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When a RESULT node receives truncated JSON (e.g. closing brace/quote missing),
+the executor's JsonFieldStreamer salvage path must extract the partial 'output'
+value and mark the node COMPLETED with the default confidence — not FAILED.
+The salvaged text must appear in the final task result.
+
+This is the complementary path to llm-invalid-json (which tests the
+unsalvageable case that still results in FAILED).
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result (salvage succeeded)"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Salvaged text appears in the final output"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "salvaged partial sentinel"
+
+[[criteria]]
+text = "Result node completed (not failed) despite truncated JSON"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"

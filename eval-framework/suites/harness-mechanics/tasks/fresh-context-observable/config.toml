@@ -4,12 +4,18 @@ type = "regression"
 difficulty = 2
 
 expected_behavior = """
-Node B (context_needed=[1]) receives only node 1's output in its context.
-Node C (context_needed=[] — empty) must NOT see node 1's output.
+The fresh-context isolation guarantee (each node sees only the outputs of its
+context_needed ids) is verified at the object level in tests/property — that
+test randomises plans and asserts no out-of-context content leaks into assembled
+prompts.  This task is the envelope-observable companion: it confirms all three
+nodes complete in the expected status.
 
-The scripted model echoes its context back as the output.  We assert that C's
-output does NOT contain node 1's sentinel, proving fresh-context isolation is
-observable at the envelope level.
+The original not_regex criterion was removed: with scripted responses the canned
+output is fixed regardless of what context the harness assembled, so it cannot
+prove isolation — only repeat the fixture value.  Making this a real isolation
+probe requires the scripted provider to echo the actual assembled prompt it
+received (an 'echo' mode, not yet implemented).  Until then isolation is owned
+by tests/property; this task is a precondition smoke check only.
 """
 
 [fixtures]
@@ -18,7 +24,13 @@ capture = []
 [fixtures.install]
 
 [[criteria]]
-text = "Node 2 (with context from node 1) completed"
+text = "Node 1 (upstream producer) completed"
+grader = "trajectory"
+node_id = 1
+expect_status = "completed"
+
+[[criteria]]
+text = "Node 2 (context_needed=[1]) completed"
 grader = "trajectory"
 node_id = 2
 expect_status = "completed"
@@ -28,10 +40,3 @@ text = "Node 3 (empty context_needed) completed"
 grader = "trajectory"
 node_id = 3
 expect_status = "completed"
-
-[[criteria]]
-text = "Node 3 output does not contain node 1's upstream sentinel"
-grader = "deterministic"
-check = "not_regex"
-target = "node:3"
-value = "upstream context sentinel"

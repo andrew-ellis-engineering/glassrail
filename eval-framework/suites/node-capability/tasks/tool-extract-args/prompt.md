@@ -1,1 +1,1 @@
-The ops team keeps two config files on this host. The application config is at /tmp/dagagent-eval/app.conf. The backup system has its own config at /tmp/dagagent-eval/backup.conf. How many days of retention is the backup system configured to keep?
+The ops team runs two configs in /tmp/dagagent-eval/ — one for the main application and one for the backup service. What retention period (in days) is the backup service configured to use?

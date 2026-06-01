@@ -7,6 +7,7 @@ expected_behavior = """
 When the decision model returns invalid JSON (non-parseable output), the
 executor must fall back to node.default_branch and set confidence=0.0.
 The node must still complete rather than propagating the error as FAILED.
+Confidence 0.0 < 0.75 threshold so the node must also be flagged=true.
 """
 
 [fixtures]
@@ -25,3 +26,9 @@ text = "Decision node completed despite parse failure"
 grader = "trajectory"
 node_id = 1
 expect_status = "completed"
+
+[[criteria]]
+text = "Decision node is flagged when confidence is 0.0 (below 0.75 threshold)"
+grader = "trajectory"
+node_id = 1
+expect_flagged = true

@@ -38,6 +38,10 @@ class Criterion:
     expect_tier: int | None = None           # assert tier_used value
     expect_flagged: bool | None = None       # assert flagged state
     expect_args_contains: str | None = None  # assert string present in args_used
+    expect_before: list[int] | None = None   # this node's index < all listed node indices
+    expect_after: list[int] | None = None    # this node's index > all listed node indices
+    # Presence-mode (tool_sequence) addition — no node_id required:
+    expect_branch_taken: str | None = None   # check branch_taken on first matching step
 
 
 @dataclass
