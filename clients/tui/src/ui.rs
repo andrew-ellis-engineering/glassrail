@@ -14,6 +14,16 @@ use crate::graph::GraphNode;
 use crate::transcript::Cell;
 
 pub fn render<O: Outbound>(frame: &mut Frame, app: &App<O>) {
+    // Minimum size gate: anything smaller can't render a usable layout.
+    if frame.area().width < 40 || frame.area().height < 8 {
+        let msg = Paragraph::new("Terminal too small — resize to at least 40×8")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::Yellow));
+        frame.render_widget(Clear, frame.area());
+        frame.render_widget(msg, frame.area());
+        return;
+    }
+
     let composer_h = composer_height(&app.composer, frame.area().width);
     let chunks = Layout::vertical([
         Constraint::Length(1),
@@ -65,7 +75,16 @@ fn render_status(
         }
         Status::AwaitingApproval => ("⏸ awaiting approval".to_string(), Color::Magenta),
     };
-    let line = Line::from(vec![
+
+    // Context-sensitive hints shown right-aligned so they don't burn the full line.
+    let hints: &str = match status {
+        Status::Ready => "Tab:graph  t:thoughts  g:top  G:tail  ?:keys",
+        Status::Working => "Esc:cancel",
+        Status::AwaitingApproval => "a:approve  r:reject  e:reject+feedback",
+    };
+    let hint_w = hints.chars().count() as u16 + 1; // +1 for right margin
+
+    let left_line = Line::from(vec![
         Span::styled(
             " dagagent ",
             Style::default()
@@ -76,7 +95,20 @@ fn render_status(
         Span::raw("  "),
         Span::styled(label, Style::default().fg(color)),
     ]);
-    frame.render_widget(Paragraph::new(line), area);
+    let right_line = Line::from(Span::styled(
+        format!("{hints} "),
+        Style::default().add_modifier(Modifier::DIM),
+    ));
+
+    // Only show hints if there's enough room (left brand+status takes ~20 chars).
+    if area.width > hint_w + 20 {
+        let parts =
+            Layout::horizontal([Constraint::Min(1), Constraint::Length(hint_w)]).split(area);
+        frame.render_widget(Paragraph::new(left_line), parts[0]);
+        frame.render_widget(Paragraph::new(right_line), parts[1]);
+    } else {
+        frame.render_widget(Paragraph::new(left_line), area);
+    }
 }
 
 fn render_body(
@@ -165,6 +197,11 @@ fn render_dag(frame: &mut Frame, area: Rect, graph: &[GraphNode]) {
     );
 }
 
+/// Dim style for secondary/muted content. Uses the terminal's default
+/// foreground + DIM rather than a hard-coded DarkGray, so it degrades
+/// gracefully on both dark and light terminal themes.
+const MUTED: Style = Style::new().add_modifier(Modifier::DIM);
+
 fn render_transcript(
     frame: &mut Frame,
     area: Rect,
@@ -174,12 +211,17 @@ fn render_transcript(
 ) {
     let inner_w = area.width.saturating_sub(2).max(1) as usize;
     let mut lines: Vec<Line> = Vec::new();
-    // Count how many Thought cells exist so we can show a summary when collapsed.
-    let thought_count = transcript
-        .iter()
-        .filter(|c| matches!(c, Cell::Thought(_)))
-        .count();
+
+    // Track whether the previous cell was a Thought so collapsed runs are
+    // emitted once per contiguous group rather than once globally.
+    let mut in_thought_run = false;
+
     for cell in transcript {
+        // Any non-Thought cell ends the current thought run.
+        if !matches!(cell, Cell::Thought(_)) {
+            in_thought_run = false;
+        }
+
         match cell {
             Cell::Prompt(text) => lines.extend(wrap_styled(
                 &format!("❯ {text}"),
@@ -189,16 +231,25 @@ fn render_transcript(
                     .add_modifier(Modifier::BOLD),
             )),
             Cell::Message(text) => {
-                for raw in text.split('\n') {
-                    lines.extend(wrap_styled(raw, inner_w, Style::default()));
+                // Final answer: highest visual weight. Bold + green bullet
+                // so the eye can jump straight to the answer on scrollback.
+                for (i, raw) in text.split('\n').enumerate() {
+                    let prefix = if i == 0 { "● " } else { "  " };
+                    lines.extend(wrap_styled(
+                        &format!("{prefix}{raw}"),
+                        inner_w,
+                        Style::default().add_modifier(Modifier::BOLD),
+                    ));
                 }
             }
             Cell::Synthesis(text) => {
+                // Intermediate synthesis/summary: clearly secondary, but not
+                // as faded as thoughts. Magenta avoids the blue used by tools.
                 for raw in text.split('\n') {
                     lines.extend(wrap_styled(
                         &format!("↻ {raw}"),
                         inner_w,
-                        Style::default().fg(Color::Blue).add_modifier(Modifier::DIM),
+                        Style::default().fg(Color::Magenta),
                     ));
                 }
             }
@@ -208,35 +259,20 @@ fn render_transcript(
                         lines.extend(wrap_styled(
                             &format!("> {raw}"),
                             inner_w,
-                            Style::default()
-                                .fg(Color::DarkGray)
-                                .add_modifier(Modifier::ITALIC),
+                            MUTED.add_modifier(Modifier::ITALIC),
                         ));
                     }
                 } else {
-                    // Collapsed: show a single summary header the first time,
-                    // skip subsequent Thought cells (they're all bundled in the header).
-                    let already_shown = lines.iter().any(|l| {
-                        l.spans
-                            .first()
-                            .map(|s| s.content.starts_with("⟩"))
-                            .unwrap_or(false)
-                    });
-                    if !already_shown {
-                        let label = if thought_count == 1 {
-                            "⟩ thinking (t to expand)".to_string()
-                        } else {
-                            format!("⟩ thinking ×{thought_count} (t to expand)")
-                        };
+                    // Collapsed: emit one header per contiguous run of Thought
+                    // cells, not one header for the entire transcript.
+                    if !in_thought_run {
                         lines.push(Line::from(Span::styled(
-                            label,
-                            Style::default()
-                                .fg(Color::DarkGray)
-                                .add_modifier(Modifier::ITALIC),
+                            "⟩ thinking  (t to expand)",
+                            MUTED.add_modifier(Modifier::ITALIC),
                         )));
+                        in_thought_run = true;
                     }
-                    // Skip the blank separator for collapsed thoughts so they
-                    // don't leave multiple blank lines.
+                    // Skip the blank separator for collapsed thoughts.
                     continue;
                 }
             }
@@ -247,42 +283,28 @@ fn render_transcript(
                 output,
             } => {
                 let mut spans = vec![
-                    Span::styled("⚙ ", Style::default().fg(Color::Blue)),
+                    Span::styled("⚙ ", Style::default().fg(Color::Cyan)),
                     Span::raw(title.clone()),
                 ];
                 if !args.is_empty() {
-                    spans.push(Span::styled(
-                        format!("  ({args})"),
-                        Style::default().fg(Color::DarkGray),
-                    ));
+                    spans.push(Span::styled(format!("  ({args})"), MUTED));
                 }
-                spans.push(Span::styled(
-                    format!("  [{status}]"),
-                    Style::default().fg(Color::DarkGray),
-                ));
+                spans.push(Span::styled(format!("  [{status}]"), MUTED));
                 lines.extend(wrap_line(Line::from(spans), inner_w));
                 if let Some(out) = output {
-                    lines.extend(wrap_styled(
-                        &format!("  ↳ {out}"),
-                        inner_w,
-                        Style::default().fg(Color::DarkGray),
-                    ));
+                    lines.extend(wrap_styled(&format!("  ↳ {out}"), inner_w, MUTED));
                 }
             }
-            Cell::Meta(text) => lines.extend(wrap_styled(
-                &format!("  {text}"),
-                inner_w,
-                Style::default()
-                    .fg(Color::DarkGray)
-                    .add_modifier(Modifier::DIM),
-            )),
-            Cell::Notice(text) => lines.extend(wrap_styled(
-                text,
-                inner_w,
-                Style::default()
-                    .fg(Color::DarkGray)
-                    .add_modifier(Modifier::ITALIC),
-            )),
+            Cell::Meta(text) => {
+                lines.extend(wrap_styled(&format!("  {text}"), inner_w, MUTED));
+            }
+            Cell::Notice(text) => {
+                lines.extend(wrap_styled(
+                    text,
+                    inner_w,
+                    MUTED.add_modifier(Modifier::ITALIC),
+                ));
+            }
         }
         lines.push(Line::raw(""));
     }

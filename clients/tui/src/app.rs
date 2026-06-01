@@ -176,6 +176,11 @@ impl<O: Outbound> App<O> {
             KeyCode::Char('t') if self.composer.is_empty() => {
                 self.thoughts_open = !self.thoughts_open
             }
+            // Ctrl-T works regardless of composer content (no conflict with typing).
+            KeyCode::Char('t') if ctrl => self.thoughts_open = !self.thoughts_open,
+            // g/G: jump transcript to top / tail (Vim convention).
+            KeyCode::Char('g') if self.composer.is_empty() => self.scrollback = u16::MAX,
+            KeyCode::Char('G') if self.composer.is_empty() => self.scrollback = 0,
             KeyCode::Char(c) => self.insert_char(c),
             KeyCode::Backspace => self.backspace(),
             KeyCode::Delete => self.delete(),
