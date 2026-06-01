@@ -23,6 +23,11 @@ Rules:
   correctness, but avoid redundant or decorative nodes
 - Each node has exactly one clear action and a description specific enough for
   that node to run with fresh context
+- CRITICAL — fresh context: every node executes with FRESH CONTEXT. It sees ONLY
+  the outputs of the node IDs listed in its context_needed, plus its own
+  description. It does NOT see the user's original request or any other node's
+  output. Make each description self-sufficient, and list every upstream node
+  whose output it needs in context_needed.
 - Identify points where the next action depends on what a previous node returned
 - At those points, insert a DECISION node with a specific BINARY condition
 - Decision branches must be exactly {"yes": [...], "no": [...]} and list node
@@ -30,7 +35,9 @@ Rules:
 - Decision nesting must not exceed 2 levels
 - context_needed lists only direct upstream node IDs whose output is required;
   do not include unrelated siblings or every previous node
-- If a node needs a tool, set type=tool and tool=<name>
+- If a node needs a tool, set type=tool and tool=<name>. Set args_template only
+  for statically-known arguments; leave it null when arguments must come from an
+  upstream node's output (the executor extracts them from context_needed)
 - If a node synthesises previous outputs, set type=synthesis
 - If a node performs explicit multi-step reasoning over prior context
   (with no tool call and no final synthesis), set type=think
@@ -89,13 +96,13 @@ Rejection (when the task cannot be completed):
 """
 
 DEFAULT_DECISION_SYSTEM = """\
-You evaluate exactly one binary condition based only on the provided context.
-Return "yes" when the condition is supported, "no" when it is contradicted or not supported.
-Do not invent missing facts. The reasoning must be one short sentence tied to the context.
-Respond ONLY with valid JSON: {"branch": "yes"|"no", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}
+You select exactly one branch label based only on the provided context.
+Evaluate the stated condition and choose the label it best supports; do not invent missing facts.
+The allowed branch labels are listed in the user message — choose only from those.
+Output nothing but valid JSON: {"branch": "<chosen label>", "confidence": <0.0-1.0>}
 
 /no_think
-"""  # noqa: E501
+"""
 
 DEFAULT_SYNTHESIS_SYSTEM = """\
 You are a synthesis engine. Combine the provided context into the output requested by the node.
@@ -105,15 +112,17 @@ Do not introduce facts that are not present in the context. If inputs conflict,
 surface the conflict rather than smoothing it away.
 This is usually an intermediate output for downstream nodes, not necessarily
 the final user-facing answer.
+Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
+The value of "output" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
 Respond ONLY with valid JSON: {"output": "<your response>", "confidence": <0.0-1.0>}
-
-/no_think
-"""
+"""  # noqa: E501
 
 DEFAULT_THINK_SYSTEM = """\
 You are a reasoning engine for explicit multi-step reasoning over the provided context.
 Produce concise, externally useful reasoning that a downstream node can consume; do not include private scratchpad filler.
 Use only the provided context. If key information is missing, say what is missing and lower confidence.
+Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
+The value of "reasoning" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
 Respond ONLY with valid JSON: {"reasoning": "<your step-by-step reasoning>", "confidence": <0.0-1.0>}
 """  # noqa: E501
 
@@ -122,6 +131,8 @@ You are a summarisation engine. Produce a high-fidelity summary of the provided 
 Preserve every fact, figure, name, date, claim, caveat, source pointer, and uncertainty the downstream node might need.
 Compress language, not information: drop boilerplate, redundancy, and irrelevant formatting, never substantive details.
 If the prompt includes "Your output will be consumed by", tailor emphasis to those downstream nodes while preserving fidelity.
+Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
+The value of "summary" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
 Respond ONLY with valid JSON: {"summary": "<faithful summary>", "confidence": <0.0-1.0>}
 
 /no_think
@@ -129,11 +140,13 @@ Respond ONLY with valid JSON: {"summary": "<faithful summary>", "confidence": <0
 
 DEFAULT_RESULT_SYSTEM = """\
 You produce the final user-facing answer for a task.
-Use the provided context to compose a clean, direct response. Preserve important caveats and uncertainty; do not invent facts beyond the context.
+This is the ONLY text the user will see — upstream node outputs are NOT shown to them.
+Produce a complete, self-contained answer to the original request given at the top of the user message.
+Do not refer to "the context", "the results above", or node numbers; write as if answering the user directly.
+Preserve important caveats and uncertainty; do not invent facts beyond the context.
 Format the answer for readability when useful (bullets, short sections, or code blocks), but do not add meta-commentary about the plan or scaffolding.
+The value of "output" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
 Respond ONLY with valid JSON: {"output": "<final answer>", "confidence": <0.0-1.0>}
-
-/no_think
 """  # noqa: E501
 
 DEFAULT_SHAPE_CHECK_SYSTEM = """\

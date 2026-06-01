@@ -403,12 +403,15 @@ class Executor:
         tier: int,
     ) -> NodeResult:
         ctx = assemble_context(node, state.results)
+        allowed = list(node.branches.keys()) if node.branches else ["yes", "no"]
         messages: list[Message] = [
             {"role": "system", "content": self._settings.prompts.decision},
             {
                 "role": "user",
                 "content": (
-                    f"Condition to evaluate: {node.condition}\n\nAvailable context:\n{ctx}"
+                    f"Condition to evaluate: {node.condition}\n"
+                    f"Allowed branches: {allowed}\n\n"
+                    f"Available context:\n{ctx}"
                 ),
             },
         ]
@@ -477,11 +480,19 @@ class Executor:
             else []
         )
         ctx = assemble_context(node, state.results, dependent_nodes=dependents or None)
+        # For the result node, prepend the original user request so the model
+        # knows what question it is directly answering (each node runs with fresh
+        # context and would otherwise only see the planner-written description).
+        task_prefix = (
+            f"Original user request: {state.user_request}\n\n"
+            if node.type is NodeType.RESULT
+            else ""
+        )
         messages: list[Message] = [
             {"role": "system", "content": self._node_system_prompt(node.type)},
             {
                 "role": "user",
-                "content": f"Task: {node.description}\n\n{spec.context_label}\n{ctx}",
+                "content": f"{task_prefix}Task: {node.description}\n\n{spec.context_label}\n{ctx}",
             },
         ]
         stream = self._router.complete(
@@ -495,7 +506,23 @@ class Executor:
                 raw, tokens = await self._stream_llm_node(node, state, stream, spec, bus)
             else:
                 raw, tokens = await collect(stream)
-            data = json.loads(raw)
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                # Local models occasionally wrap their JSON in prose or leave the
+                # object unclosed. Try to salvage the output field via the streaming
+                # extractor before giving up entirely.
+                streamer = JsonFieldStreamer(spec.output_key)
+                salvaged = streamer.feed(raw)
+                if salvaged:
+                    log.warning(
+                        "Node %d: JSON parse failed; salvaged %r field via streamer",
+                        node.id,
+                        spec.output_key,
+                    )
+                    data = {spec.output_key: salvaged}
+                else:
+                    raise
             output = data.get(spec.output_key, raw)
             confidence = float(data.get("confidence", spec.default_confidence))
         except Exception as exc:
