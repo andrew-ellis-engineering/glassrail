@@ -14,9 +14,10 @@ Nested fields use the double-underscore delimiter, e.g.
 
 from __future__ import annotations
 
+from enum import StrEnum
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -131,6 +132,35 @@ class ToolsSettings(BaseModel):
     web: WebToolConfig = WebToolConfig()
 
 
+class ToolApprovalPolicy(StrEnum):
+    """Per-tool approval behavior."""
+
+    ALLOW = "allow"
+    ASK = "ask"
+    DENY = "deny"
+
+
+class ToolApprovalMode(StrEnum):
+    """How to interpret approval policies for this execution surface."""
+
+    INTERACTIVE = "interactive"
+    AUTO = "auto"
+
+
+class ToolApprovalSettings(BaseModel):
+    """Operator policy for tool execution approval."""
+
+    default: ToolApprovalPolicy = ToolApprovalPolicy.ALLOW
+    """Policy for tools without an override."""
+    mode: ToolApprovalMode = ToolApprovalMode.INTERACTIVE
+    """In auto mode, ask is interpreted as allow; deny still denies."""
+    overrides: dict[str, ToolApprovalPolicy] = Field(default_factory=dict)
+    """Per-tool policy overrides, keyed by tool name."""
+
+    def policy_for(self, tool_name: str) -> ToolApprovalPolicy:
+        return self.overrides.get(tool_name, self.default)
+
+
 _DEFAULT_TIER0 = TierConfig(
     base_url="http://localhost:8080/v1",
     model="qwen3.6-35b-moe",
@@ -211,6 +241,7 @@ class Settings(BaseSettings):
 
     # ── HITL ─────────────────────────────────────────────────────────────
     confirm_plans: bool = False
+    tool_approval: ToolApprovalSettings = ToolApprovalSettings()
 
     # ── Observability ────────────────────────────────────────────────────
     # Tracing is a no-op unless turned on here. Setting an OTLP endpoint

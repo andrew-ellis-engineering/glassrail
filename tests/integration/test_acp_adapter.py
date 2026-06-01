@@ -32,6 +32,7 @@ from dagagent.events import (
     TaskCompleted,
 )
 from dagagent.executor import Orchestrator
+from dagagent.executor.tool_approval import ToolApprovalBroker
 from dagagent.gateways.acp.protocol import Connection, JsonRpcError
 from dagagent.gateways.acp.server import AcpServer
 from dagagent.gateways.acp.session import Session
@@ -253,6 +254,8 @@ def _build_gating_server(conn: Connection) -> tuple[AcpServer, _GatingOrchestrat
 
 _APPROVE: dict[str, Any] = {"outcome": {"outcome": "selected", "optionId": "approve"}}
 _REJECT: dict[str, Any] = {"outcome": {"outcome": "selected", "optionId": "reject"}}
+_ALLOW_ONCE: dict[str, Any] = {"outcome": {"outcome": "selected", "optionId": "allow_once"}}
+_ALWAYS_ALLOW: dict[str, Any] = {"outcome": {"outcome": "selected", "optionId": "always_allow"}}
 _CANCEL: dict[str, Any] = {"outcome": {"outcome": "cancelled"}}
 
 
@@ -314,6 +317,75 @@ async def test_gate_cancel_outcome_cancels_turn() -> None:
     result = await _prompt(server, conn)
 
     assert result["stopReason"] == "cancelled"
+
+
+class _ToolApprovalOrchestrator(Orchestrator):
+    def __init__(self, *, broker: ToolApprovalBroker, event_bus: EventBus) -> None:
+        self._broker = broker
+        self._bus = event_bus
+        self.approvals: list[bool] = []
+
+    async def run(self, task_id: TaskId) -> None:  # type: ignore[override]
+        approved = await self._broker.request(
+            task_id=task_id,
+            node_id=7,
+            tool_name="file_write",
+            risk="write",
+            args={"path": "/tmp/out.txt", "content": "hello"},
+            description="write a file",
+        )
+        self.approvals.append(approved)
+        await self._bus.publish(
+            TaskCompleted(task_id=task_id, final_output="approved" if approved else "denied")
+        )
+
+
+def _build_tool_approval_server(
+    conn: Connection,
+) -> tuple[AcpServer, _ToolApprovalOrchestrator, ToolApprovalBroker]:
+    bus = EventBus()
+    store = InMemoryStateStore()
+    broker = ToolApprovalBroker(bus)
+    orchestrator = _ToolApprovalOrchestrator(broker=broker, event_bus=bus)
+    runtime = Runtime(
+        orchestrator=orchestrator,
+        store=store,
+        harness=ToolHarness(),
+        event_bus=bus,
+        settings=get_settings(),
+        tool_approval=broker,
+    )
+    return AcpServer(runtime, conn), orchestrator, broker
+
+
+async def test_tool_approval_request_allows_once() -> None:
+    conn = _RecordingConnection([], permissions=[_ALLOW_ONCE])
+    server, orch, _ = _build_tool_approval_server(conn)
+
+    result = await _prompt(server, conn)
+
+    assert result["stopReason"] == "end_turn"
+    assert orch.approvals == [True]
+    method, params = conn.requests[0]
+    assert method == "session/request_permission"
+    assert params["kind"] == "tool_call"
+    assert params["toolCall"]["toolName"] == "file_write"
+    assert params["toolCall"]["risk"] == "write"
+    assert {o["optionId"] for o in params["options"]} == {
+        "allow_once",
+        "always_allow",
+        "deny",
+    }
+
+
+async def test_tool_approval_always_allow_is_remembered() -> None:
+    conn = _RecordingConnection([], permissions=[_ALWAYS_ALLOW])
+    server, orch, broker = _build_tool_approval_server(conn)
+
+    await _prompt(server, conn)
+
+    assert orch.approvals == [True]
+    assert broker.is_always_allowed("file_write")
 
 
 async def test_initialize_advertises_protocol_and_capabilities() -> None:

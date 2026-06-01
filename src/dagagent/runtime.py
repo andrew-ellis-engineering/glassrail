@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from dagagent.config import Settings, get_settings
 from dagagent.events import EventBus
 from dagagent.executor import Executor, Orchestrator
+from dagagent.executor.tool_approval import ToolApprovalBroker
 from dagagent.harness import ToolHarness, register_builtins
 from dagagent.harness.integrations import register_integrations
 from dagagent.planner import Planner
@@ -33,9 +34,15 @@ class Runtime:
     harness: ToolHarness
     event_bus: EventBus
     settings: Settings
+    tool_approval: ToolApprovalBroker | None = None
 
 
-def build_runtime(settings: Settings | None = None, *, store: StateStore | None = None) -> Runtime:
+def build_runtime(
+    settings: Settings | None = None,
+    *,
+    store: StateStore | None = None,
+    interactive_tool_approval: bool = False,
+) -> Runtime:
     """Wire a complete agent runtime from settings (defaults to in-memory state)."""
     settings = settings or get_settings()
     configure_tracing(settings)
@@ -48,9 +55,16 @@ def build_runtime(settings: Settings | None = None, *, store: StateStore | None 
         loaded = harness.load_entry_points()
         log.info("Loaded %d tool plugin(s) from the dagagent.tools entry-point group", loaded)
     router = router_from_settings(settings)
+    tool_approval = ToolApprovalBroker(bus) if interactive_tool_approval else None
     validator = PlanValidator(harness=harness, settings=settings)
     planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
-    executor = Executor(router=router, harness=harness, settings=settings, event_bus=bus)
+    executor = Executor(
+        router=router,
+        harness=harness,
+        settings=settings,
+        event_bus=bus,
+        tool_approval=tool_approval,
+    )
     store = store or InMemoryStateStore()
     orchestrator = Orchestrator(
         planner=planner,
@@ -65,4 +79,5 @@ def build_runtime(settings: Settings | None = None, *, store: StateStore | None 
         harness=harness,
         event_bus=bus,
         settings=settings,
+        tool_approval=tool_approval,
     )

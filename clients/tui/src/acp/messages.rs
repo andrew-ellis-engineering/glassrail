@@ -110,6 +110,20 @@ pub struct PermOption {
 pub struct PermissionParams {
     #[serde(default)]
     pub plan: Option<PlanWrap>,
+    #[serde(default, rename = "toolCall")]
+    pub tool_call: Option<ToolCallPermission>,
     #[serde(default)]
     pub options: Vec<PermOption>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ToolCallPermission {
+    #[serde(default, rename = "toolName")]
+    pub tool_name: String,
+    #[serde(default)]
+    pub risk: String,
+    #[serde(default)]
+    pub args: serde_json::Value,
+    #[serde(default)]
+    pub description: String,
 }

@@ -17,7 +17,7 @@ from typing import ClassVar, NamedTuple, cast
 
 from opentelemetry.trace import Status, StatusCode
 
-from dagagent.config import Settings
+from dagagent.config import Settings, ToolApprovalMode, ToolApprovalPolicy
 from dagagent.config import prompts as default_prompts
 from dagagent.core import (
     BranchLogEntry,
@@ -41,6 +41,7 @@ from dagagent.events import (
     TaskCompleted,
 )
 from dagagent.executor.context import assemble_context
+from dagagent.executor.tool_approval import ToolApprovalBroker
 from dagagent.harness import ToolHarness
 from dagagent.providers import Chunk, Message, TierRouter, collect, strip_model_output
 from dagagent.telemetry import (
@@ -222,11 +223,13 @@ class Executor:
         harness: ToolHarness,
         settings: Settings,
         event_bus: EventBus | None = None,
+        tool_approval: ToolApprovalBroker | None = None,
     ) -> None:
         self._router = router
         self._harness = harness
         self._settings = settings
         self._bus = event_bus
+        self._tool_approval = tool_approval
 
     async def execute(self, state: ExecutionState) -> ExecutionState:
         """Execute the plan, emitting lifecycle events to the bus."""
@@ -382,6 +385,14 @@ class Executor:
 
         if ctx and not args:
             args = await self._extract_args(node, ctx, tier)
+
+        approved = await self._approve_tool_call(node=node, state=state, args=args)
+        if not approved:
+            return NodeResult(
+                node_id=node.id,
+                status=NodeStatus.FAILED,
+                error=f"user_denied: tool '{node.tool}' was not approved",
+            )
 
         try:
             raw_output = await self._harness.execute(node.tool, args)
@@ -642,6 +653,41 @@ class Executor:
         )
 
     # ── Helpers ───────────────────────────────────────────────────────────
+
+    async def _approve_tool_call(
+        self,
+        *,
+        node: Node,
+        state: ExecutionState,
+        args: dict[str, object],
+    ) -> bool:
+        """Apply configured per-tool approval policy before execution."""
+        assert node.tool is not None
+        policy = self._settings.tool_approval.policy_for(node.tool)
+        if policy is ToolApprovalPolicy.DENY:
+            log.warning("Node %d: tool '%s' denied by policy", node.id, node.tool)
+            return False
+        if policy is ToolApprovalPolicy.ALLOW:
+            return True
+        if self._settings.tool_approval.mode is ToolApprovalMode.AUTO:
+            return True
+        if self._tool_approval is None:
+            log.warning(
+                "Node %d: tool '%s' requires approval but no channel exists",
+                node.id,
+                node.tool,
+            )
+            return False
+        if self._tool_approval.is_always_allowed(node.tool):
+            return True
+        return await self._tool_approval.request(
+            task_id=state.task_id,
+            node_id=node.id,
+            tool_name=node.tool,
+            risk=self._harness.risk_for(node.tool),
+            args=args,
+            description=node.description,
+        )
 
     @staticmethod
     def _direct_dependents(node: Node, state: ExecutionState) -> list[Node]:

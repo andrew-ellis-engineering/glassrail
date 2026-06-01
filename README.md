@@ -128,6 +128,7 @@ parsed by `pydantic-settings`. Tiers are nested, so use the `__` delimiter:
 | Tier 0 timeout (s) | `DAGAGENT_TIER0__TIMEOUT_S` | `10.0` |
 | Tier 1 API key | `DAGAGENT_TIER1__API_KEY` | *(empty)* |
 | HITL plan gate | `DAGAGENT_CONFIRM_PLANS` | `false` |
+| Tool approval mode | `DAGAGENT_TOOL_APPROVAL__MODE` | `interactive` |
 | Planner stall char multiplier | `DAGAGENT_PLANNER_STALL_CHAR_MULTIPLIER` | `4` |
 | Load tool plugins | `DAGAGENT_LOAD_TOOL_PLUGINS` | `false` |
 
@@ -192,6 +193,23 @@ uv sync --extra web                      # installs trafilatura + lxml
 [tools.web]
 fetch = true
 search = "duckduckgo"                    # or "searxng" (+ searxng_url)
+```
+
+### Tool Approval
+
+Per-tool approval is configured under `[tool_approval]`. Policies are:
+`allow` (run), `ask` (prompt an interactive client), and `deny` (never run).
+`mode = "auto"` treats `ask` as `allow` for unattended/headless execution, but
+keeps `deny` as `deny`.
+
+```toml
+[tool_approval]
+default = "allow"
+mode = "interactive"                     # or "auto"
+
+[tool_approval.overrides]
+file_write = "ask"
+shell_exec = "deny"
 ```
 
 **Third-party plugins** advertised through the `dagagent.tools` entry-point

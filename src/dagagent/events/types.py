@@ -14,6 +14,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from dagagent.core import NodeStatus, NodeType, TaskId
+from dagagent.harness import ToolRisk
 
 
 def _utcnow() -> datetime:
@@ -87,6 +88,16 @@ class NodeOutputChunk(_BaseEvent):
     text: str
 
 
+class ToolApprovalRequested(_BaseEvent):
+    type: Literal["tool_approval_requested"] = "tool_approval_requested"
+    approval_id: str
+    node_id: int
+    tool_name: str
+    risk: ToolRisk
+    args: dict[str, Any] = Field(default_factory=dict)
+    description: str
+
+
 class BranchDecided(_BaseEvent):
     type: Literal["branch_decided"] = "branch_decided"
     node_id: int
@@ -117,6 +128,7 @@ Event = (
     | AwaitingConfirmation
     | NodeStarted
     | NodeOutputChunk
+    | ToolApprovalRequested
     | NodeFinished
     | BranchDecided
     | TaskCompleted

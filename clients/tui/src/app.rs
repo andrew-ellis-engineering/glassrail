@@ -8,7 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
-use crate::acp::messages::{PermOption, PlanEntry, SessionUpdate};
+use crate::acp::messages::{PermOption, PlanEntry, SessionUpdate, ToolCallPermission};
 use crate::acp::{Outbound, ServerMessage};
 use crate::graph::{self, GraphNode};
 use crate::transcript::Cell;
@@ -31,6 +31,7 @@ struct PermissionState {
     id: Value,
     options: Vec<PermOption>,
     plan: Vec<PlanEntry>,
+    tool_call: Option<ToolCallPermission>,
 }
 
 pub struct App<O: Outbound> {
@@ -117,6 +118,10 @@ impl<O: Outbound> App<O> {
     /// The plan attached to the pending permission request (for the overlay).
     pub fn permission_plan(&self) -> Option<&[PlanEntry]> {
         self.permission.as_ref().map(|p| p.plan.as_slice())
+    }
+
+    pub fn permission_tool_call(&self) -> Option<&ToolCallPermission> {
+        self.permission.as_ref().and_then(|p| p.tool_call.as_ref())
     }
 
     /// Advance the spinner one frame (called on the UI tick while working).
@@ -270,9 +275,12 @@ impl<O: Outbound> App<O> {
 
     async fn on_key_approval(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('a') => self.decide(approve(), Status::Working).await,
-            KeyCode::Char('r') => self.decide(reject(None), Status::Working).await,
-            KeyCode::Char('e') => self.mode = Mode::Feedback(String::new()),
+            KeyCode::Char('a') => self.decide(approve_for(self), Status::Working).await,
+            KeyCode::Char('A') => self.decide(always_allow_for(self), Status::Working).await,
+            KeyCode::Char('r') => self.decide(reject_for(self, None), Status::Working).await,
+            KeyCode::Char('e') if self.can_reject_with_feedback() => {
+                self.mode = Mode::Feedback(String::new())
+            }
             KeyCode::Esc => self.decide(cancel(), Status::Working).await,
             _ => {}
         }
@@ -290,7 +298,8 @@ impl<O: Outbound> App<O> {
                 } else {
                     self.transcript
                         .push(Cell::Notice(format!("↩ revise: {feedback}")));
-                    self.decide(reject(Some(feedback)), Status::Working).await;
+                    self.decide(reject_for(self, Some(feedback)), Status::Working)
+                        .await;
                 }
             }
             KeyCode::Esc => self.mode = Mode::Approval,
@@ -312,6 +321,7 @@ impl<O: Outbound> App<O> {
                     id,
                     options: params.options,
                     plan: params.plan.map(|p| p.entries).unwrap_or_default(),
+                    tool_call: params.tool_call,
                 });
                 self.mode = Mode::Approval;
                 self.status = Status::AwaitingApproval;
@@ -502,19 +512,48 @@ impl<O: Outbound> App<O> {
         self.mode = Mode::Normal;
         self.status = next;
     }
+
+    fn permission_option(&self, candidates: &[&str], fallback: &str) -> String {
+        self.permission
+            .as_ref()
+            .and_then(|p| {
+                candidates.iter().find_map(|candidate| {
+                    p.options
+                        .iter()
+                        .find(|opt| opt.option_id == *candidate)
+                        .map(|opt| opt.option_id.clone())
+                })
+            })
+            .unwrap_or_else(|| fallback.into())
+    }
+
+    fn can_reject_with_feedback(&self) -> bool {
+        self.permission
+            .as_ref()
+            .is_some_and(|p| !p.plan.is_empty() && p.tool_call.is_none())
+    }
 }
 
-fn approve() -> Value {
-    json!({"outcome": {"outcome": "selected", "optionId": "approve"}})
+fn selected(option_id: String) -> Value {
+    json!({"outcome": {"outcome": "selected", "optionId": option_id}})
 }
 
-fn reject(feedback: Option<String>) -> Value {
+fn approve_for<O: Outbound>(app: &App<O>) -> Value {
+    selected(app.permission_option(&["approve", "allow_once"], "approve"))
+}
+
+fn always_allow_for<O: Outbound>(app: &App<O>) -> Value {
+    selected(app.permission_option(&["always_allow", "approve", "allow_once"], "approve"))
+}
+
+fn reject_for<O: Outbound>(app: &App<O>, feedback: Option<String>) -> Value {
+    let option_id = app.permission_option(&["reject", "deny"], "reject");
     match feedback {
         Some(text) => json!({
-            "outcome": {"outcome": "selected", "optionId": "reject"},
+            "outcome": {"outcome": "selected", "optionId": option_id},
             "feedback": text,
         }),
-        None => json!({"outcome": {"outcome": "selected", "optionId": "reject"}}),
+        None => selected(option_id),
     }
 }
 
@@ -626,6 +665,7 @@ mod tests {
                         status: "pending".into(),
                     }],
                 }),
+                tool_call: None,
                 options: vec![PermOption {
                     option_id: "approve".into(),
                     name: "Approve".into(),

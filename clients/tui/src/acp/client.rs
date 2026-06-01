@@ -173,6 +173,7 @@ fn route_incoming(value: Value, pending: &Pending, tx: &mpsc::UnboundedSender<Se
                 .and_then(|p| serde_json::from_value::<PermissionParams>(p).ok())
                 .unwrap_or(PermissionParams {
                     plan: None,
+                    tool_call: None,
                     options: Vec::new(),
                 });
             let _ = tx.send(ServerMessage::Permission { id, params });

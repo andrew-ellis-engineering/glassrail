@@ -7,7 +7,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
-use crate::acp::messages::{PermOption, PlanEntry};
+use crate::acp::messages::{PermOption, PlanEntry, ToolCallPermission};
 use crate::acp::Outbound;
 use crate::app::{App, Mode, Status, SPINNER};
 use crate::graph::GraphNode;
@@ -53,6 +53,7 @@ pub fn render<O: Outbound>(frame: &mut Frame, app: &App<O>) {
         Mode::Approval => render_approval(
             frame,
             app.permission_plan().unwrap_or(&[]),
+            app.permission_tool_call(),
             app.permission_options().unwrap_or(&[]),
         ),
         Mode::Feedback(buf) => render_feedback(frame, buf),
@@ -438,13 +439,42 @@ fn wrap_plain(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-fn render_approval(frame: &mut Frame, plan: &[PlanEntry], options: &[PermOption]) {
+fn render_approval(
+    frame: &mut Frame,
+    plan: &[PlanEntry],
+    tool_call: Option<&ToolCallPermission>,
+    options: &[PermOption],
+) {
     let mut lines: Vec<Line> = vec![Line::from(Span::styled(
-        "Review the plan, then choose:",
+        if tool_call.is_some() {
+            "Review the tool call, then choose:"
+        } else {
+            "Review the plan, then choose:"
+        },
         Style::default().add_modifier(Modifier::BOLD),
     ))];
-    for entry in plan {
-        lines.push(plan_line(entry));
+    if let Some(tool) = tool_call {
+        lines.push(Line::raw(""));
+        lines.push(Line::from(vec![
+            Span::styled("tool: ", Style::default().fg(Color::DarkGray)),
+            Span::raw(tool.tool_name.clone()),
+            Span::styled("  risk: ", Style::default().fg(Color::DarkGray)),
+            Span::raw(tool.risk.clone()),
+        ]));
+        if !tool.description.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("desc: ", Style::default().fg(Color::DarkGray)),
+                Span::raw(tool.description.clone()),
+            ]));
+        }
+        lines.push(Line::from(vec![
+            Span::styled("args: ", Style::default().fg(Color::DarkGray)),
+            Span::raw(tool.args.to_string()),
+        ]));
+    } else {
+        for entry in plan {
+            lines.push(plan_line(entry));
+        }
     }
     if !options.is_empty() {
         lines.push(Line::raw(""));
@@ -457,7 +487,11 @@ fn render_approval(frame: &mut Frame, plan: &[PlanEntry], options: &[PermOption]
     }
     lines.push(Line::raw(""));
     lines.push(Line::from(Span::styled(
-        "[a] approve   [e] reject with feedback   [r] reject   [esc] cancel",
+        if tool_call.is_some() {
+            "[a] allow once   [A] always allow   [r] deny   [esc] cancel"
+        } else {
+            "[a] approve   [e] reject with feedback   [r] reject   [esc] cancel"
+        },
         Style::default().fg(Color::Yellow),
     )));
 

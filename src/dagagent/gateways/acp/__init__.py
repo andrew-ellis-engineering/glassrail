@@ -35,7 +35,7 @@ async def run_acp() -> None:
     stdout is reserved for the protocol, so all logging is forced to stderr.
     """
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
-    runtime = build_runtime(_settings_for_acp())
+    runtime = build_runtime(_settings_for_acp(), interactive_tool_approval=True)
     reader, writer = await stdio_streams()
     server = AcpServer(runtime, Connection(reader, writer))
     await server.serve()

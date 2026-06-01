@@ -9,7 +9,14 @@ from collections.abc import Sequence as _Sequence
 
 import pytest
 
-from dagagent.config import NodeBudgets, NodePrompts, Settings
+from dagagent.config import (
+    NodeBudgets,
+    NodePrompts,
+    Settings,
+    ToolApprovalMode,
+    ToolApprovalPolicy,
+    ToolApprovalSettings,
+)
 from dagagent.core import (
     ExecutionState,
     Node,
@@ -23,6 +30,7 @@ from dagagent.core import (
 from dagagent.events import EventBus, NodeOutputChunk, TaskCompleted
 from dagagent.executor import Executor
 from dagagent.executor.executor import JsonFieldStreamer
+from dagagent.executor.tool_approval import ToolApprovalBroker
 from dagagent.harness import ToolHarness, register_builtins
 from dagagent.providers import Chunk, Message, TierRouter
 
@@ -104,6 +112,116 @@ async def test_single_tool_completes() -> None:
     assert node_result.status is NodeStatus.COMPLETED
     assert node_result.tier_used == 0
     assert node_result.execution_time_s >= 0
+
+
+async def test_tool_approval_deny_blocks_execution() -> None:
+    calls = 0
+    harness = ToolHarness()
+
+    @harness.tool(name="danger", description="danger", parameters={"type": "object"}, risk="write")
+    async def _danger() -> dict[str, str]:
+        nonlocal calls
+        calls += 1
+        return {"ok": "yes"}
+
+    executor = Executor(
+        router=TierRouter([_ScriptedProvider([])]),
+        harness=harness,
+        settings=Settings(
+            tool_approval=ToolApprovalSettings(overrides={"danger": ToolApprovalPolicy.DENY})
+        ),
+    )
+    state = _state(
+        Plan(
+            nodes=[
+                Node(id=1, type=NodeType.TOOL, description="run danger", tool="danger"),
+            ]
+        )
+    )
+
+    result = await executor.execute(state)
+
+    assert calls == 0
+    assert result.results[1].status is NodeStatus.FAILED
+    assert "user_denied" in (result.results[1].error or "")
+
+
+async def test_tool_approval_ask_uses_broker() -> None:
+    bus = EventBus()
+    broker = ToolApprovalBroker(bus)
+    harness = ToolHarness()
+
+    @harness.tool(name="writer", description="write", parameters={"type": "object"}, risk="write")
+    async def _writer() -> dict[str, str]:
+        return {"written": "yes"}
+
+    executor = Executor(
+        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        harness=harness,
+        settings=Settings(
+            tool_approval=ToolApprovalSettings(overrides={"writer": ToolApprovalPolicy.ASK})
+        ),
+        event_bus=bus,
+        tool_approval=broker,
+    )
+    state = _state(Plan(nodes=[Node(id=1, type=NodeType.TOOL, description="write", tool="writer")]))
+
+    async with bus.subscribe() as sub:
+        task = asyncio.create_task(executor.execute(state))
+        event = await sub.__anext__()
+        while event.type != "tool_approval_requested":
+            event = await sub.__anext__()
+        assert event.tool_name == "writer"
+        broker.resolve(event.approval_id, True)
+        result = await task
+
+    assert result.results[1].status is NodeStatus.COMPLETED
+
+
+async def test_tool_approval_auto_mode_allows_ask_but_not_deny() -> None:
+    calls = 0
+    harness = ToolHarness()
+
+    @harness.tool(name="maybe", description="maybe", parameters={"type": "object"}, risk="write")
+    async def _maybe() -> dict[str, str]:
+        nonlocal calls
+        calls += 1
+        return {"ok": "yes"}
+
+    ask_settings = Settings(
+        tool_approval=ToolApprovalSettings(
+            mode=ToolApprovalMode.AUTO,
+            overrides={"maybe": ToolApprovalPolicy.ASK},
+        )
+    )
+    executor = Executor(
+        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        harness=harness,
+        settings=ask_settings,
+    )
+    ask_state = _state(
+        Plan(nodes=[Node(id=1, type=NodeType.TOOL, description="maybe", tool="maybe")])
+    )
+    await executor.execute(ask_state)
+    assert calls == 1
+
+    deny_settings = Settings(
+        tool_approval=ToolApprovalSettings(
+            mode=ToolApprovalMode.AUTO,
+            overrides={"maybe": ToolApprovalPolicy.DENY},
+        )
+    )
+    deny_executor = Executor(
+        router=TierRouter([_ScriptedProvider([])]),
+        harness=harness,
+        settings=deny_settings,
+    )
+    deny_state = _state(
+        Plan(nodes=[Node(id=1, type=NodeType.TOOL, description="maybe", tool="maybe")])
+    )
+    result = await deny_executor.execute(deny_state)
+    assert calls == 1
+    assert result.results[1].status is NodeStatus.FAILED
 
 
 async def test_synthesis_extracts_final_output() -> None:

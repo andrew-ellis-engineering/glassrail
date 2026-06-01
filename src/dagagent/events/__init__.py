@@ -24,6 +24,7 @@ from dagagent.events.types import (
     TaskCancelled,
     TaskCompleted,
     TaskFailed,
+    ToolApprovalRequested,
 )
 
 __all__ = [
@@ -43,4 +44,5 @@ __all__ = [
     "TaskCancelled",
     "TaskCompleted",
     "TaskFailed",
+    "ToolApprovalRequested",
 ]

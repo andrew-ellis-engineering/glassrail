@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Per-tool approval policy is now configurable with `allow`, `ask`, and `deny`
+  policies plus an `auto` execution mode that treats `ask` as `allow` while
+  preserving explicit denies. ACP surfaces `ask` tool calls through
+  `session/request_permission`, including an "always allow" promotion for the
+  running agent process.
 - Summary nodes now support a `format` hint (`concise`, `medium`, `verbose`).
   The executor selects concise or verbose summary prompts when requested while
   preserving the existing configurable medium/default summary prompt.

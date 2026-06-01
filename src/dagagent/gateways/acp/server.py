@@ -33,6 +33,7 @@ from dagagent.events import (
     TaskCancelled,
     TaskCompleted,
     TaskFailed,
+    ToolApprovalRequested,
 )
 from dagagent.gateways.acp.mapping import PlanTracker
 from dagagent.gateways.acp.protocol import (
@@ -207,6 +208,9 @@ class AcpServer:
                             break
                         current = outcome
                         continue
+                    if isinstance(event, ToolApprovalRequested):
+                        await self._handle_tool_approval(session, event)
+                        continue
                     terminal = await self._translate(session, tracker, event)
                     if terminal is not None:
                         stop_reason = terminal
@@ -276,6 +280,47 @@ class AcpServer:
         if choice == "reject":
             return "refusal"
         return "cancelled"
+
+    async def _handle_tool_approval(self, session: Session, event: ToolApprovalRequested) -> None:
+        broker = self._rt.tool_approval
+        if broker is None:
+            return
+        outcome = await self._conn.request(
+            "session/request_permission",
+            {
+                "sessionId": session.id,
+                "kind": "tool_call",
+                "toolCall": {
+                    "approvalId": event.approval_id,
+                    "nodeId": event.node_id,
+                    "toolName": event.tool_name,
+                    "risk": event.risk,
+                    "args": event.args,
+                    "description": event.description,
+                },
+                "options": [
+                    {
+                        "optionId": "allow_once",
+                        "name": f"Allow {event.tool_name} once",
+                        "kind": "allow_once",
+                    },
+                    {
+                        "optionId": "always_allow",
+                        "name": f"Always allow {event.tool_name}",
+                        "kind": "allow_always",
+                    },
+                    {"optionId": "deny", "name": "Deny this tool call", "kind": "reject_once"},
+                ],
+            },
+        )
+        choice, _ = _parse_permission(outcome)
+        if choice == "always_allow":
+            broker.remember_allow(event.tool_name)
+            broker.resolve(event.approval_id, True)
+        elif choice == "allow_once":
+            broker.resolve(event.approval_id, True)
+        else:
+            broker.resolve(event.approval_id, False)
 
     async def _translate(self, session: Session, tracker: PlanTracker, event: Event) -> str | None:
         """Emit session/update(s) for one event; return a stop reason if terminal."""

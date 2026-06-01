@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pytest import MonkeyPatch
 
-from dagagent.config import Settings, TierConfig
+from dagagent.config import Settings, TierConfig, ToolApprovalMode, ToolApprovalPolicy
 
 
 def _clear_env(monkeypatch: MonkeyPatch) -> None:
@@ -28,6 +28,9 @@ def test_defaults(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     assert settings.max_plan_nodes == 24
     assert settings.confidence_threshold == 0.75
     assert settings.confirm_plans is False
+    assert settings.tool_approval.default is ToolApprovalPolicy.ALLOW
+    assert settings.tool_approval.mode is ToolApprovalMode.INTERACTIVE
+    assert settings.tool_approval.overrides == {}
     assert settings.state_path == Path("./state.sqlite")
     assert len(settings.tiers) == 4
 
@@ -52,6 +55,21 @@ def test_env_var_overrides_nested_tier(tmp_path: Path, monkeypatch: MonkeyPatch)
     assert settings.tier1.api_key == "secret-123"
     # Untouched defaults remain.
     assert settings.tier1.base_url == "https://openrouter.ai/api/v1"
+
+
+def test_tool_approval_settings_parse(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("DAGAGENT_TOOL_APPROVAL__MODE", "auto")
+    monkeypatch.setenv("DAGAGENT_TOOL_APPROVAL__OVERRIDES__file_write", "ask")
+    monkeypatch.setenv("DAGAGENT_TOOL_APPROVAL__OVERRIDES__shell_exec", "deny")
+
+    settings = Settings()
+
+    assert settings.tool_approval.mode is ToolApprovalMode.AUTO
+    assert settings.tool_approval.policy_for("file_write") is ToolApprovalPolicy.ASK
+    assert settings.tool_approval.policy_for("shell_exec") is ToolApprovalPolicy.DENY
+    assert settings.tool_approval.policy_for("file_read") is ToolApprovalPolicy.ALLOW
 
 
 def test_init_kwargs_win_over_env(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
