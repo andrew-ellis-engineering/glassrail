@@ -43,10 +43,8 @@ Rules:
   (with no tool call and no final synthesis), set type=think
 - If a node condenses noisy upstream output for a downstream consumer,
   set type=summary; preserve facts the downstream consumer may need
-- The final node whose output is the user's answer should be type=result;
-  use synthesis for intermediate combination steps. Every successful plan
-  should normally have one result node unless it deliberately relies on the
-  legacy synthesis fallback.
+- The final node whose output is the user's answer must be type=result.
+  Use synthesis for intermediate combination steps only.
 - Use type=subplan only when a sub-task is genuinely self-contained,
   meaningfully complex (3+ distinct steps), and would clutter the main
   plan if inlined. For simpler cases add nodes directly to the main plan.
@@ -65,9 +63,26 @@ Rules:
   tool is not registered, the request is contradictory, or no valid DAG
   can be constructed — emit {"rejection": "<reason>"} instead of a plan.
   Reject only when no plan could succeed, not merely because the task is
-  difficult. Never fabricate tool names or invent capabilities.
+  difficult or the prompt is vague. Never fabricate tool names or invent
+  capabilities.
+- Tasks answered from general knowledge, reasoning, or synthesis — including
+  factual questions, requests for a recommendation or judgment, predictions you
+  can only answer by declining or hedging, and underspecified requests that
+  warrant a clarifying question — require NO tool and must NOT be rejected.
+  Route them to a result or synthesis node whose description tells the node how
+  to answer (e.g. "decline the prediction and explain why" or "ask one
+  clarifying question"). A result node with no tool is always valid. Rejection
+  is ONLY for tasks where no node could produce any useful answer.
+- When the task contains a conditional ("if X then Y, otherwise Z"), you MUST
+  emit a decision node for it, even if each branch is a single node. Do not
+  resolve the condition yourself inside a description, and do not treat a
+  conditional decision node as redundant — it is required for correctness. The
+  decision node's condition is the binary question; the yes/no branches contain
+  the node IDs that produce each outcome.
 
-Output ONLY valid JSON — either a plan or a rejection (no markdown, no explanation):
+Output ONLY valid JSON — no markdown, no explanation, no code fences. Any
+wrapper (including backticks) causes an unrecoverable parse failure. The two
+valid top-level shapes are:
 
 Plan:
 {
@@ -91,8 +106,6 @@ Plan:
 
 Rejection (when the task cannot be completed):
 {"rejection": "<clear explanation of why this task cannot be completed>"}
-
-/no_think
 """
 
 DEFAULT_DECISION_SYSTEM = """\

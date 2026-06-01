@@ -40,7 +40,7 @@ from dagagent.events import (
 )
 from dagagent.executor.context import assemble_context
 from dagagent.harness import ToolHarness
-from dagagent.providers import Chunk, Message, TierRouter, collect
+from dagagent.providers import Chunk, Message, TierRouter, collect, strip_model_output
 from dagagent.telemetry import (
     ATTR_NODE_CONFIDENCE,
     ATTR_NODE_ID,
@@ -435,7 +435,7 @@ class Executor:
                     max_tokens=self._settings.budgets.decision,
                 )
             )
-            data = json.loads(raw)
+            data = json.loads(strip_model_output(raw))
             branch = data.get("branch", node.default_branch or "yes")
             confidence = _clamp_confidence(float(data.get("confidence", 0.5)), 0.5, node.id)
             if node.branches and branch not in node.branches:
@@ -516,7 +516,7 @@ class Executor:
             else:
                 raw, tokens = await collect(stream)
             try:
-                data = json.loads(raw)
+                data = json.loads(strip_model_output(raw))
             except json.JSONDecodeError:
                 # Local models occasionally wrap their JSON in prose or leave the
                 # object unclosed. Try to salvage the output field via the streaming
@@ -702,7 +702,7 @@ class Executor:
                     max_tokens=self._settings.budgets.extract_args,
                 )
             )
-            data = json.loads(raw)
+            data = json.loads(strip_model_output(raw))
             if isinstance(data, dict):
                 return cast("dict[str, object]", data)
             return {}
@@ -735,7 +735,7 @@ class Executor:
                     max_tokens=self._settings.budgets.shape_check,
                 )
             )
-            data = json.loads(raw)
+            data = json.loads(strip_model_output(raw))
             ok = bool(data.get("matches_expectation", True))
             issue = data.get("issue")
             return ok, issue if isinstance(issue, str) else None

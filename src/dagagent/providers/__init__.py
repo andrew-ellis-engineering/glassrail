@@ -21,6 +21,7 @@ from dagagent.providers.base import (
 )
 from dagagent.providers.factory import router_from_settings
 from dagagent.providers.openai_compat import OpenAICompatProvider
+from dagagent.providers.postprocess import strip_model_output
 from dagagent.providers.router import TierRouter
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "TierRouter",
     "collect",
     "router_from_settings",
+    "strip_model_output",
 ]

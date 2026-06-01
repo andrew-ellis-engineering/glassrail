@@ -12,7 +12,7 @@ def test_planner_prompt_requests_right_sized_fresh_context_dags() -> None:
     assert "fresh context" in prompt
     assert "context_needed lists only direct upstream node IDs" in prompt
     assert 'Decision branches must be exactly {"yes": [...], "no": [...]}' in prompt
-    assert "normally have one result node" in prompt
+    assert "final node whose output is the user's answer must be type=result" in prompt
 
 
 def test_summary_prompt_prioritizes_downstream_fidelity() -> None:

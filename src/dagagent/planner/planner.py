@@ -19,7 +19,7 @@ from dagagent.core import Plan, PlanningAttempt, PlanRejectedError, PlanValidati
 from dagagent.harness import ToolHarness
 from dagagent.planner.cookbook import PlannerCookbook
 from dagagent.planner.tool_digest import render_tool_capability_digest
-from dagagent.providers import Message, TierRouter, collect
+from dagagent.providers import Message, TierRouter, collect, strip_model_output
 from dagagent.telemetry import ATTR_MIN_TIER, ATTR_PLAN_NODE_COUNT, SPAN_PLAN, get_tracer
 from dagagent.validator import PlanValidator
 
@@ -230,8 +230,9 @@ class Planner:
             raw, tokens = await collect(stream)
             log.info("Plan generated (%d tokens)", tokens)
 
+            cleaned = strip_model_output(raw)
             try:
-                data = json.loads(raw)
+                data = json.loads(cleaned)
             except json.JSONDecodeError as exc:
                 return self._failed(
                     PlanningAttempt(
