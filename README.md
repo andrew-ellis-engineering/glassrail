@@ -128,6 +128,7 @@ parsed by `pydantic-settings`. Tiers are nested, so use the `__` delimiter:
 | Tier 0 timeout (s) | `DAGAGENT_TIER0__TIMEOUT_S` | `10.0` |
 | Tier 1 API key | `DAGAGENT_TIER1__API_KEY` | *(empty)* |
 | HITL plan gate | `DAGAGENT_CONFIRM_PLANS` | `false` |
+| Planner stall char multiplier | `DAGAGENT_PLANNER_STALL_CHAR_MULTIPLIER` | `4` |
 | Load tool plugins | `DAGAGENT_LOAD_TOOL_PLUGINS` | `false` |
 
 Tiers 1–3 default to OpenRouter models; override any field the same way. With a
@@ -144,7 +145,7 @@ small. Override any field under `[budgets]` in `config.toml` (or
 
 | Budget | Default | Used by |
 |---|---|---|
-| `planner` | 4096 | the full plan JSON |
+| `planner` | 16384 | the full plan JSON |
 | `think` | 8192 | multi-step reasoning |
 | `summary` | 8192 | high-fidelity document/webpage summaries |
 | `synthesis` | 4096 | combining prior outputs |
@@ -155,6 +156,11 @@ small. Override any field under `[budgets]` in `config.toml` (or
 
 These are *output* caps. How much a node can *read* is bounded by your served
 model's context window, not by these.
+
+Planner output that is not valid JSON and exceeds
+`budgets.planner * planner_stall_char_multiplier` characters is classified as a
+stall; the next retry sees a truncated copy of that raw output and is told not
+to repeat it.
 
 ### Node prompts
 

@@ -1,0 +1,1 @@
+Compare SQLite, DuckDB, and Apache Parquet as storage choices for a local-first analytics notebook that must ingest CSV exports, support ad hoc SQL exploration, and later publish compact artifacts for sharing. Treat each candidate as its own end-to-end mini-research track before making the final recommendation.

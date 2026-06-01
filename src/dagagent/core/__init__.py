@@ -22,7 +22,7 @@ from dagagent.core.execution import (
     TaskStatus,
 )
 from dagagent.core.ids import TaskId, new_task_id
-from dagagent.core.plan import Node, NodeType, Plan
+from dagagent.core.plan import Node, NodeType, Plan, SummaryFormat
 
 __all__ = [
     "BranchLogEntry",
@@ -36,6 +36,7 @@ __all__ = [
     "PlanRejectedError",
     "PlanValidationError",
     "PlanningAttempt",
+    "SummaryFormat",
     "TaskId",
     "TaskStatus",
     "ToolExecutionError",

@@ -13,6 +13,7 @@ def test_planner_prompt_requests_right_sized_fresh_context_dags() -> None:
     assert "context_needed lists only direct upstream node IDs" in prompt
     assert 'Decision branches must be exactly {"yes": [...], "no": [...]}' in prompt
     assert "final node whose output is the user's answer must be type=result" in prompt
+    assert '"format": "concise" | "medium" | "verbose"' in prompt
 
 
 def test_summary_prompt_prioritizes_downstream_fidelity() -> None:
@@ -22,6 +23,12 @@ def test_summary_prompt_prioritizes_downstream_fidelity() -> None:
     assert "Compress language, not information" in prompt
     assert "Your output will be consumed by" in prompt
     assert "source pointer" in prompt
+
+
+def test_summary_variant_prompts_have_distinct_roles() -> None:
+    assert "concise 1-3 sentence summary" in prompts.SUMMARY_CONCISE_SYSTEM
+    assert "thorough summary preserving all key facts" in prompts.SUMMARY_VERBOSE_SYSTEM
+    assert prompts.SUMMARY_CONCISE_SYSTEM != prompts.SUMMARY_VERBOSE_SYSTEM
 
 
 def test_synthesis_and_result_prompts_preserve_caveats_without_inventing() -> None:

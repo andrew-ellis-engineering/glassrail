@@ -30,6 +30,17 @@ class NodeType(StrEnum):
     """A nested plan executed inline; its final_output is this node's output."""
 
 
+class SummaryFormat(StrEnum):
+    """Planner hint for how much detail a summary node should preserve."""
+
+    CONCISE = "concise"
+    """1-3 sentences; enough to gate a decision or feed an intermediate node."""
+    MEDIUM = "medium"
+    """Balanced paragraph; the default summary shape."""
+    VERBOSE = "verbose"
+    """Full detail; preserves all key facts for a user-facing result."""
+
+
 class Node(BaseModel):
     """A single node in a plan."""
 
@@ -56,6 +67,9 @@ class Node(BaseModel):
 
     # SUBPLAN-only — the nested plan to execute when this node fires.
     subplan: Plan | None = None
+
+    # SUMMARY-only — ignored by other node types.
+    format: SummaryFormat = SummaryFormat.MEDIUM
 
 
 class Plan(BaseModel):

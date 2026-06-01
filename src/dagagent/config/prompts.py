@@ -42,18 +42,43 @@ Rules:
 - If a node performs explicit multi-step reasoning over prior context
   (with no tool call and no final synthesis), set type=think
 - If a node condenses noisy upstream output for a downstream consumer,
-  set type=summary; preserve facts the downstream consumer may need
+  set type=summary; preserve facts the downstream consumer may need. Summary
+  nodes may include "format": "concise" | "medium" | "verbose"; omit it for
+  medium. Use "concise" when feeding a decision or a node that only needs a
+  signal, and "verbose" when feeding the final result directly.
 - The final node whose output is the user's answer must be type=result.
   Use synthesis for intermediate combination steps only.
-- Use type=subplan only when a sub-task is genuinely self-contained,
-  meaningfully complex (3+ distinct steps), and would clutter the main
-  plan if inlined. For simpler cases add nodes directly to the main plan.
-  A subplan node carries a "subplan" object with the same shape as this
-  top-level plan; the nested plan's final_output becomes this node's
-  output. Respect the node and subplan limits stated in the request.
-  Example: a research task with fetch → extract → summarise steps inside
-  a subplan. Do NOT wrap a single tool call in a subplan — that is always
-  wrong.
+- Subplan boundaries:
+  - Use type=subplan when a sub-task is genuinely self-contained: it has its
+    own inputs, performs several related steps, and produces one output the
+    parent consumes. Good boundaries include "research Option A end to end" in
+    a compare-three plan, or a conditional branch where the yes/no path itself
+    needs several nodes.
+  - Do NOT use subplan to wrap a single node or a single tool call — that is
+    always wrong. Do NOT nest when a flat fan-out plus synthesis would be
+    clearer. Prefer flat structure over nesting, and never plan deeper than
+    one subplan level.
+  - A subplan node carries a "subplan" object with the same shape as this
+    top-level plan: {"nodes": [...]}. The nested plan's final result node
+    becomes the subplan node's output for the parent plan. Respect the node and
+    subplan limits stated in the request.
+  - Well-formed example:
+    {"id": 2, "type": "subplan",
+     "description": "Research Option A end to end",
+     "context_needed": [], "subplan": {"nodes": [
+      {"id": 1, "type": "tool", "description": "Search for Option A evidence",
+       "tool": "web_search", "context_needed": []},
+      {"id": 2, "type": "summary", "description": "Summarise Option A evidence",
+       "context_needed": [1]},
+      {"id": 3, "type": "result", "description": "Return the Option A summary",
+       "context_needed": [2]}
+    ]}}
+  - Anti-pattern:
+    {"id": 2, "type": "subplan", "description": "Read one file",
+     "subplan": {"nodes": [
+      {"id": 1, "type": "tool", "tool": "file_read", "description": "Read one file"}
+    ]}}
+    This is wrong: a single tool belongs in the parent plan.
 - reasoning_required=true only for nodes needing genuine multi-step logic
   beyond what type=think already implies
 - forced_tier should normally be null. Set it only when the request or runtime
@@ -99,6 +124,7 @@ Plan:
       "default_branch": "yes" | "no" | null,
       "reasoning_required": true | false,
       "forced_tier": null,
+      "format": "concise" | "medium" | "verbose",
       "subplan": null | {"nodes": [<nested nodes>]}
     }
   ]
@@ -147,6 +173,28 @@ If the prompt includes "Your output will be consumed by", tailor emphasis to tho
 Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
 The value of "summary" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
 Respond ONLY with valid JSON: {"summary": "<faithful summary>", "confidence": <0.0-1.0>}
+
+/no_think
+"""  # noqa: E501
+
+SUMMARY_CONCISE_SYSTEM = """\
+You are a summarisation engine. Produce a concise 1-3 sentence summary for the downstream consumer.
+Preserve the decisive facts, branch signal, caveats, and uncertainty needed by the next node; omit background detail.
+If the prompt includes "Your output will be consumed by", tailor the summary to that consumer's decision or task.
+Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
+The value of "summary" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
+Respond ONLY with valid JSON: {"summary": "<concise summary>", "confidence": <0.0-1.0>}
+
+/no_think
+"""  # noqa: E501
+
+SUMMARY_VERBOSE_SYSTEM = """\
+You are a summarisation engine. Produce a thorough summary preserving all key facts, named entities, dates, quantitative results, source pointers, caveats, and uncertainty.
+Use this when the summary feeds a user-facing result directly: compress wording, but do not drop load-bearing detail.
+If the prompt includes "Your output will be consumed by", organise detail around what that consumer needs to answer fully.
+Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
+The value of "summary" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
+Respond ONLY with valid JSON: {"summary": "<thorough summary>", "confidence": <0.0-1.0>}
 
 /no_think
 """  # noqa: E501

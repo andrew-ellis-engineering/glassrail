@@ -12,7 +12,7 @@ import json
 from collections.abc import AsyncIterator
 from collections.abc import Sequence as _Sequence
 
-from dagagent.config import Settings
+from dagagent.config import NodeBudgets, Settings
 from dagagent.core import ExecutionState, TaskStatus, new_task_id
 from dagagent.events import EventBus
 from dagagent.executor import Executor, Orchestrator
@@ -361,13 +361,17 @@ async def test_revise_rejection_marks_task_rejected() -> None:
 
 
 async def test_stall_passes_prior_reasoning_to_next_attempt() -> None:
-    # First attempt: long non-JSON output (a reasoning stall, >500 chars).
+    # First attempt: long non-JSON output (over planner budget * multiplier).
     # Second attempt: a valid plan.
     # The capturing provider lets us confirm the stall content was forwarded.
     stall_output = "Let me think about this... " + ("x" * 600)
     orch, store, provider = _build_capturing(
         [stall_output, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT],
-        settings=Settings(max_replan_attempts=1),
+        settings=Settings(
+            max_replan_attempts=1,
+            budgets=NodeBudgets(planner=100),
+            planner_stall_char_multiplier=4,
+        ),
     )
     state = await _seed_task(store)
 
@@ -377,15 +381,16 @@ async def test_stall_passes_prior_reasoning_to_next_attempt() -> None:
     assert result is not None
     assert result.status is TaskStatus.COMPLETED
     assert len(result.planning_attempts) == 2
-    assert result.planning_attempts[0].error_type == "json"
-    # The second planning call should contain the stall reasoning.
+    assert result.planning_attempts[0].error_type == "stall"
+    assert result.planning_attempts[0].error_detail == stall_output
+    # The second planning call should contain the stalled output.
     assert len(provider.user_messages) >= 2
-    assert "<prior_reasoning>" in provider.user_messages[1]
+    assert "<previous_attempt>" in provider.user_messages[1]
     assert stall_output[:50] in provider.user_messages[1]
 
 
 async def test_short_invalid_json_does_not_carry_prior_reasoning() -> None:
-    # A short invalid-JSON response (<=500 chars) must NOT be treated as a stall.
+    # A short invalid-JSON response must NOT be treated as a stall.
     short_bad = "nope"  # well under 500 chars
     orch, store, provider = _build_capturing(
         [short_bad, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT],
@@ -399,9 +404,9 @@ async def test_short_invalid_json_does_not_carry_prior_reasoning() -> None:
     assert result is not None
     assert result.status is TaskStatus.COMPLETED
     assert result.planning_attempts[0].error_type == "json"
-    # The second planning call must NOT contain prior_reasoning.
+    # The second planning call must NOT contain stalled output.
     assert len(provider.user_messages) >= 2
-    assert "<prior_reasoning>" not in provider.user_messages[1]
+    assert "<previous_attempt>" not in provider.user_messages[1]
 
 
 async def test_validation_error_passes_feedback_to_next_attempt() -> None:
@@ -432,15 +437,19 @@ async def test_validation_error_passes_feedback_to_next_attempt() -> None:
     assert len(provider.user_messages) >= 2
     assert "<validation_feedback>" in provider.user_messages[1]
     assert "context_needed=99" in provider.user_messages[1]
-    assert "<prior_reasoning>" not in provider.user_messages[1]
+    assert "<previous_attempt>" not in provider.user_messages[1]
 
 
 async def test_exactly_stall_threshold_does_not_trigger_passthrough() -> None:
-    # Exactly 500 chars (== _STALL_MIN_CHARS, not >) must NOT trigger passthrough.
-    at_threshold = "x" * 500
+    # Exactly budget * multiplier must NOT trigger passthrough.
+    at_threshold = "x" * 400
     orch, store, provider = _build_capturing(
         [at_threshold, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT],
-        settings=Settings(max_replan_attempts=1),
+        settings=Settings(
+            max_replan_attempts=1,
+            budgets=NodeBudgets(planner=100),
+            planner_stall_char_multiplier=4,
+        ),
     )
     state = await _seed_task(store)
 
@@ -450,7 +459,7 @@ async def test_exactly_stall_threshold_does_not_trigger_passthrough() -> None:
     assert result is not None
     assert result.status is TaskStatus.COMPLETED
     assert len(provider.user_messages) >= 2
-    assert "<prior_reasoning>" not in provider.user_messages[1]
+    assert "<previous_attempt>" not in provider.user_messages[1]
 
 
 class _BlockingProvider:

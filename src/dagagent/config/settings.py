@@ -188,6 +188,9 @@ class Settings(BaseSettings):
     max_plan_nodes: int = 24
     max_decision_nesting_depth: int = 2
     max_replan_attempts: int = 1
+    planner_stall_char_multiplier: int = 4
+    """Classify invalid planner output longer than planner max_tokens times
+    this multiplier as a stall and feed the raw output into the retry prompt."""
     confidence_threshold: float = 0.75
     max_subplan_nodes: int = 12
     max_subplans_per_plan: int = 2

@@ -16,6 +16,7 @@ from dagagent.core import (
     NodeStatus,
     NodeType,
     Plan,
+    SummaryFormat,
     TaskStatus,
     new_task_id,
 )
@@ -342,6 +343,7 @@ class _CapturingProvider:
         self._tier = tier
         self.max_tokens_seen: list[int] = []
         self.system_seen: list[str] = []
+        self.user_seen: list[str] = []
 
     @property
     def name(self) -> str:
@@ -362,6 +364,7 @@ class _CapturingProvider:
         del json_mode, timeout_s
         self.max_tokens_seen.append(max_tokens)
         self.system_seen.append(next(m["content"] for m in messages if m["role"] == "system"))
+        self.user_seen.append(next(m["content"] for m in messages if m["role"] == "user"))
         yield Chunk(text=self._responses.pop(0), tokens_used=1)
 
 
@@ -418,6 +421,88 @@ async def test_content_node_uses_configured_prompt() -> None:
 
     await executor.execute(state)
     assert provider.system_seen == ["CUSTOM SUMMARY PROMPT"]
+
+
+async def test_summary_format_selects_variant_prompts() -> None:
+    """Concise and verbose summary nodes use distinct system prompts."""
+    provider = _CapturingProvider(
+        [
+            json.dumps({"summary": "short", "confidence": 0.9}),
+            json.dumps({"summary": "long", "confidence": 0.9}),
+        ]
+    )
+    executor = Executor(
+        router=TierRouter([provider]),
+        harness=ToolHarness(),
+        settings=Settings(),
+    )
+    state = _state(
+        Plan(
+            nodes=[
+                Node(
+                    id=1,
+                    type=NodeType.SUMMARY,
+                    description="condense for decision",
+                    format=SummaryFormat.CONCISE,
+                ),
+                Node(
+                    id=2,
+                    type=NodeType.SUMMARY,
+                    description="condense for final answer",
+                    format=SummaryFormat.VERBOSE,
+                ),
+            ]
+        )
+    )
+
+    await executor.execute(state)
+
+    assert len(provider.system_seen) == 2
+    assert "concise 1-3 sentence summary" in provider.system_seen[0]
+    assert "thorough summary preserving all key facts" in provider.system_seen[1]
+    assert provider.system_seen[0] != provider.system_seen[1]
+
+
+async def test_decision_context_includes_direct_dependents() -> None:
+    """Decision prompts include downstream descriptions without leaking extra results."""
+    provider = _CapturingProvider(
+        [
+            json.dumps({"branch": "yes", "confidence": 0.9}),
+            json.dumps({"output": "yes", "confidence": 0.9}),
+        ]
+    )
+    executor = Executor(
+        router=TierRouter([provider]),
+        harness=ToolHarness(),
+        settings=Settings(),
+    )
+    state = _state(
+        Plan(
+            nodes=[
+                Node(
+                    id=1,
+                    type=NodeType.DECISION,
+                    description="choose a path",
+                    condition="is the signal positive?",
+                    branches={"yes": [2], "no": []},
+                    default_branch="no",
+                ),
+                Node(
+                    id=2,
+                    type=NodeType.SYNTHESIS,
+                    description="write the positive-path response",
+                    context_needed=[1],
+                ),
+            ]
+        )
+    )
+
+    await executor.execute(state)
+
+    decision_msg = provider.user_seen[0]
+    assert "Your output will be consumed by" in decision_msg
+    assert "Node 2" in decision_msg
+    assert "write the positive-path response" in decision_msg
 
 
 # ── JsonFieldStreamer unit tests ─────────────────────────────────────────────

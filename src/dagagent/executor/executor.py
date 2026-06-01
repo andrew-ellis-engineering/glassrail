@@ -18,6 +18,7 @@ from typing import ClassVar, NamedTuple, cast
 from opentelemetry.trace import Status, StatusCode
 
 from dagagent.config import Settings
+from dagagent.config import prompts as default_prompts
 from dagagent.core import (
     BranchLogEntry,
     ExecutionState,
@@ -26,6 +27,7 @@ from dagagent.core import (
     NodeStatus,
     NodeType,
     Plan,
+    SummaryFormat,
     TaskStatus,
     ToolExecutionError,
 )
@@ -371,7 +373,11 @@ class Executor:
                 error="TOOL node has no tool name",
             )
 
-        ctx = assemble_context(node, state.results)
+        ctx = assemble_context(
+            node,
+            state.results,
+            dependent_nodes=self._direct_dependents(node, state) or None,
+        )
         args: dict[str, object] = dict(node.args_template or {})
 
         if ctx and not args:
@@ -411,7 +417,11 @@ class Executor:
         state: ExecutionState,
         tier: int,
     ) -> NodeResult:
-        ctx = assemble_context(node, state.results)
+        ctx = assemble_context(
+            node,
+            state.results,
+            dependent_nodes=self._direct_dependents(node, state) or None,
+        )
         allowed = list(node.branches.keys()) if node.branches else ["yes", "no"]
         messages: list[Message] = [
             {"role": "system", "content": self._settings.prompts.decision},
@@ -479,15 +489,7 @@ class Executor:
         subscribers (e.g. the ACP adapter) can forward it to the client in
         real time.
         """
-        # Tool, decision, and subplan nodes don't use _execute_llm_node so they
-        # never receive the dependents section (intentional — subplan is a context
-        # firewall; decision/tool nodes don't take an open-ended LLM prompt).
-        plan = state.plan
-        dependents = (
-            [n for n in plan.nodes if node.id in n.context_needed and n.id != node.id]
-            if plan
-            else []
-        )
+        dependents = self._direct_dependents(node, state)
         ctx = assemble_context(node, state.results, dependent_nodes=dependents or None)
         # For the result node, prepend the original user request so the model
         # knows what question it is directly answering (each node runs with fresh
@@ -498,7 +500,7 @@ class Executor:
             else ""
         )
         messages: list[Message] = [
-            {"role": "system", "content": self._node_system_prompt(node.type)},
+            {"role": "system", "content": self._node_system_prompt(node)},
             {
                 "role": "user",
                 "content": f"{task_prefix}Task: {node.description}\n\n{spec.context_label}\n{ctx}",
@@ -641,6 +643,18 @@ class Executor:
 
     # ── Helpers ───────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _direct_dependents(node: Node, state: ExecutionState) -> list[Node]:
+        """Nodes that directly consume ``node`` via ``context_needed``.
+
+        This is planning metadata only: it helps the current node shape its
+        output for consumers without granting access to any additional results.
+        """
+        plan = state.plan
+        if plan is None:
+            return []
+        return [n for n in plan.nodes if node.id in n.context_needed and n.id != node.id]
+
     def _node_output_budget(self, node_type: NodeType) -> int:
         """Output ``max_tokens`` for a single-LLM-call content node.
 
@@ -656,15 +670,20 @@ class Executor:
             NodeType.RESULT: budgets.result,
         }[node_type]
 
-    def _node_system_prompt(self, node_type: NodeType) -> str:
+    def _node_system_prompt(self, node: Node) -> str:
         """System prompt for a single-LLM-call content node, from settings."""
         prompts = self._settings.prompts
+        if node.type is NodeType.SUMMARY:
+            if node.format is SummaryFormat.CONCISE:
+                return default_prompts.SUMMARY_CONCISE_SYSTEM
+            if node.format is SummaryFormat.VERBOSE:
+                return default_prompts.SUMMARY_VERBOSE_SYSTEM
+            return prompts.summary
         return {
             NodeType.THINK: prompts.think,
-            NodeType.SUMMARY: prompts.summary,
             NodeType.SYNTHESIS: prompts.synthesis,
             NodeType.RESULT: prompts.result,
-        }[node_type]
+        }[node.type]
 
     def _select_tier(self, node: Node) -> int:
         """Pick a tier for ``node``. Deterministic — the model never decides."""

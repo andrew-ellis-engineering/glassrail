@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Summary nodes now support a `format` hint (`concise`, `medium`, `verbose`).
+  The executor selects concise or verbose summary prompts when requested while
+  preserving the existing configurable medium/default summary prompt.
+- Added a `subplan-correct` dagagent capability eval that requires a naturally
+  partitioned task to include a `subplan` trajectory step.
 - Streaming text events now carry node metadata: `NodeOutputChunk` includes the
   node type, and ACP `agent_message_chunk` updates include dagagent extension
   fields (`nodeId`, `nodeType`, `isFinal`) so clients can distinguish
@@ -21,6 +26,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or a verbatim template.
 
 ### Changed
+- Planner invalid-JSON failures now distinguish short parse errors from
+  generation stalls using a configurable planner-budget character multiplier.
+  Stall attempts preserve the raw output as `error_detail` and feed a truncated
+  copy into the next retry prompt so the model does not repeat it.
+- Planner rejections are logged at warning level with structured
+  `rejection_reason` and best-effort `rejection_class` fields for operators.
+- Planner subplan guidance now defines good boundaries, anti-patterns, schema
+  expectations, and examples so nested plans are used for self-contained
+  multi-step sub-tasks instead of single-node wrappers.
 - TUI transcript and composer rendering now pre-wrap to the pane width before
   computing scroll offsets. Long streamed results stay fully scrollable, and
   long prompts wrap inside a composer that grows up to a small cap.

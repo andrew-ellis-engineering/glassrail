@@ -69,6 +69,7 @@ class PlanningAttempt(BaseModel):
     plan: Plan | None = None
     error: str | None = None
     error_type: str | None = None
+    error_detail: str | None = None
     tokens_used: int = 0
     created_at: datetime = Field(default_factory=_utcnow)
     filepath: str | None = None

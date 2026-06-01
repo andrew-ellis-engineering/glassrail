@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from dagagent.core import Node, NodeType, Plan
+from dagagent.core import Node, NodeType, Plan, SummaryFormat
 
 
 def test_node_minimum_fields() -> None:
@@ -17,6 +17,7 @@ def test_node_minimum_fields() -> None:
     assert node.branches is None
     assert node.reasoning_required is False
     assert node.forced_tier is None
+    assert node.format is SummaryFormat.MEDIUM
 
 
 def test_node_type_strenum_round_trip() -> None:
@@ -24,6 +25,15 @@ def test_node_type_strenum_round_trip() -> None:
     assert NodeType.TOOL == "tool"
     node = Node.model_validate({"id": 2, "type": "decision", "description": "branch"})
     assert node.type is NodeType.DECISION
+
+
+def test_summary_format_round_trip() -> None:
+    node = Node.model_validate(
+        {"id": 4, "type": "summary", "description": "condense", "format": "verbose"}
+    )
+    assert node.format is SummaryFormat.VERBOSE
+    dumped = node.model_dump(mode="json")
+    assert dumped["format"] == "verbose"
 
 
 def test_node_rejects_unknown_type() -> None:

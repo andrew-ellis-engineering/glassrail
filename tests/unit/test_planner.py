@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import AsyncIterator
 
 import pytest
@@ -238,6 +239,18 @@ async def test_plan_attempt_captures_invalid_json(harness: ToolHarness, settings
     assert attempt.valid is False
 
 
+async def test_plan_attempt_marks_long_invalid_json_as_stall(harness: ToolHarness) -> None:
+    raw = "thinking without a plan " + ("x" * 100)
+    settings = Settings(budgets=NodeBudgets(planner=10), planner_stall_char_multiplier=4)
+    planner = _planner_from(_FixedProvider(payload=raw), harness, settings)
+
+    attempt = await planner.plan_attempt("hi", attempt=0)
+
+    assert attempt.error_type == "stall"
+    assert attempt.error_detail == raw
+    assert attempt.raw_output == raw
+
+
 async def test_plan_validation_errors_propagate(harness: ToolHarness, settings: Settings) -> None:
     payload = json.dumps(
         {
@@ -293,6 +306,21 @@ async def test_rejection_returned_as_rejection_error_type(
     assert attempt.valid is False
 
 
+async def test_rejection_is_logged_with_reason_and_class(
+    harness: ToolHarness, settings: Settings, caplog: pytest.LogCaptureFixture
+) -> None:
+    payload = json.dumps({"rejection": "I cannot predict future prices"})
+    planner = _planner_from(_FixedProvider(payload=payload), harness, settings)
+
+    with caplog.at_level(logging.WARNING, logger="dagagent.planner.planner"):
+        attempt = await planner.plan_attempt("predict tomorrow's Bitcoin price", attempt=0)
+
+    assert attempt.error_type == "rejection"
+    record = next(r for r in caplog.records if r.message == "Planner rejected task")
+    assert getattr(record, "rejection_reason") == "I cannot predict future prices"
+    assert getattr(record, "rejection_class") == "suspected_mistaken"
+
+
 async def test_plan_raises_plan_rejected_error(harness: ToolHarness, settings: Settings) -> None:
     payload = json.dumps({"rejection": "No suitable tools available"})
     planner = _planner_from(_FixedProvider(payload=payload), harness, settings)
@@ -309,8 +337,9 @@ async def test_prior_reasoning_injected_into_user_message(
 
     await planner.plan_attempt("do a thing", attempt=1, prior_reasoning="Step 1: consider X")
     user_msg = provider.user_seen[0]
-    assert "prior_reasoning" in user_msg
+    assert "previous_attempt" in user_msg
     assert "Step 1: consider X" in user_msg
+    assert "Do not repeat this output" in user_msg
 
 
 async def test_validation_feedback_injected_into_user_message(
@@ -338,7 +367,7 @@ async def test_no_prior_reasoning_leaves_prompt_clean(
     planner = _planner_from(provider, harness, settings)
 
     await planner.plan_attempt("do a thing", attempt=0)
-    assert "prior_reasoning" not in provider.user_seen[0]
+    assert "previous_attempt" not in provider.user_seen[0]
 
 
 async def test_no_validation_feedback_leaves_prompt_clean(

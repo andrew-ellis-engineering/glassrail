@@ -45,11 +45,6 @@ from dagagent.telemetry import (
 
 log = logging.getLogger(__name__)
 
-# Minimum raw-output length (chars) for a JSON-parse failure to be treated as
-# a reasoning stall. Below this the model probably emitted garbage or a very
-# short error; above it the model likely reasoned but failed to wrap up in JSON.
-_STALL_MIN_CHARS = 500
-
 
 class Orchestrator:
     """Top-level coordinator for the full plan-validate-confirm-execute flow."""
@@ -285,8 +280,8 @@ class Orchestrator:
 
         attempts = self._settings.max_replan_attempts + 1
         last_error: str | None = None
-        # Carries raw output from a previous attempt that failed to emit valid
-        # JSON (likely a reasoning stall), so the next attempt can build on it.
+        # Carries raw output from a previous planner stall so the next attempt
+        # can explicitly avoid repeating it.
         prior_reasoning: str | None = None
         validation_feedback: str | None = None
 
@@ -317,15 +312,10 @@ class Orchestrator:
                     state.touch()
                     return None
 
-                # Stall detection: if the model produced a long response that
-                # wasn't valid JSON, it likely reasoned but failed to emit a
-                # plan. Pass the raw output forward so the next attempt can
-                # build on it rather than starting from scratch.
-                is_stall = (
-                    plan_attempt.error_type == "json"
-                    and len(plan_attempt.raw_output) > _STALL_MIN_CHARS
-                )
-                prior_reasoning = plan_attempt.raw_output if is_stall else None
+                if plan_attempt.error_type == "stall":
+                    prior_reasoning = plan_attempt.error_detail or plan_attempt.raw_output
+                else:
+                    prior_reasoning = None
                 validation_feedback = (
                     plan_attempt.error
                     if plan_attempt.error_type in ("schema", "validation")

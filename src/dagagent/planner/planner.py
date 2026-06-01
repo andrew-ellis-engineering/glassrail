@@ -149,6 +149,7 @@ class Planner:
             "attempt": attempt.attempt,
             "error_type": attempt.error_type,
             "error": attempt.error,
+            "error_detail": attempt.error_detail,
             "raw_output": attempt.raw_output,
             "parsed": attempt.parsed,
             "tokens_used": attempt.tokens_used,
@@ -172,8 +173,8 @@ class Planner:
         """Generate one plan attempt and retain raw output plus validation errors.
 
         ``prior_reasoning`` carries accumulated output from a previous attempt
-        that failed to emit valid JSON (a reasoning stall), so the next attempt
-        can build on it rather than starting from scratch.
+        that failed to emit valid JSON (a stall), so the next attempt can avoid
+        repeating it.
 
         ``validation_feedback`` carries the validator/schema failure from the
         immediately preceding attempt, letting the model correct a concrete plan
@@ -204,10 +205,11 @@ class Planner:
                 )
             if prior_reasoning:
                 user_content += (
-                    "\n\nA previous planning attempt produced the following reasoning "
-                    "but did not emit a valid plan. Build on it rather than starting "
-                    "from scratch:\n"
-                    f"<prior_reasoning>\n{prior_reasoning}\n</prior_reasoning>"
+                    "\n\nA previous planning attempt produced output that could not "
+                    "be parsed as a valid plan. The raw output was:\n"
+                    f"<previous_attempt>\n{prior_reasoning[:2000]}\n</previous_attempt>\n\n"
+                    "Do not repeat this output. Emit only a valid JSON plan or a "
+                    "rejection object."
                 )
             if validation_feedback:
                 user_content += (
@@ -234,12 +236,14 @@ class Planner:
             try:
                 data = json.loads(cleaned)
             except json.JSONDecodeError as exc:
+                is_stall = len(raw) > self._planner_stall_char_limit()
                 return self._failed(
                     PlanningAttempt(
                         attempt=attempt,
                         raw_output=raw,
                         error=f"Planner returned invalid JSON: {exc}",
-                        error_type="json",
+                        error_type="stall" if is_stall else "json",
+                        error_detail=raw if is_stall else None,
                         tokens_used=tokens,
                     )
                 )
@@ -260,7 +264,14 @@ class Planner:
             # contains both "rejection" and "nodes" is treated as a rejection.
             if "rejection" in parsed:
                 reason = str(parsed["rejection"])
-                log.info("Planner rejected task: %s", reason)
+                rejection_class = self._classify_rejection(request, reason)
+                log.warning(
+                    "Planner rejected task",
+                    extra={
+                        "rejection_reason": reason,
+                        "rejection_class": rejection_class,
+                    },
+                )
                 return self._failed(
                     PlanningAttempt(
                         attempt=attempt,
@@ -305,3 +316,32 @@ class Planner:
                 plan=plan,
                 tokens_used=tokens,
             )
+
+    def _planner_stall_char_limit(self) -> int:
+        """Character threshold for classifying invalid planner output as a stall."""
+        return self._settings.budgets.planner * self._settings.planner_stall_char_multiplier
+
+    @staticmethod
+    def _classify_rejection(request: str, reason: str) -> str:
+        """Best-effort label for operator logs; does not change behaviour."""
+        text = f"{request} {reason}".lower()
+        suspected_keywords = (
+            "predict",
+            "prediction",
+            "forecast",
+            "recommend",
+            "recommendation",
+            "judge",
+            "opinion",
+            "factual",
+            "general knowledge",
+            "clarifying",
+            "vague",
+            "unknown",
+            "unknowable",
+        )
+        return (
+            "suspected_mistaken"
+            if any(keyword in text for keyword in suspected_keywords)
+            else "legitimate"
+        )
