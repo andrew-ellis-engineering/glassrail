@@ -28,7 +28,14 @@ pub fn render<O: Outbound>(frame: &mut Frame, app: &App<O>) {
     if app.show_dag {
         render_dag(frame, chunks[1], &app.graph);
     } else {
-        render_body(frame, chunks[1], &app.plan, &app.transcript, app.scrollback);
+        render_body(
+            frame,
+            chunks[1],
+            &app.plan,
+            &app.transcript,
+            app.scrollback,
+            app.thoughts_open,
+        );
     }
     render_composer(frame, chunks[2], &app.composer, app.cursor);
 
@@ -78,15 +85,16 @@ fn render_body(
     plan: &[PlanEntry],
     transcript: &[Cell],
     scrollback: u16,
+    thoughts_open: bool,
 ) {
     if plan.is_empty() {
-        render_transcript(frame, area, transcript, scrollback);
+        render_transcript(frame, area, transcript, scrollback, thoughts_open);
         return;
     }
     let plan_h = (plan.len() as u16 + 2).min(area.height / 2).max(3);
     let parts = Layout::vertical([Constraint::Length(plan_h), Constraint::Min(1)]).split(area);
     render_plan(frame, parts[0], plan);
-    render_transcript(frame, parts[1], transcript, scrollback);
+    render_transcript(frame, parts[1], transcript, scrollback, thoughts_open);
 }
 
 fn render_plan(frame: &mut Frame, area: Rect, plan: &[PlanEntry]) {
@@ -157,9 +165,20 @@ fn render_dag(frame: &mut Frame, area: Rect, graph: &[GraphNode]) {
     );
 }
 
-fn render_transcript(frame: &mut Frame, area: Rect, transcript: &[Cell], scrollback: u16) {
+fn render_transcript(
+    frame: &mut Frame,
+    area: Rect,
+    transcript: &[Cell],
+    scrollback: u16,
+    thoughts_open: bool,
+) {
     let inner_w = area.width.saturating_sub(2).max(1) as usize;
     let mut lines: Vec<Line> = Vec::new();
+    // Count how many Thought cells exist so we can show a summary when collapsed.
+    let thought_count = transcript
+        .iter()
+        .filter(|c| matches!(c, Cell::Thought(_)))
+        .count();
     for cell in transcript {
         match cell {
             Cell::Prompt(text) => lines.extend(wrap_styled(
@@ -175,14 +194,41 @@ fn render_transcript(frame: &mut Frame, area: Rect, transcript: &[Cell], scrollb
                 }
             }
             Cell::Thought(text) => {
-                for raw in text.split('\n') {
-                    lines.extend(wrap_styled(
-                        &format!("> {raw}"),
-                        inner_w,
-                        Style::default()
-                            .fg(Color::DarkGray)
-                            .add_modifier(Modifier::ITALIC),
-                    ));
+                if thoughts_open {
+                    for raw in text.split('\n') {
+                        lines.extend(wrap_styled(
+                            &format!("> {raw}"),
+                            inner_w,
+                            Style::default()
+                                .fg(Color::DarkGray)
+                                .add_modifier(Modifier::ITALIC),
+                        ));
+                    }
+                } else {
+                    // Collapsed: show a single summary header the first time,
+                    // skip subsequent Thought cells (they're all bundled in the header).
+                    let already_shown = lines.iter().any(|l| {
+                        l.spans
+                            .first()
+                            .map(|s| s.content.starts_with("⟩"))
+                            .unwrap_or(false)
+                    });
+                    if !already_shown {
+                        let label = if thought_count == 1 {
+                            "⟩ thinking (t to expand)".to_string()
+                        } else {
+                            format!("⟩ thinking ×{thought_count} (t to expand)")
+                        };
+                        lines.push(Line::from(Span::styled(
+                            label,
+                            Style::default()
+                                .fg(Color::DarkGray)
+                                .add_modifier(Modifier::ITALIC),
+                        )));
+                    }
+                    // Skip the blank separator for collapsed thoughts so they
+                    // don't leave multiple blank lines.
+                    continue;
                 }
             }
             Cell::Tool {
@@ -319,22 +365,46 @@ fn chunk_spans(spans: Vec<Span<'static>>, width: usize) -> Vec<Line<'static>> {
     lines
 }
 
+/// Word-aware line wrapper. Splits `text` into segments of at most `width`
+/// characters, breaking at whitespace where possible and hard-breaking any
+/// single word that still overflows.  The output always contains at least one
+/// element; an empty input yields `[""]`.
 fn wrap_plain(text: &str, width: usize) -> Vec<String> {
     let width = width.max(1);
     if text.is_empty() {
         return vec![String::new()];
     }
-    let mut out = Vec::new();
+    let mut lines: Vec<String> = Vec::new();
     let mut current = String::new();
-    for ch in text.chars() {
-        if current.chars().count() == width {
-            out.push(current);
-            current = String::new();
+    let mut col = 0usize;
+    for word in text.split_ascii_whitespace() {
+        let w = word.chars().count();
+        if col == 0 {
+            current.push_str(word);
+            col = w;
+        } else if col + 1 + w <= width {
+            current.push(' ');
+            current.push_str(word);
+            col += 1 + w;
+        } else {
+            lines.push(std::mem::take(&mut current));
+            current.push_str(word);
+            col = w;
         }
-        current.push(ch);
+        // Hard-break any word that overflows the line width.
+        while col > width {
+            let bp = current
+                .char_indices()
+                .nth(width)
+                .map(|(b, _)| b)
+                .unwrap_or(current.len());
+            let rest = current.split_off(bp);
+            lines.push(std::mem::replace(&mut current, rest));
+            col = current.chars().count();
+        }
     }
-    out.push(current);
-    out
+    lines.push(current);
+    lines
 }
 
 fn render_approval(frame: &mut Frame, plan: &[PlanEntry], options: &[PermOption]) {
@@ -418,12 +488,44 @@ mod tests {
 
     #[test]
     fn transcript_wrapping_counts_visual_lines() {
+        // A single long word with no spaces hard-breaks at the width boundary.
         let lines = wrap_styled("abcdef", 2, Style::default());
         let rendered: Vec<String> = lines
             .into_iter()
             .map(|line| line.spans.into_iter().map(|span| span.content).collect())
             .collect();
         assert_eq!(rendered, vec!["ab", "cd", "ef"]);
+    }
+
+    #[test]
+    fn wrap_plain_breaks_at_word_boundaries() {
+        // "hello world" at width 7: "hello" fits (5), " world" would be 11 — wrap.
+        let lines = wrap_plain("hello world", 7);
+        assert_eq!(lines, vec!["hello", "world"]);
+    }
+
+    #[test]
+    fn wrap_plain_fits_short_text_on_one_line() {
+        let lines = wrap_plain("hi", 80);
+        assert_eq!(lines, vec!["hi"]);
+    }
+
+    #[test]
+    fn wrap_plain_hard_breaks_overlong_words() {
+        let lines = wrap_plain("abcdefgh", 3);
+        assert_eq!(lines, vec!["abc", "def", "gh"]);
+    }
+
+    #[test]
+    fn wrap_plain_empty_is_one_empty_string() {
+        assert_eq!(wrap_plain("", 80), vec![""]);
+    }
+
+    #[test]
+    fn wrap_plain_multiple_words_pack_greedily() {
+        // "one two" fits on width 7 ("one two" = 7 chars exactly).
+        let lines = wrap_plain("one two three", 7);
+        assert_eq!(lines, vec!["one two", "three"]);
     }
 
     #[test]

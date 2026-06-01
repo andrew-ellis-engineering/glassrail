@@ -44,6 +44,8 @@ pub struct App<O: Outbound> {
     pub graph: Vec<GraphNode>,
     /// Whether the DAG view is open (toggled with Tab).
     pub show_dag: bool,
+    /// Whether thought cells (think-node output) are expanded; toggled with `t`.
+    pub thoughts_open: bool,
     pub composer: String,
     /// Cursor position in the composer, as a character index.
     pub cursor: usize,
@@ -83,11 +85,12 @@ impl<O: Outbound> App<O> {
             tx,
             session_id,
             transcript: vec![Cell::Notice(
-                "Type a task and press Enter. Esc or Ctrl-C to quit.".into(),
+                "Type a task and press Enter. Tab: graph  t: thoughts  Esc: quit".into(),
             )],
             plan: Vec::new(),
             graph: Vec::new(),
             show_dag: false,
+            thoughts_open: true,
             composer: String::new(),
             cursor: 0,
             status: Status::Ready,
@@ -168,6 +171,11 @@ impl<O: Outbound> App<O> {
             }
             KeyCode::Char('p') if ctrl => self.history_prev(),
             KeyCode::Char('n') if ctrl => self.history_next(),
+            // Navigation shortcuts only fire when the composer is empty so
+            // they don't swallow keystrokes mid-sentence.
+            KeyCode::Char('t') if self.composer.is_empty() => {
+                self.thoughts_open = !self.thoughts_open
+            }
             KeyCode::Char(c) => self.insert_char(c),
             KeyCode::Backspace => self.backspace(),
             KeyCode::Delete => self.delete(),
@@ -1120,5 +1128,33 @@ mod tests {
         app.composer = "go".into();
         app.on_key(key(KeyCode::Enter)).await;
         assert_eq!(app.scrollback, 0);
+    }
+
+    #[tokio::test]
+    async fn t_key_toggles_thoughts_open() {
+        let (mut app, _client, _rx) = app();
+        assert!(app.thoughts_open, "thoughts visible by default");
+        app.on_key(key(KeyCode::Char('t'))).await;
+        assert!(!app.thoughts_open, "first press collapses");
+        app.on_key(key(KeyCode::Char('t'))).await;
+        assert!(app.thoughts_open, "second press re-expands");
+    }
+
+    #[tokio::test]
+    async fn thought_chunks_land_in_thought_cell() {
+        let (mut app, _client, _rx) = app();
+        app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
+            content: Content {
+                text: "step one".into(),
+            },
+            node_id: Some(1),
+            node_type: "think".into(),
+            is_final: false,
+        }))
+        .await;
+        assert!(
+            matches!(app.transcript.last(), Some(Cell::Thought(t)) if t == "step one"),
+            "non-final think chunk should be a Thought cell"
+        );
     }
 }
