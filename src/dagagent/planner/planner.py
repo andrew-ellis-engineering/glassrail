@@ -46,9 +46,10 @@ class Planner:
         self._settings = settings
         self._cookbook = cookbook or PlannerCookbook.load_default()
         # Failed planning attempts are written here for post-mortem inspection.
-        # Relative paths resolve against CWD (the project root when running via
-        # the CLI). Override via subclass or constructor injection if needed.
-        self._failed_plan_dir = Path("failed_plans")
+        # Anchored to the user's home dir so it works regardless of which CWD
+        # the process was launched from (e.g. the TUI spawns dagagent acp from
+        # an arbitrary directory).
+        self._failed_plan_dir = Path.home() / ".dagagent" / "failed_plans"
 
     async def plan(self, request: str, *, min_tier: int = 0, feedback: str | None = None) -> Plan:
         """Generate and validate a plan for ``request``.
@@ -154,7 +155,9 @@ class Planner:
         }
         with filepath.open("w") as f:
             json.dump(payload, f, indent=2)
-        return str(filepath)
+        # Return the absolute path so callers can surface it to users regardless
+        # of what the process CWD was when the file was written.
+        return str(filepath.resolve())
 
     async def plan_attempt(
         self,

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -51,6 +52,14 @@ from dagagent.telemetry import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _clamp_confidence(value: float, default: float, node_id: int) -> float:
+    """Clamp confidence to [0, 1] and replace NaN/Inf with ``default``."""
+    if math.isnan(value) or math.isinf(value):
+        log.warning("Node %d: confidence is %s; substituting default %.2f", node_id, value, default)
+        return default
+    return max(0.0, min(1.0, value))
 
 
 class _LLMNodeSpec(NamedTuple):
@@ -428,7 +437,7 @@ class Executor:
             )
             data = json.loads(raw)
             branch = data.get("branch", node.default_branch or "yes")
-            confidence = float(data.get("confidence", 0.5))
+            confidence = _clamp_confidence(float(data.get("confidence", 0.5)), 0.5, node.id)
             if node.branches and branch not in node.branches:
                 log.warning(
                     "Node %d returned unknown branch '%s', falling back to default '%s'",
@@ -514,17 +523,32 @@ class Executor:
                 # extractor before giving up entirely.
                 streamer = JsonFieldStreamer(spec.output_key)
                 salvaged = streamer.feed(raw)
-                if salvaged:
+                # Use `done` (field marker found AND closing quote seen) OR a
+                # non-empty partial (truncated but usable). Do NOT use truthiness
+                # alone: an empty field value is valid and should not cause a failure.
+                if streamer.done or salvaged:
                     log.warning(
-                        "Node %d: JSON parse failed; salvaged %r field via streamer",
+                        "Node %d: JSON parse failed; salvaged %r field via streamer "
+                        "(done=%s, len=%d) — confidence will default to %.2f",
                         node.id,
                         spec.output_key,
+                        streamer.done,
+                        len(salvaged),
+                        spec.default_confidence,
                     )
                     data = {spec.output_key: salvaged}
                 else:
                     raise
-            output = data.get(spec.output_key, raw)
-            confidence = float(data.get("confidence", spec.default_confidence))
+            raw_output = data.get(spec.output_key)
+            if raw_output is None:
+                log.warning(
+                    "Node %d: response missing expected key %r; falling back to raw output",
+                    node.id,
+                    spec.output_key,
+                )
+            output = raw_output if raw_output is not None else raw
+            raw_confidence = float(data.get("confidence", spec.default_confidence))
+            confidence = _clamp_confidence(raw_confidence, spec.default_confidence, node.id)
         except Exception as exc:
             return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
 

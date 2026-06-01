@@ -32,8 +32,10 @@ ToolRisk = Literal["read", "network", "write", "execute"]
 - ``write``   — modifies local state (files, database, etc.).
 - ``execute`` — runs arbitrary code or shell commands; highest risk.
 
-``read`` and ``network`` tools run without confirmation. ``write`` and
-``execute`` tools require explicit user approval (HITL gate).
+``read`` and ``network`` tools run without user confirmation. ``write`` and
+``execute`` tools are intended to require explicit user approval via the
+HITL gate — callers should check :meth:`ToolHarness.risk_for` before
+executing any tool with risk ``write`` or ``execute``.
 """
 
 
