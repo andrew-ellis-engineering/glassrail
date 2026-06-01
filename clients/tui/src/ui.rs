@@ -193,6 +193,15 @@ fn render_transcript(
                     lines.extend(wrap_styled(raw, inner_w, Style::default()));
                 }
             }
+            Cell::Synthesis(text) => {
+                for raw in text.split('\n') {
+                    lines.extend(wrap_styled(
+                        &format!("↻ {raw}"),
+                        inner_w,
+                        Style::default().fg(Color::Blue).add_modifier(Modifier::DIM),
+                    ));
+                }
+            }
             Cell::Thought(text) => {
                 if thoughts_open {
                     for raw in text.split('\n') {

@@ -50,9 +50,28 @@ def test_tool_digest_groups_web_tools_when_registered() -> None:
     digest = render_tool_capability_digest(schemas)
 
     assert "Web / current information:" in digest
-    assert "web_search required=['query']" in digest
-    assert "web_fetch required=['url']" in digest
+    # Risk tag is now embedded: name[risk] required=[...]
+    assert "web_search[read] required=['query']" in digest
+    assert "web_fetch[read] required=['url']" in digest
     assert "inventing a tool" in digest
+    assert "Risk levels:" in digest
+
+
+def test_tool_risk_is_stored_and_retrievable() -> None:
+    harness = ToolHarness()
+    register_builtins(harness)
+
+    assert harness.risk_for("file_read") == "read"
+    assert harness.risk_for("calendar_get") == "read"
+    # Unknown tool defaults to the safe "read" level.
+    assert harness.risk_for("nonexistent_tool") == "read"
+
+
+def test_tool_digest_includes_risk_tag_in_tool_line() -> None:
+    harness = ToolHarness()
+    register_builtins(harness)
+    digest = render_tool_capability_digest(harness.all_schemas())
+    assert "file_read[read]" in digest
 
 
 def test_tool_digest_handles_no_tools() -> None:

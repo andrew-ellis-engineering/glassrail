@@ -389,6 +389,8 @@ impl<O: Outbound> App<O> {
                 is_final,
             } => {
                 let is_thought = node_type == "think" && !is_final;
+                let is_synthesis =
+                    (node_type == "synthesis" || node_type == "summary") && !is_final;
                 let key = (node_id, node_type, is_final);
                 if self.streaming_msg
                     && self.streaming_msg_key.as_ref() == Some(&key)
@@ -399,7 +401,9 @@ impl<O: Outbound> App<O> {
                     // Fall back to a new cell if the last cell was replaced by
                     // something else (shouldn't happen, but be safe).
                     match self.transcript.last_mut() {
-                        Some(Cell::Message(s)) | Some(Cell::Thought(s)) => {
+                        Some(Cell::Message(s))
+                        | Some(Cell::Synthesis(s))
+                        | Some(Cell::Thought(s)) => {
                             s.push_str(&content.text);
                             return;
                         }
@@ -410,6 +414,8 @@ impl<O: Outbound> App<O> {
                 if !content.text.trim().is_empty() {
                     if is_thought {
                         self.transcript.push(Cell::Thought(content.text));
+                    } else if is_synthesis {
+                        self.transcript.push(Cell::Synthesis(content.text));
                     } else {
                         self.transcript.push(Cell::Message(content.text));
                     }
@@ -860,8 +866,7 @@ mod tests {
             .transcript
             .iter()
             .filter_map(|c| match c {
-                Cell::Message(m) => Some(m.as_str()),
-                Cell::Thought(m) => Some(m.as_str()),
+                Cell::Message(m) | Cell::Synthesis(m) | Cell::Thought(m) => Some(m.as_str()),
                 _ => None,
             })
             .collect();
@@ -1138,6 +1143,60 @@ mod tests {
         assert!(!app.thoughts_open, "first press collapses");
         app.on_key(key(KeyCode::Char('t'))).await;
         assert!(app.thoughts_open, "second press re-expands");
+    }
+
+    #[tokio::test]
+    async fn synthesis_chunks_land_in_synthesis_cell() {
+        let (mut app, _client, _rx) = app();
+        app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
+            content: Content {
+                text: "combining results".into(),
+            },
+            node_id: Some(2),
+            node_type: "synthesis".into(),
+            is_final: false,
+        }))
+        .await;
+        assert!(
+            matches!(app.transcript.last(), Some(Cell::Synthesis(s)) if s == "combining results"),
+            "non-final synthesis chunk should be a Synthesis cell"
+        );
+    }
+
+    #[tokio::test]
+    async fn summary_chunks_land_in_synthesis_cell() {
+        let (mut app, _client, _rx) = app();
+        app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
+            content: Content {
+                text: "condensed".into(),
+            },
+            node_id: Some(3),
+            node_type: "summary".into(),
+            is_final: false,
+        }))
+        .await;
+        assert!(
+            matches!(app.transcript.last(), Some(Cell::Synthesis(_))),
+            "non-final summary chunk should be a Synthesis cell"
+        );
+    }
+
+    #[tokio::test]
+    async fn final_result_chunk_lands_in_message_cell() {
+        let (mut app, _client, _rx) = app();
+        app.on_server(ServerMessage::Update(SessionUpdate::AgentMessageChunk {
+            content: Content {
+                text: "final answer".into(),
+            },
+            node_id: Some(4),
+            node_type: "result".into(),
+            is_final: true,
+        }))
+        .await;
+        assert!(
+            matches!(app.transcript.last(), Some(Cell::Message(m)) if m == "final answer"),
+            "final result chunk should be a Message cell"
+        );
     }
 
     #[tokio::test]

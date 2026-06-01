@@ -49,6 +49,7 @@ def register_builtins(harness: ToolHarness) -> None:
             },
             "required": ["date"],
         },
+        risk="read",
     )(calendar_get)
 
     harness.tool(
@@ -62,6 +63,7 @@ def register_builtins(harness: ToolHarness) -> None:
             },
             "required": ["query"],
         },
+        risk="read",
     )(memory_search)
 
     harness.tool(
@@ -74,4 +76,5 @@ def register_builtins(harness: ToolHarness) -> None:
             },
             "required": ["path"],
         },
+        risk="read",
     )(file_read)

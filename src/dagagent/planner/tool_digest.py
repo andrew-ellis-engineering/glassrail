@@ -18,6 +18,7 @@ class _ToolInfo:
     name: str
     description: str
     required: tuple[str, ...]
+    risk: str = "read"
 
 
 @dataclass(frozen=True)
@@ -95,6 +96,8 @@ def render_tool_capability_digest(schemas: list[ToolSchema]) -> str:
         "- Use this as a quick capability map; the full JSON schemas below are "
         "authoritative for exact tool names and arguments.",
         "- If a needed capability is absent, emit a rejection instead of inventing a tool.",
+        "- Risk levels: [read] no side effects; [network] reads external sources; "
+        "[write] modifies local state; [execute] runs code — plan accordingly.",
     ]
     for group in _GROUPS:
         entries = grouped[group.id]
@@ -115,6 +118,7 @@ def _tool_info(schema: ToolSchema) -> _ToolInfo:
     fn = cast("dict[str, object]", raw_fn)
     name = str(fn.get("name", "<unknown>"))
     description = str(fn.get("description", ""))
+    risk = str(schema.get("x_risk", "read"))
     raw_parameters = fn.get("parameters")
     required: tuple[str, ...] = ()
     if isinstance(raw_parameters, dict):
@@ -122,7 +126,7 @@ def _tool_info(schema: ToolSchema) -> _ToolInfo:
         raw_required = parameters.get("required")
         if isinstance(raw_required, list):
             required = tuple(str(item) for item in cast("list[object]", raw_required))
-    return _ToolInfo(name=name, description=description, required=required)
+    return _ToolInfo(name=name, description=description, required=required, risk=risk)
 
 
 def _classify(tool: _ToolInfo) -> _CapabilityGroup | None:
@@ -150,4 +154,4 @@ def _format_tools(tools: list[_ToolInfo]) -> str:
 def _format_tool(tool: _ToolInfo) -> str:
     required = f" required={list(tool.required)}" if tool.required else ""
     description = f" — {tool.description}" if tool.description else ""
-    return f"{tool.name}{required}{description}"
+    return f"{tool.name}[{tool.risk}]{required}{description}"

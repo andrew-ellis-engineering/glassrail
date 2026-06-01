@@ -9,9 +9,11 @@
 pub enum Cell {
     /// A prompt the user submitted.
     Prompt(String),
-    /// An agent message chunk (think/summary/synthesis output, or the result).
+    /// The final user-visible answer from the result node.
     Message(String),
-    /// Live reasoning/thinking output, rendered dimmer than final answers.
+    /// Intermediate synthesis or summary output — visible but clearly secondary.
+    Synthesis(String),
+    /// Live reasoning/thinking output from a think node — dim and collapsible.
     Thought(String),
     /// A tool call: its title, arguments, latest status, and (once done) output.
     Tool {

@@ -8,11 +8,12 @@ from dagagent.harness.builtin import (
     memory_search,
     register_builtins,
 )
-from dagagent.harness.registry import ToolFunc, ToolHarness, ToolSchema
+from dagagent.harness.registry import ToolFunc, ToolHarness, ToolRisk, ToolSchema
 
 __all__ = [
     "ToolFunc",
     "ToolHarness",
+    "ToolRisk",
     "ToolSchema",
     "calendar_get",
     "file_read",

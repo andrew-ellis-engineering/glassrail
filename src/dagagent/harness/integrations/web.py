@@ -276,6 +276,7 @@ def register_web(harness: ToolHarness, config: WebToolConfig) -> None:
                 },
                 "required": ["url"],
             },
+            risk="network",
         )(_web_fetch)
         log.info("Registered web tool: web_fetch")
 
@@ -302,5 +303,6 @@ def register_web(harness: ToolHarness, config: WebToolConfig) -> None:
                 },
                 "required": ["query"],
             },
+            risk="network",
         )(_web_search)
         log.info("Registered web tool: web_search (provider=%s)", provider.name)

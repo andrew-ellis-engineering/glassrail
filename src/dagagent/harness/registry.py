@@ -12,7 +12,7 @@ import importlib.metadata
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Literal
 
 from dagagent.core import ToolExecutionError, ToolRegistrationError
 
@@ -24,6 +24,18 @@ ToolFunc = Callable[..., Awaitable[Any] | Any]
 ToolSchema = dict[str, Any]
 """OpenAI-style tool schema: ``{"type": "function", "function": {...}}``."""
 
+ToolRisk = Literal["read", "network", "write", "execute"]
+"""Declared side-effect risk for a tool.
+
+- ``read``    — no side effects; reads local data only (default).
+- ``network`` — reads from external sources; may leak information or incur cost.
+- ``write``   — modifies local state (files, database, etc.).
+- ``execute`` — runs arbitrary code or shell commands; highest risk.
+
+``read`` and ``network`` tools run without confirmation. ``write`` and
+``execute`` tools require explicit user approval (HITL gate).
+"""
+
 
 class ToolHarness:
     """Registry of callable tools with JSON-schema metadata."""
@@ -31,6 +43,7 @@ class ToolHarness:
     def __init__(self) -> None:
         self._funcs: dict[str, ToolFunc] = {}
         self._schemas: dict[str, ToolSchema] = {}
+        self._risk: dict[str, ToolRisk] = {}
 
     # ── Registration ─────────────────────────────────────────────────────
 
@@ -40,8 +53,12 @@ class ToolHarness:
         name: str,
         description: str,
         parameters: dict[str, Any],
+        risk: ToolRisk = "read",
     ) -> Callable[[ToolFunc], ToolFunc]:
         """Register a tool. Use as a decorator factory.
+
+        ``risk`` declares the tool's side-effect level and governs whether
+        execution requires user approval. Default is ``"read"`` (safe).
 
         Example::
 
@@ -49,13 +66,16 @@ class ToolHarness:
                 name="calendar_get",
                 description="Fetch calendar events for a date",
                 parameters={"type": "object", "properties": {...}, "required": [...]},
+                risk="read",
             )
             async def calendar_get(date: str) -> dict:
                 ...
         """
 
         def decorator(func: ToolFunc) -> ToolFunc:
-            self._register(name=name, description=description, parameters=parameters, func=func)
+            self._register(
+                name=name, description=description, parameters=parameters, func=func, risk=risk
+            )
             return func
 
         return decorator
@@ -67,6 +87,7 @@ class ToolHarness:
         description: str,
         parameters: dict[str, Any],
         func: ToolFunc,
+        risk: ToolRisk = "read",
     ) -> None:
         if name in self._funcs:
             raise ToolRegistrationError(f"Tool '{name}' already registered")
@@ -78,8 +99,13 @@ class ToolHarness:
                 "description": description,
                 "parameters": parameters,
             },
+            # Extension field: not part of the OpenAI function-calling spec but
+            # ignored by compliant parsers. Used by the planner digest and the
+            # executor's HITL gate.
+            "x_risk": risk,
         }
-        log.info("Registered tool: %s", name)
+        self._risk[name] = risk
+        log.info("Registered tool: %s (risk=%s)", name, risk)
 
     def load_entry_points(self, group: str = "dagagent.tools") -> int:
         """Discover and register tools exposed via the ``dagagent.tools`` group.
@@ -117,6 +143,10 @@ class ToolHarness:
 
     def schema_for(self, name: str) -> ToolSchema | None:
         return self._schemas.get(name)
+
+    def risk_for(self, name: str) -> ToolRisk:
+        """Return the declared risk level for ``name``, defaulting to ``"read"``."""
+        return self._risk.get(name, "read")
 
     def all_schemas(self) -> list[ToolSchema]:
         return list(self._schemas.values())
