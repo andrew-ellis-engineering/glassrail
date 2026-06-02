@@ -17,7 +17,7 @@ def test_node_minimum_fields() -> None:
     assert node.branches is None
     assert node.reasoning_required is False
     assert node.forced_tier is None
-    assert node.format is SummaryFormat.MEDIUM
+    assert node.format is None
 
 
 def test_node_type_strenum_round_trip() -> None:

@@ -35,10 +35,14 @@ class TierConfig(BaseModel):
     fallthrough. Order in the parent :class:`Settings` is the routing order.
     """
 
-    base_url: str
-    model: str
+    kind: str = "openai_compat"
+    """Provider kind: ``openai_compat`` (default) or ``scripted`` (eval-only)."""
+    base_url: str = ""
+    model: str = ""
     api_key: str = ""
     timeout_s: float = 60.0
+    scripted_path: str = ""
+    """Absolute path to a JSONL responses file. Required when ``kind=scripted``."""
 
 
 class NodeBudgets(BaseModel):

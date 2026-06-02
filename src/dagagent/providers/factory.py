@@ -7,11 +7,20 @@ hand-construct providers.
 from __future__ import annotations
 
 from dagagent.config import Settings, TierConfig
+from dagagent.providers.base import LLMProvider
 from dagagent.providers.openai_compat import OpenAICompatProvider
 from dagagent.providers.router import TierRouter
+from dagagent.providers.scripted import ScriptedProvider
 
 
-def _provider_from_tier(tier: int, cfg: TierConfig) -> OpenAICompatProvider:
+def _provider_from_tier(tier: int, cfg: TierConfig) -> LLMProvider:
+    if cfg.kind == "scripted":
+        if not cfg.scripted_path:
+            raise ValueError(
+                f"tier{tier}: kind=scripted requires scripted_path to be set "
+                "(e.g. DAGAGENT_TIER0__SCRIPTED_PATH=/path/to/responses.jsonl)"
+            )
+        return ScriptedProvider(name=f"tier{tier}-scripted", tier=tier, path=cfg.scripted_path)
     return OpenAICompatProvider(
         name=f"tier{tier}",
         tier=tier,

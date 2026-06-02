@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 
 import typer
 
@@ -18,12 +19,14 @@ from dagagent.core import (
     ExecutionState,
     Node,
     NodeType,
+    Plan,
     TaskStatus,
     new_task_id,
 )
 from dagagent.gateways.acp import run_acp
 from dagagent.gateways.tui import DEFAULT_BASE_URL, run_tui
 from dagagent.runtime import build_runtime
+from dagagent.validator import PlanValidator
 
 app = typer.Typer(
     name="dagagent",
@@ -154,6 +157,11 @@ def _trajectory(state: ExecutionState) -> list[dict[str, object]]:
             continue
         result = state.results.get(node_id)
         branch = result.branch_taken if result else None
+        raw_out = result.output if result else None
+        out_str: str | None = None
+        if raw_out is not None:
+            s = str(raw_out)
+            out_str = s[:2048] if len(s) > 2048 else s
         steps.append(
             {
                 "tool": _node_token(node),
@@ -165,6 +173,8 @@ def _trajectory(state: ExecutionState) -> list[dict[str, object]]:
                 "confidence": result.confidence if result else 1.0,
                 "flagged": result.flagged if result else False,
                 "branch_taken": branch,
+                "args_used": result.args_used if result else None,
+                "output": out_str,
             }
         )
     return steps
@@ -193,6 +203,93 @@ def _envelope(state: ExecutionState, *, error: str | None = None) -> dict[str, o
         "branch_log": [e.model_dump(mode="json") for e in state.branch_log],
         "flagged_nodes": [r.node_id for r in state.results.values() if r.flagged],
     }
+
+
+@app.command("exec-plan")
+def exec_plan(
+    plan_file: str = typer.Argument(..., help="Path to the plan JSON file."),
+    json_output: bool = typer.Option(
+        False, "--json", help="Emit a JSON result envelope on stdout."
+    ),
+    no_validate: bool = typer.Option(
+        False, "--no-validate", help="Skip plan validation (for negative harness tests)."
+    ),
+) -> None:
+    """Execute a fixed plan JSON, bypassing the planner.
+
+    Reads a plan from a JSON file, optionally validates it, then runs only the
+    executor.  Emits the same ``--json`` envelope as ``run``.  Used by the
+    harness-mechanics eval suite to inject deterministic plans without running
+    the planner.
+    """
+    envelope = asyncio.run(_exec_plan(plan_file, no_validate=no_validate))
+    if json_output:
+        typer.echo(json.dumps(envelope))
+    else:
+        typer.echo(envelope.get("result") or envelope.get("error") or "(no output)")
+
+
+async def _exec_plan(plan_file: str, *, no_validate: bool) -> dict[str, object]:
+    try:
+        raw = await asyncio.get_event_loop().run_in_executor(
+            None, Path(plan_file).read_text, "utf-8"
+        )
+        plan_data = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "result": "",
+            "trajectory": [],
+            "status": "failed",
+            "is_error": True,
+            "error": f"could not load plan file: {exc}",
+            "total_cost_usd": None,
+            "total_tokens": 0,
+        }
+
+    settings = get_settings()
+    settings = settings.model_copy(update={"confirm_plans": False})
+    rt = build_runtime(settings)
+
+    try:
+        plan = Plan.model_validate(plan_data)
+    except Exception as exc:
+        return {
+            "result": "",
+            "trajectory": [],
+            "status": "failed",
+            "is_error": True,
+            "error": f"plan parse failed: {exc}",
+            "total_cost_usd": None,
+            "total_tokens": 0,
+        }
+
+    if not no_validate:
+        validator = PlanValidator(harness=rt.harness, settings=settings)
+        try:
+            plan.sorted_node_ids = validator.validate(plan)
+        except Exception as exc:
+            return {
+                "result": "",
+                "trajectory": [],
+                "status": "failed",
+                "is_error": True,
+                "error": f"plan validation failed: {exc}",
+                "total_cost_usd": None,
+                "total_tokens": 0,
+            }
+
+    state = ExecutionState(task_id=new_task_id(), user_request="<exec-plan>")
+    state.plan = plan
+    await rt.store.save_task(state)
+
+    run_error: str | None = None
+    try:
+        await rt.orchestrator.execute_plan(state)
+    except TimeoutError:
+        run_error = "timed out"
+
+    final = await rt.store.load_task(state.task_id) or state
+    return _envelope(final, error=run_error)
 
 
 if __name__ == "__main__":

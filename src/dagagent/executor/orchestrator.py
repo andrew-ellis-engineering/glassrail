@@ -106,6 +106,24 @@ class Orchestrator:
                 if state.status is TaskStatus.FAILED:
                     span.set_status(Status(StatusCode.ERROR, state.error or "task failed"))
 
+    async def execute_plan(self, state: ExecutionState) -> None:
+        """Execute a pre-built plan, bypassing the planner entirely.
+
+        Used by ``dagagent exec-plan`` to inject a fixed plan JSON and run
+        only the executor.  The caller is responsible for validating the plan
+        and setting ``state.plan`` before calling.
+        """
+        assert state.plan is not None, "execute_plan requires state.plan to be set"
+        try:
+            await self._executor.execute(state)
+        except Exception as exc:
+            log.exception("[%s] exec-plan failed: %s", state.task_id, exc)
+            state.status = TaskStatus.FAILED
+            state.error = str(exc)
+            state.touch()
+        finally:
+            await self._store.save_task(state)
+
     async def resume(self, task_id: TaskId) -> None:
         """Resume a task paused at confirmation or mid-execution."""
         with get_tracer().start_as_current_span(SPAN_TASK) as span:

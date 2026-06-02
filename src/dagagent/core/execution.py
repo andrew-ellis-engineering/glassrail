@@ -41,6 +41,8 @@ class NodeResult(BaseModel):
     output: Any = None
     branch_taken: str | None = None
     """Set on DECISION nodes — names the branch the executor took."""
+    args_used: dict[str, Any] | None = None
+    """Actual args passed to the tool (template or extracted). TOOL nodes only."""
     confidence: float = 1.0
     flagged: bool = False
     """True when ``confidence`` fell below the configured threshold."""

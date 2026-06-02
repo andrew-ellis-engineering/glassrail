@@ -401,7 +401,9 @@ class Executor:
 
         if raw_output is None or raw_output in ({}, []):
             log.info("Node %d: tool '%s' returned empty", node.id, node.tool)
-            return NodeResult(node_id=node.id, status=NodeStatus.EMPTY, output=raw_output)
+            return NodeResult(
+                node_id=node.id, status=NodeStatus.EMPTY, output=raw_output, args_used=args
+            )
 
         ok, issue = await self._check_output_shape(node, raw_output)
         if not ok:
@@ -410,6 +412,7 @@ class Executor:
                 node_id=node.id,
                 status=NodeStatus.COMPLETED,
                 output=raw_output,
+                args_used=args,
                 confidence=0.5,
                 flagged=True,
                 error=f"Unexpected shape: {issue}",
@@ -419,6 +422,7 @@ class Executor:
             node_id=node.id,
             status=NodeStatus.COMPLETED,
             output=raw_output,
+            args_used=args,
             confidence=1.0,
         )
 

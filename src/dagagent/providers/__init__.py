@@ -23,6 +23,7 @@ from dagagent.providers.factory import router_from_settings
 from dagagent.providers.openai_compat import OpenAICompatProvider
 from dagagent.providers.postprocess import strip_model_output
 from dagagent.providers.router import TierRouter
+from dagagent.providers.scripted import ScriptedProvider
 
 __all__ = [
     "Chunk",
@@ -31,6 +32,7 @@ __all__ = [
     "OpenAICompatProvider",
     "ProviderError",
     "ProviderUnavailableError",
+    "ScriptedProvider",
     "TierRouter",
     "collect",
     "router_from_settings",

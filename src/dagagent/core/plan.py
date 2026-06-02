@@ -69,7 +69,8 @@ class Node(BaseModel):
     subplan: Plan | None = None
 
     # SUMMARY-only — ignored by other node types.
-    format: SummaryFormat = SummaryFormat.MEDIUM
+    format: SummaryFormat | None = None
+    """Compression hint for summary nodes. ``None`` uses the configured default (medium)."""
 
 
 class Plan(BaseModel):

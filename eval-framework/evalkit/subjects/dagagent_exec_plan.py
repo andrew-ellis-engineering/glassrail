@@ -1,0 +1,76 @@
+"""dagagent-exec-plan backend — run a fixed plan through the executor.
+
+Calls ``dagagent exec-plan <plan_path> --json`` instead of
+``dagagent run <prompt> --json``.  The plan path is resolved from the
+prompt string (which the runner populates with the absolute path after
+resolving the ``__EXEC_PLAN__`` fixture directive).
+
+The scripted provider path is injected into the subprocess env via
+``DAGAGENT_TIER0__SCRIPTED_PATH`` when ``scripted_responses`` is present
+in the backend_config (set by the task's fixture install / backend_config).
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+from typing import Any
+
+from evalkit.subjects.base import RunResult
+from evalkit.subjects.dagagent_cli import _as_text, _result_from_proc
+
+_DEFAULT_COMMAND = ["dagagent", "exec-plan"]
+
+
+class DagAgentExecPlanSubject:
+    """Subject backend: the dagagent executor driven with a fixed injected plan."""
+
+    name = "dagagent-exec-plan"
+
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
+        config = config or {}
+        cmd = config.get("command", _DEFAULT_COMMAND)
+        self._command = list(cmd) if isinstance(cmd, (list, tuple)) else [str(cmd)]
+        raw_env = config.get("env") or {}
+        self._env_overrides = {str(k): str(v) for k, v in raw_env.items()}
+        # Optional: absolute path to the scripted responses JSONL for this task.
+        # The runner resolves it and passes it here via backend_config.
+        self._scripted_path: str | None = config.get("scripted_responses")
+
+    def run(self, *, prompt: str, model: str, max_turns: int, timeout_s: int) -> RunResult:
+        # ``prompt`` is the absolute plan path, resolved by the runner from the
+        # ``__EXEC_PLAN__ fixtures/plan.json`` directive in prompt.md.
+        plan_path = prompt.strip()
+        if not plan_path:
+            return RunResult(
+                result_text="",
+                success=False,
+                error="exec-plan: no plan path provided",
+            )
+
+        cmd = [*self._command, plan_path, "--json"]
+        env = dict(os.environ)
+        if self._env_overrides:
+            env.update(self._env_overrides)
+        if self._scripted_path:
+            env["DAGAGENT_TIER0__SCRIPTED_PATH"] = self._scripted_path
+
+        try:
+            proc = subprocess.run(  # noqa: S603
+                cmd, capture_output=True, text=True, timeout=timeout_s, check=False, env=env
+            )
+        except subprocess.TimeoutExpired as exc:
+            return RunResult(
+                result_text="",
+                success=False,
+                error="timed out",
+                raw_stdout=_as_text(exc.stdout),
+                raw_stderr=_as_text(exc.stderr) + "\n[timed out]",
+            )
+        except FileNotFoundError:
+            return RunResult(
+                result_text="",
+                success=False,
+                error=f"dagagent CLI not found: {self._command[0]!r}",
+            )
+        return _result_from_proc(proc.returncode, proc.stdout, proc.stderr)

@@ -105,7 +105,35 @@ def _install_fixtures(task: Task) -> None:
             shutil.copy2(src, dest)
 
 
+def _inject_scripted_path(task: Task, subject: Any) -> None:
+    """If the subject is an exec-plan backend, resolve and set the scripted responses path.
+
+    Looks for ``responses.jsonl`` in the task's fixtures directory.  When found,
+    sets ``subject._scripted_path`` so the subprocess gets the right
+    ``DAGAGENT_TIER0__SCRIPTED_PATH`` env var.  No-ops for other backends.
+    """
+    if not hasattr(subject, "_scripted_path"):
+        return
+    responses = task.path / "fixtures" / "responses.jsonl"
+    if responses.exists():
+        subject._scripted_path = str(responses.resolve())
+
+
+_EXEC_PLAN_PREFIX = "__EXEC_PLAN__"
+
+
 def _build_prompt(task: Task) -> str:
+    """Build the prompt string passed to the subject.
+
+    For ``dagagent-exec-plan`` tasks the prompt.md contains a single line of
+    the form ``__EXEC_PLAN__ fixtures/plan.json``.  This directive is resolved
+    to an absolute path here so the subject receives a ready-to-use path
+    without needing access to the task directory itself.
+    """
+    raw = task.prompt.strip()
+    if raw.startswith(_EXEC_PLAN_PREFIX):
+        relative = raw[len(_EXEC_PLAN_PREFIX):].strip()
+        return str(_find_fixture_source(task, relative).resolve())
     parts = [task.prompt]
     if task.context_files:
         block = ["\n\n## Context files\n"]
@@ -142,6 +170,7 @@ def run_trial(task: Task, run_number: int, *, subject: Subject, model: str, time
             baseline[raw] = _read_content(_expand(raw))
 
         _install_fixtures(task)
+        _inject_scripted_path(task, subject)
 
         result = subject.run(
             prompt=_build_prompt(task),
