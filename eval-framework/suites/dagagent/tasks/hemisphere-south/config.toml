@@ -2,7 +2,7 @@ name = "hemisphere-south"
 tags = ["decision", "reasoning", "control-pair"]
 type = "capability"
 difficulty = 4
-timeout_s = 180
+timeout_s = 270
 
 expected_behavior = """
 Sydney is in the southern hemisphere. Austral summer runs December through

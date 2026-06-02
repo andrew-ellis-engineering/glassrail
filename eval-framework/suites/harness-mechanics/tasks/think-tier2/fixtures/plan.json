@@ -20,12 +20,14 @@
       "description": "Report the reasoning conclusion",
       "tool": null,
       "args_template": null,
-      "context_needed": [1],
+      "context_needed": [
+        1
+      ],
       "condition": null,
       "branches": null,
       "default_branch": null,
       "reasoning_required": false,
-      "forced_tier": null,
+      "forced_tier": 2,
       "subplan": null
     }
   ]

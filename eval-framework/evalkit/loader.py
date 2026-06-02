@@ -125,7 +125,7 @@ def load_task(task_dir: Path, suite_meta: dict[str, Any], suite_name: str) -> Ta
         max_turns=max_turns,
         timeout_s=timeout_s,
         tags=[str(t) for t in cfg.get("tags", []) or []],
-        type=str(cfg.get("type", "capability")),
+        type=str(cfg.get("type") or suite_meta.get("default_type") or "capability"),
         difficulty=int(cfg.get("difficulty", 1)),
         control_for=cfg.get("control_for"),
         expected_behavior=str(cfg.get("expected_behavior", "")),

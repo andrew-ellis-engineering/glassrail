@@ -7,15 +7,11 @@ calls) and asserts execution-model behaviour at the envelope level.  A single
 trial is a proof — pass@1 == pass^1 — so failures diagnose executor bugs, not
 model variance.
 
-Infrastructure required (not yet built; see HARNESS_NODE_EVAL_SPEC.md §4):
-  - `dagagent exec-plan <plan.json> --json` CLI command
-  - A `scripted` provider kind (DAGAGENT_TIER0__KIND=scripted) that replays
-    a JSONL file of canned model responses in call order
-  - Envelope enrichments: `args_used` and per-node `output` on each
-    trajectory step
-
-Until that infrastructure lands, tasks in this suite will not run but their
-config and fixtures encode the full spec as a ready-to-execute artefact.
+Runs via `dagagent exec-plan <plan.json> --json` with all four tiers set to
+KIND=scripted, so THINK and reasoning_required nodes routed to tier 2 are also
+model-free.  Responses are consumed from a single JSONL deque per tier;
+tasks that use multiple tiers must ensure all LLM calls for that task route
+to the same tier (via forced_tier) so call order is deterministic.
 """
 default_backend = "dagagent-exec-plan"
 default_model = "scripted"
@@ -31,4 +27,7 @@ command = ["uv", "run", "dagagent", "exec-plan"]
 
 [backend.env]
 DAGAGENT_TIER0__KIND = "scripted"
-# DAGAGENT_TIER0__SCRIPTED_PATH is set per-task via task-level backend_config.
+DAGAGENT_TIER1__KIND = "scripted"
+DAGAGENT_TIER2__KIND = "scripted"
+DAGAGENT_TIER3__KIND = "scripted"
+# SCRIPTED_PATH is injected for all four tiers by the runner via _inject_scripted_path.

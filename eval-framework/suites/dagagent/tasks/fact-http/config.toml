@@ -29,7 +29,7 @@ target = "__result_text__"
 value = "(?i)(not sure|don't know|do not know|no idea|can't say|cannot say)"
 
 [[criteria]]
-text = "Plan terminates on a result node"
+text = "Plan includes a result node"
 grader = "trajectory"
 tool_sequence = ["result"]
 

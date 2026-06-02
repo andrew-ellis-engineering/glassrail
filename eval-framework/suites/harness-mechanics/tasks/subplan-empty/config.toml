@@ -4,8 +4,10 @@ type = "regression"
 difficulty = 1
 
 expected_behavior = """
-When a subplan's nested execution produces no final_output (e.g. no result
-node completes), the SUBPLAN node must have status EMPTY, not FAILED.
+When a subplan's nested execution produces no final_output, the SUBPLAN node
+must have status EMPTY, not FAILED.  The nested plan uses a think-only node
+(forced_tier=0, scripted) — think is not in _extract_final_output's fallback
+chain (only result and synthesis are), so nested final_output is null.
 """
 
 [fixtures]

@@ -41,7 +41,7 @@ target = "__result_text__"
 value = "(?i)(can't predict|cannot predict|unpredictable|no way to know|not possible to know|future|unknown|impossible to say|depends on)"
 
 [[criteria]]
-text = "Plan terminates on a result node"
+text = "Plan includes a result node"
 grader = "trajectory"
 tool_sequence = ["result"]
 

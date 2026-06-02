@@ -42,7 +42,7 @@ target = "__result_text__"
 value = "(?i)time[- ]series"
 
 [[criteria]]
-text = "Plan terminates on a result node"
+text = "Plan includes a result node"
 grader = "trajectory"
 tool_sequence = ["result"]
 

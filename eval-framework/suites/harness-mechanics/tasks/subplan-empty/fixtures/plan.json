@@ -16,8 +16,8 @@
         "nodes": [
           {
             "id": 1,
-            "type": "synthesis",
-            "description": "Intermediate step with no downstream result node",
+            "type": "think",
+            "description": "Think-only nested step \u2014 produces no final_output (think is not in the extraction fallback chain)",
             "tool": null,
             "args_template": null,
             "context_needed": [],
@@ -25,7 +25,7 @@
             "branches": null,
             "default_branch": null,
             "reasoning_required": false,
-            "forced_tier": null,
+            "forced_tier": 0,
             "subplan": null
           }
         ]

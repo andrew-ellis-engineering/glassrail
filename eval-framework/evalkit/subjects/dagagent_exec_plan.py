@@ -31,6 +31,7 @@ class DagAgentExecPlanSubject:
         config = config or {}
         cmd = config.get("command", _DEFAULT_COMMAND)
         self._command = list(cmd) if isinstance(cmd, (list, tuple)) else [str(cmd)]
+        self._extra_args = [str(a) for a in config.get("args", [])]
         raw_env = config.get("env") or {}
         self._env_overrides = {str(k): str(v) for k, v in raw_env.items()}
         # Optional: absolute path to the scripted responses JSONL for this task.
@@ -48,12 +49,15 @@ class DagAgentExecPlanSubject:
                 error="exec-plan: no plan path provided",
             )
 
-        cmd = [*self._command, plan_path, "--json"]
+        cmd = [*self._command, plan_path, "--json", *self._extra_args]
         env = dict(os.environ)
         if self._env_overrides:
             env.update(self._env_overrides)
         if self._scripted_path:
-            env["DAGAGENT_TIER0__SCRIPTED_PATH"] = self._scripted_path
+            # Propagate to all four tiers so THINK/reasoning_required nodes that
+            # route to tier 2 also get scripted responses, not live model calls.
+            for tier in range(4):
+                env[f"DAGAGENT_TIER{tier}__SCRIPTED_PATH"] = self._scripted_path
 
         try:
             proc = subprocess.run(  # noqa: S603

@@ -109,14 +109,16 @@ def _inject_scripted_path(task: Task, subject: Any) -> None:
     """If the subject is an exec-plan backend, resolve and set the scripted responses path.
 
     Looks for ``responses.jsonl`` in the task's fixtures directory.  When found,
-    sets ``subject._scripted_path`` so the subprocess gets the right
-    ``DAGAGENT_TIER0__SCRIPTED_PATH`` env var.  No-ops for other backends.
+    sets ``subject._scripted_path``; the subject propagates this to all tier env
+    vars so THINK/reasoning_required nodes routed to tier 2 also get scripted
+    responses.  No-ops for other backends (``_scripted_path`` is exec-plan-only).
     """
     if not hasattr(subject, "_scripted_path"):
         return
     responses = task.path / "fixtures" / "responses.jsonl"
-    if responses.exists():
-        subject._scripted_path = str(responses.resolve())
+    if not responses.exists():
+        return
+    subject._scripted_path = str(responses.resolve())
 
 
 _EXEC_PLAN_PREFIX = "__EXEC_PLAN__"
@@ -132,12 +134,14 @@ def _build_prompt(task: Task) -> str:
     """
     raw = task.prompt.strip()
     if raw.startswith(_EXEC_PLAN_PREFIX):
-        # Directive is "__EXEC_PLAN__ fixtures/plan.json"; _find_fixture_source
-        # already prepends "fixtures/", so strip that prefix from the path.
+        # Directive: "__EXEC_PLAN__ fixtures/plan.json"
+        # _find_fixture_source already prepends "fixtures/", so strip only that
+        # literal prefix — not the first path component blindly.
         directive_path = raw[len(_EXEC_PLAN_PREFIX):].strip()
-        fixture_parts = directive_path.split("/", 1)
-        source = fixture_parts[-1]  # "plan.json" (strips leading "fixtures/" if present)
-        return str(_find_fixture_source(task, source).resolve())
+        _FIXTURES_PREFIX = "fixtures/"
+        if directive_path.startswith(_FIXTURES_PREFIX):
+            directive_path = directive_path[len(_FIXTURES_PREFIX):]
+        return str(_find_fixture_source(task, directive_path).resolve())
     parts = [task.prompt]
     if task.context_files:
         block = ["\n\n## Context files\n"]

@@ -4,13 +4,9 @@ type = "regression"
 difficulty = 1
 
 expected_behavior = """
-NOTE: the "node:<id> output" criterion below requires the §4.3 envelope enrichment
-(per-node `output` field on trajectory steps). Until that lands, the regex check
-will fail because `_resolve("node:1")` returns (None, False) → regex returns False.
-This is the expected "not yet runnable" state; fix will flow automatically once
-the `output` field is surfaced in the trajectory envelope.
 A SYNTHESIS node reads the 'output' field from the model response.
-The value must appear in the node's trajectory output and in the result.
+The value must appear in the node's trajectory output (via node:<id> grader)
+and also flow through to the final result text.
 """
 
 [fixtures]

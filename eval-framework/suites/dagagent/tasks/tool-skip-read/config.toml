@@ -38,7 +38,7 @@ tool_sequence = ["file_read"]
 value = "absent"
 
 [[criteria]]
-text = "Plan terminates on a result node"
+text = "Plan includes a result node"
 grader = "trajectory"
 tool_sequence = ["result"]
 

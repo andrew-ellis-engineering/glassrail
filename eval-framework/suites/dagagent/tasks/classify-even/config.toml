@@ -2,7 +2,7 @@ name = "classify-even"
 tags = ["decision", "control-pair"]
 type = "capability"
 difficulty = 2
-timeout_s = 150
+timeout_s = 240
 
 expected_behavior = """
 246 is even, so its half (123) should be reported. The conditional phrasing

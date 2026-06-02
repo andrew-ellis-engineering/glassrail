@@ -40,10 +40,10 @@ text = "Names a recommended option"
 grader = "deterministic"
 check = "regex"
 target = "__result_text__"
-value = "(?i)(recommend|best fit|choose|go with).{0,60}(kafka|redis|postgres)"
+value = "(?i)(recommend|best fit|choose|go with).{0,10}(kafka|redis|postgres)"
 
 [[criteria]]
-text = "Plan terminates on a result node"
+text = "Plan includes a result node"
 grader = "trajectory"
 tool_sequence = ["result"]
 

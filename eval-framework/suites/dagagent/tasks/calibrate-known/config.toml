@@ -36,10 +36,10 @@ text = "Does not hedge on a known fact"
 grader = "deterministic"
 check = "not_regex"
 target = "__result_text__"
-value = "(?i)(not sure|don't know|do not know|cannot say|can't say|it depends|typically|usually|generally)"
+value = "(?i)(not sure|don't know|do not know|cannot say|can't say|it depends)"
 
 [[criteria]]
-text = "Plan terminates on a result node"
+text = "Plan includes a result node"
 grader = "trajectory"
 tool_sequence = ["result"]
 

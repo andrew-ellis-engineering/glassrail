@@ -43,14 +43,21 @@ def _is_subsequence(expected: list[str], actual: list[str]) -> bool:
 
 
 def _references_target(trajectory: list[dict[str, Any]], tools: list[str], target: str) -> bool:
-    """True if any call to one of ``tools`` mentions ``target`` in its input."""
+    """True if any call to one of ``tools`` mentions ``target`` in its input or args_used.
+
+    Checks both ``input`` (the planner's args_template) and ``args_used`` (the
+    actual resolved args passed to the tool) so that tasks exercising
+    ``_extract_args`` — where the resolved path lands in ``args_used`` rather
+    than ``input`` — pass correctly.
+    """
     candidates = {target, os.path.expanduser(target), os.path.basename(target)}
     for step in trajectory:
         if str(step.get("tool", "")) not in tools:
             continue
-        for val in _flatten_strings(step.get("input", {})):
-            if any(c and c in val for c in candidates):
-                return True
+        for field in ("input", "args_used"):
+            for val in _flatten_strings(step.get(field) or {}):
+                if any(c and c in val for c in candidates):
+                    return True
     return False
 
 

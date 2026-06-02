@@ -3,7 +3,7 @@
     {
       "id": 1,
       "type": "think",
-      "description": "Root node — gather initial context",
+      "description": "Root node \u2014 gather initial context",
       "tool": null,
       "args_template": null,
       "context_needed": [],
@@ -11,16 +11,18 @@
       "branches": null,
       "default_branch": null,
       "reasoning_required": true,
-      "forced_tier": null,
+      "forced_tier": 0,
       "subplan": null
     },
     {
       "id": 2,
       "type": "synthesis",
-      "description": "Left branch — process first half",
+      "description": "Left branch \u2014 process first half",
       "tool": null,
       "args_template": null,
-      "context_needed": [1],
+      "context_needed": [
+        1
+      ],
       "condition": null,
       "branches": null,
       "default_branch": null,
@@ -31,10 +33,12 @@
     {
       "id": 3,
       "type": "synthesis",
-      "description": "Right branch — process second half",
+      "description": "Right branch \u2014 process second half",
       "tool": null,
       "args_template": null,
-      "context_needed": [1],
+      "context_needed": [
+        1
+      ],
       "condition": null,
       "branches": null,
       "default_branch": null,
@@ -45,10 +49,13 @@
     {
       "id": 4,
       "type": "result",
-      "description": "Sink — combine both branches",
+      "description": "Sink \u2014 combine both branches",
       "tool": null,
       "args_template": null,
-      "context_needed": [2, 3],
+      "context_needed": [
+        2,
+        3
+      ],
       "condition": null,
       "branches": null,
       "default_branch": null,

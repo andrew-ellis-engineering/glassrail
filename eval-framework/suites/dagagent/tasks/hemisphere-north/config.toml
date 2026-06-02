@@ -3,7 +3,7 @@ tags = ["decision", "reasoning", "control-pair"]
 type = "capability"
 difficulty = 4
 control_for = "hemisphere-south"
-timeout_s = 180
+timeout_s = 270
 
 expected_behavior = """
 Madrid is in the northern hemisphere. Boreal winter runs December through

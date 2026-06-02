@@ -3,7 +3,7 @@
     {
       "id": 1,
       "type": "think",
-      "description": "Only a think node — no result or synthesis follows",
+      "description": "Only a think node \u2014 no result or synthesis follows",
       "tool": null,
       "args_template": null,
       "context_needed": [],
@@ -11,7 +11,7 @@
       "branches": null,
       "default_branch": null,
       "reasoning_required": true,
-      "forced_tier": null,
+      "forced_tier": 0,
       "subplan": null
     }
   ]

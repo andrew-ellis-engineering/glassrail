@@ -39,7 +39,7 @@ target = "__result_text__"
 value = "(?i)(alice.{0,30}fish|fish.{0,30}alice)"
 
 [[criteria]]
-text = "Plan terminates on a result node"
+text = "Plan includes a result node"
 grader = "trajectory"
 tool_sequence = ["result"]
 
