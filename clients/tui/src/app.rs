@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 
 use crate::acp::messages::{PermOption, PlanEntry, SessionUpdate, ToolCallPermission};
 use crate::acp::{Outbound, ServerMessage};
-use crate::graph::{self, GraphNode};
+use crate::graph::{self, Graph};
 use crate::transcript::Cell;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,7 +42,7 @@ pub struct App<O: Outbound> {
     pub transcript: Vec<Cell>,
     pub plan: Vec<PlanEntry>,
     /// The plan's graph topology for the DAG view (empty until plan_graph).
-    pub graph: Vec<GraphNode>,
+    pub graph: Graph,
     /// Whether the DAG view is open (toggled with Tab).
     pub show_dag: bool,
     /// Whether thought cells (think-node output) are expanded; toggled with `t`.
@@ -89,7 +89,7 @@ impl<O: Outbound> App<O> {
                 "Type a task and press Enter. Tab: graph  t: thoughts  Esc: quit".into(),
             )],
             plan: Vec::new(),
-            graph: Vec::new(),
+            graph: Graph::default(),
             show_dag: false,
             thoughts_open: true,
             composer: String::new(),
@@ -357,14 +357,14 @@ impl<O: Outbound> App<O> {
         }
         match update {
             SessionUpdate::Plan { entries } => {
-                // Plan entries and graph nodes share the topological order, so
-                // sync the graph's per-node status by position.
-                for (node, entry) in self.graph.iter_mut().zip(&entries) {
-                    node.status = entry.status.clone();
+                for entry in &entries {
+                    if let Some(node_id) = entry.node_id {
+                        self.graph.update_status(node_id, entry.status.clone());
+                    }
                 }
                 self.plan = entries;
             }
-            SessionUpdate::PlanGraph { nodes } => self.graph = graph::build(nodes),
+            SessionUpdate::PlanGraph { nodes, edges } => self.graph = graph::build(nodes, edges),
             SessionUpdate::ToolCall {
                 tool_call_id,
                 title,
@@ -465,7 +465,7 @@ impl<O: Outbound> App<O> {
         self.history_pos = None;
         self.transcript.push(Cell::Prompt(prompt.clone()));
         self.plan.clear();
-        self.graph.clear();
+        self.graph = Graph::default();
         self.tool_idx.clear();
         self.scrollback = 0; // jump back to the tail for the new turn
         self.working = true;
@@ -661,6 +661,7 @@ mod tests {
             params: PermissionParams {
                 plan: Some(PlanWrap {
                     entries: vec![PlanEntry {
+                        node_id: Some(1),
                         content: "step one".into(),
                         status: "pending".into(),
                     }],
@@ -776,6 +777,7 @@ mod tests {
         let (mut app, _client, _rx) = app();
         app.on_server(ServerMessage::Update(SessionUpdate::Plan {
             entries: vec![PlanEntry {
+                node_id: Some(1),
                 content: "do x".into(),
                 status: "in_progress".into(),
             }],
@@ -893,6 +895,7 @@ mod tests {
         // A plan update in between closes the streaming sequence.
         app.on_server(ServerMessage::Update(SessionUpdate::Plan {
             entries: vec![PlanEntry {
+                node_id: Some(1),
                 content: "node".into(),
                 status: "completed".into(),
             }],
@@ -1097,29 +1100,32 @@ mod tests {
                     deps: vec![1],
                 },
             ],
+            edges: Vec::new(),
         }))
         .await;
-        assert_eq!(app.graph.len(), 2);
-        assert_eq!(app.graph[0].layer, 0);
-        assert_eq!(app.graph[1].layer, 1);
-        assert!(app.graph.iter().all(|n| n.status == "pending"));
+        assert_eq!(app.graph.nodes.len(), 2);
+        assert_eq!(app.graph.nodes[0].layer, 0);
+        assert_eq!(app.graph.nodes[1].layer, 1);
+        assert!(app.graph.nodes.iter().all(|n| n.status == "pending"));
 
-        // A plan update syncs status onto the graph by position.
+        // A plan update syncs status onto the graph by node id.
         app.on_server(ServerMessage::Update(SessionUpdate::Plan {
             entries: vec![
                 PlanEntry {
+                    node_id: Some(2),
                     content: "[tool] read".into(),
                     status: "completed".into(),
                 },
                 PlanEntry {
+                    node_id: Some(1),
                     content: "[result] answer".into(),
                     status: "in_progress".into(),
                 },
             ],
         }))
         .await;
-        assert_eq!(app.graph[0].status, "completed");
-        assert_eq!(app.graph[1].status, "in_progress");
+        assert_eq!(app.graph.nodes[0].status, "in_progress");
+        assert_eq!(app.graph.nodes[1].status, "completed");
     }
 
     #[tokio::test]

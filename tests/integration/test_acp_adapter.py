@@ -426,6 +426,7 @@ async def test_prompt_streams_plan_nodes_and_result() -> None:
     # Plan was emitted and its final render has every entry completed.
     plans = conn.updates_of("plan")
     assert plans, "expected at least one plan update"
+    assert [entry["nodeId"] for entry in plans[0]["entries"]] == [1, 3, 2]
     assert all(e["status"] == "completed" for e in plans[-1]["entries"])
 
     # The tool node produced a tool_call and a completed tool_call_update.
@@ -449,6 +450,11 @@ async def test_prompt_streams_plan_nodes_and_result() -> None:
     assert [n["id"] for n in nodes] == [1, 3, 2]
     assert {n["nodeType"] for n in nodes} == {"tool", "think", "result"}
     assert all("deps" in n for n in nodes)
+    assert graphs[0]["edges"] == [
+        {"from": 1, "to": 3, "kind": "data"},
+        {"from": 1, "to": 2, "kind": "data"},
+        {"from": 3, "to": 2, "kind": "data"},
+    ]
 
     # The final answer is streamed exactly once (via TaskCompleted, not the
     # result node) — no duplication.
@@ -470,6 +476,55 @@ async def test_prompt_streams_plan_nodes_and_result() -> None:
     assert intermediate[0]["nodeId"] == 3
     assert intermediate[0]["nodeType"] == "think"
     assert intermediate[0]["isFinal"] is False
+
+
+class _BranchGraphOrchestrator(Orchestrator):
+    def __init__(self, *, event_bus: EventBus) -> None:
+        self._bus = event_bus
+
+    async def run(self, task_id: TaskId) -> None:  # type: ignore[override]
+        await self._bus.publish(
+            PlanReady(
+                task_id=task_id,
+                node_count=3,
+                plan={
+                    "nodes": [
+                        {
+                            "id": 1,
+                            "type": "decision",
+                            "description": "choose path",
+                            "branches": {"yes": [2], "no": [3]},
+                        },
+                        {"id": 2, "type": "tool", "description": "yes path"},
+                        {"id": 3, "type": "result", "description": "no path"},
+                    ],
+                    "sorted_node_ids": [1, 2, 3],
+                },
+            )
+        )
+        await self._bus.publish(TaskCompleted(task_id=task_id, final_output="done"))
+
+
+async def test_plan_graph_includes_decision_control_edges() -> None:
+    conn = _RecordingConnection([])
+    bus = EventBus()
+    runtime = Runtime(
+        orchestrator=_BranchGraphOrchestrator(event_bus=bus),
+        store=InMemoryStateStore(),
+        harness=ToolHarness(),
+        event_bus=bus,
+        settings=get_settings(),
+    )
+    server = AcpServer(runtime, conn)
+
+    await _prompt(server, conn)
+
+    graphs = conn.updates_of("plan_graph")
+    assert len(graphs) == 1
+    assert graphs[0]["edges"] == [
+        {"from": 1, "to": 2, "kind": "control", "label": "yes"},
+        {"from": 1, "to": 3, "kind": "control", "label": "no"},
+    ]
 
 
 async def test_prompt_rejects_unknown_session() -> None:

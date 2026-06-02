@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserving explicit denies. ACP surfaces `ask` tool calls through
   `session/request_permission`, including an "always allow" promotion for the
   running agent process.
+- Rust TUI graph view now draws routed box-drawing edges between plan nodes.
+  The ACP `plan_graph` extension includes explicit data/control edges while
+  keeping per-node `deps` for compatibility.
 - Summary nodes now support a `format` hint (`concise`, `medium`, `verbose`).
   The executor selects concise or verbose summary prompts when requested while
   preserving the existing configurable medium/default summary prompt.
@@ -65,8 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TUI DAG view (`Tab`): a collapsible panel showing the plan's nodes grouped
   into dependency layers (parallel cohorts), recoloured live by status. The
   adapter sends the graph topology as a `plan_graph` extension update, since
-  ACP's flat plan omits edges. Edge/connector drawing between nodes is not yet
-  implemented.
+  ACP's flat plan omits edges.
 - TUI composer editing: in-place cursor movement (`←`/`→`, `Home`/`End`,
   `Backspace`/`Del`) with a visible cursor, and submitted-task history recall via
   `Ctrl-P`/`Ctrl-N`. (Multi-line entry is not yet supported.)

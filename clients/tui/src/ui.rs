@@ -10,7 +10,7 @@ use ratatui::Frame;
 use crate::acp::messages::{PermOption, PlanEntry, ToolCallPermission};
 use crate::acp::Outbound;
 use crate::app::{App, Mode, Status, SPINNER};
-use crate::graph::GraphNode;
+use crate::graph::{self, EdgeKind, Graph, BOX_H, BOX_W, CHANNEL};
 use crate::transcript::Cell;
 
 pub fn render<O: Outbound>(frame: &mut Frame, app: &App<O>) {
@@ -155,7 +155,7 @@ fn plan_line(entry: &PlanEntry) -> Line<'static> {
 
 /// The DAG view: nodes grouped into topological layers (parallel cohorts),
 /// each coloured by live status. Edges/connectors are not drawn yet.
-fn render_dag(frame: &mut Frame, area: Rect, graph: &[GraphNode]) {
+fn render_dag(frame: &mut Frame, area: Rect, graph: &Graph) {
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" graph — Tab to close ");
@@ -168,26 +168,12 @@ fn render_dag(frame: &mut Frame, area: Rect, graph: &[GraphNode]) {
                 .add_modifier(Modifier::ITALIC),
         )));
     } else {
-        for layer in 0..=crate::graph::max_layer(graph) {
-            lines.push(Line::from(Span::styled(
-                format!("layer {layer}"),
-                Style::default()
-                    .fg(Color::DarkGray)
-                    .add_modifier(Modifier::BOLD),
-            )));
-            for node in graph.iter().filter(|n| n.layer == layer) {
-                let (glyph, color) = status_glyph(&node.status);
-                lines.push(Line::from(vec![
-                    Span::raw("   "),
-                    Span::styled(format!("{glyph} "), Style::default().fg(color)),
-                    Span::styled(
-                        format!("#{} [{}] ", node.id, node.node_type),
-                        Style::default().fg(Color::DarkGray),
-                    ),
-                    Span::raw(node.description.clone()),
-                ]));
-            }
-            lines.push(Line::raw(""));
+        let layout = graph::layout(graph);
+        let inner_w = area.width.saturating_sub(2) as usize;
+        if layout.width <= inner_w && layout.height > 0 {
+            lines = draw_graph(graph, &layout);
+        } else {
+            lines = compact_graph_lines(graph);
         }
     }
     frame.render_widget(
@@ -196,6 +182,290 @@ fn render_dag(frame: &mut Frame, area: Rect, graph: &[GraphNode]) {
             .wrap(Wrap { trim: false }),
         area,
     );
+}
+
+const N: u8 = 1;
+const S: u8 = 2;
+const E: u8 = 4;
+const W: u8 = 8;
+
+#[derive(Clone, Copy)]
+struct GraphCell {
+    ch: char,
+    style: Style,
+    dirs: u8,
+}
+
+impl Default for GraphCell {
+    fn default() -> Self {
+        Self {
+            ch: ' ',
+            style: Style::default(),
+            dirs: 0,
+        }
+    }
+}
+
+struct GraphGrid {
+    width: usize,
+    height: usize,
+    cells: Vec<GraphCell>,
+}
+
+impl GraphGrid {
+    fn new(width: usize, height: usize) -> Self {
+        Self {
+            width,
+            height,
+            cells: vec![GraphCell::default(); width.saturating_mul(height)],
+        }
+    }
+
+    fn put(&mut self, x: usize, y: usize, ch: char, style: Style) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
+        let cell = &mut self.cells[y * self.width + x];
+        cell.ch = ch;
+        cell.style = style;
+        cell.dirs = 0;
+    }
+
+    fn write(&mut self, x: usize, y: usize, text: &str, style: Style) {
+        for (offset, ch) in text.chars().enumerate() {
+            self.put(x + offset, y, ch, style);
+        }
+    }
+
+    fn add_dir(&mut self, x: usize, y: usize, dirs: u8) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
+        self.cells[y * self.width + x].dirs |= dirs;
+    }
+
+    fn to_lines(&self) -> Vec<Line<'static>> {
+        let mut lines = Vec::new();
+        for row in self.cells.chunks(self.width.max(1)) {
+            let spans = row
+                .iter()
+                .map(|cell| {
+                    if cell.dirs != 0 && cell.ch == ' ' {
+                        Span::styled(
+                            dir_glyph(cell.dirs).to_string(),
+                            Style::default().add_modifier(Modifier::DIM),
+                        )
+                    } else {
+                        Span::styled(cell.ch.to_string(), cell.style)
+                    }
+                })
+                .collect::<Vec<_>>();
+            lines.push(Line::from(spans));
+        }
+        lines
+    }
+}
+
+fn draw_graph(graph: &Graph, layout: &graph::GraphLayout) -> Vec<Line<'static>> {
+    let mut grid = GraphGrid::new(layout.width, layout.height);
+    for (vertex, layer) in &layout.vlayer {
+        let top = layer * (BOX_H + CHANNEL);
+        if *vertex > 0 {
+            if let Some(node) = graph.node(*vertex) {
+                if let Some(left) = layout.vleft.get(vertex) {
+                    draw_node_box(&mut grid, node, *left, top);
+                }
+            }
+        } else if let Some(x) = layout.vx.get(vertex) {
+            for y in top..(top + BOX_H) {
+                grid.add_dir(*x, y, N | S);
+            }
+        }
+    }
+    for segment in &layout.segments {
+        draw_segment(&mut grid, layout, segment, graph);
+    }
+    grid.to_lines()
+}
+
+fn draw_node_box(grid: &mut GraphGrid, node: &graph::GraphNode, x0: usize, y0: usize) {
+    let (glyph, color) = status_glyph(&node.status);
+    let style = Style::default().fg(color);
+    let right = x0 + BOX_W - 1;
+    let bottom = y0 + BOX_H - 1;
+
+    grid.put(x0, y0, '┌', style);
+    grid.put(right, y0, '┐', style);
+    grid.put(x0, bottom, '└', style);
+    grid.put(right, bottom, '┘', style);
+    for x in (x0 + 1)..right {
+        grid.put(x, y0, '─', style);
+        grid.put(x, bottom, '─', style);
+    }
+    for y in (y0 + 1)..bottom {
+        grid.put(x0, y, '│', style);
+        grid.put(right, y, '│', style);
+    }
+
+    let header = truncate_cells(
+        &format!("{glyph} {} {}", node.id, node.node_type),
+        BOX_W - 2,
+    );
+    let body = truncate_cells(&node.description, BOX_W - 2);
+    grid.write(x0 + 1, y0 + 1, &header, style);
+    grid.write(x0 + 1, y0 + 2, &body, MUTED);
+}
+
+fn draw_segment(
+    grid: &mut GraphGrid,
+    layout: &graph::GraphLayout,
+    segment: &graph::GraphSegment,
+    graph: &Graph,
+) {
+    let Some(&ax) = layout.vx.get(&segment.from) else {
+        return;
+    };
+    let Some(&bx) = layout.vx.get(&segment.to) else {
+        return;
+    };
+    let Some(&from_layer) = layout.vlayer.get(&segment.from) else {
+        return;
+    };
+    let Some(&to_layer) = layout.vlayer.get(&segment.to) else {
+        return;
+    };
+    if to_layer <= from_layer {
+        return;
+    }
+
+    let top = from_layer * (BOX_H + CHANNEL);
+    let channel_top = top + BOX_H;
+    let channel_bottom = channel_top + CHANNEL - 1;
+
+    if segment.from > 0 {
+        let style = node_style(graph, segment.from);
+        grid.put(ax, top + BOX_H - 1, '┬', style);
+    }
+    if segment.to > 0 {
+        let style = node_style(graph, segment.to);
+        grid.put(bx, channel_bottom + 1, '┴', style);
+    }
+
+    if ax == bx {
+        for y in channel_top..=channel_bottom {
+            grid.add_dir(ax, y, N | S);
+        }
+        return;
+    }
+
+    let horizontal_y = channel_top;
+    let turn = if bx > ax { E } else { W };
+    let incoming = if bx > ax { W } else { E };
+    grid.add_dir(ax, horizontal_y, N | turn);
+    for x in (ax.min(bx) + 1)..ax.max(bx) {
+        grid.add_dir(x, horizontal_y, E | W);
+    }
+    grid.add_dir(bx, horizontal_y, incoming | S);
+    for y in (horizontal_y + 1)..=channel_bottom {
+        grid.add_dir(bx, y, N | S);
+    }
+
+    if segment.kind == EdgeKind::Control {
+        if let Some(label) = &segment.label {
+            let label = truncate_cells(label, ax.abs_diff(bx).saturating_sub(1));
+            let label_x = ax.min(bx) + 1;
+            if !label.is_empty() {
+                grid.write(
+                    label_x,
+                    horizontal_y,
+                    &label,
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::DIM),
+                );
+            }
+        }
+    }
+}
+
+fn compact_graph_lines(graph: &Graph) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    for layer in 0..=graph::max_layer(graph) {
+        lines.push(Line::from(Span::styled(
+            format!("layer {layer}"),
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        )));
+        for node in graph.nodes.iter().filter(|n| n.layer == layer) {
+            let (glyph, color) = status_glyph(&node.status);
+            let parents = graph
+                .edges
+                .iter()
+                .filter(|edge| edge.to == node.id)
+                .map(|edge| edge.from.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            let deps = if parents.is_empty() {
+                String::new()
+            } else {
+                format!("  <- {parents}")
+            };
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(format!("{glyph} "), Style::default().fg(color)),
+                Span::styled(
+                    format!("{} [{}] ", node.id, node.node_type),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::raw(node.description.clone()),
+                Span::styled(deps, MUTED),
+            ]));
+        }
+        lines.push(Line::raw(""));
+    }
+    lines
+}
+
+fn node_style(graph: &Graph, node_id: i64) -> Style {
+    graph
+        .node(node_id)
+        .map(|node| Style::default().fg(status_glyph(&node.status).1))
+        .unwrap_or_else(|| Style::default().add_modifier(Modifier::DIM))
+}
+
+fn dir_glyph(dirs: u8) -> char {
+    match dirs {
+        d if d == (N | S) => '│',
+        d if d == (E | W) => '─',
+        d if d == (N | E) => '└',
+        d if d == (N | W) => '┘',
+        d if d == (S | E) => '┌',
+        d if d == (S | W) => '┐',
+        d if d == (N | S | E) => '├',
+        d if d == (N | S | W) => '┤',
+        d if d == (S | E | W) => '┬',
+        d if d == (N | E | W) => '┴',
+        d if d == (N | S | E | W) => '┼',
+        d if d & (N | S) != 0 => '│',
+        d if d & (E | W) != 0 => '─',
+        _ => '·',
+    }
+}
+
+fn truncate_cells(text: &str, limit: usize) -> String {
+    if limit == 0 {
+        return String::new();
+    }
+    let mut out = String::new();
+    for ch in text.chars().take(limit) {
+        out.push(ch);
+    }
+    if text.chars().count() > limit && limit > 1 {
+        out.pop();
+        out.push('…');
+    }
+    out
 }
 
 /// Dim style for secondary/muted content. Uses the terminal's default

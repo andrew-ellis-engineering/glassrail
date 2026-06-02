@@ -47,7 +47,7 @@ Submit any task, then approve (`a`), revise (`e`), or reject (`r`) the plan.
 | `e` | reject with feedback → guided replan |
 | `r` | reject the plan |
 | `↑` / `↓`, `PgUp` / `PgDn`, mouse wheel | scroll the transcript (jumps back to the tail on a new task) |
-| `Tab` | toggle the DAG view (plan nodes grouped by dependency layer, coloured by status) |
+| `Tab` | toggle the DAG view (plan nodes grouped by dependency layer with routed edges, coloured by status) |
 | `Esc` | cancel a running turn, else quit |
 | `Ctrl-C` | quit |
 
@@ -66,8 +66,8 @@ no need to restate. Quit and relaunch for a fresh session.
 - **Plan panel** — the live plan, each entry re-coloured as it runs.
 - **Transcript** — prompts, streamed messages, tool calls, and notices.
 - **DAG view** (`Tab`) — the plan's nodes grouped into dependency layers
-  (parallel cohorts), recoloured by status as they run. Edges between nodes
-  aren't drawn yet.
+  (parallel cohorts), connected by routed box-drawing edges, and recoloured by
+  status as they run. Wide graphs fall back to a compact layer list.
 - **Composer** — the task input.
 - **Approval overlay** — the plan-gate modal (approve / reject / revise).
 

@@ -76,6 +76,7 @@ logs/
 target/
 
 # Local runtime config & state
+failed_plans/
 config.toml
 !eval-framework/**/config.toml
 !eval-framework/**/suite.toml

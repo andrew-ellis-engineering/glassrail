@@ -12,6 +12,8 @@ use serde_json::Value;
 /// Only the fields the TUI renders are modelled; `priority` etc. are ignored.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PlanEntry {
+    #[serde(default, rename = "nodeId")]
+    pub node_id: Option<i64>,
     pub content: String,
     pub status: String,
 }
@@ -76,6 +78,8 @@ pub enum SessionUpdate {
     PlanGraph {
         #[serde(default)]
         nodes: Vec<GraphNode>,
+        #[serde(default)]
+        edges: Vec<GraphEdge>,
     },
 }
 
@@ -89,6 +93,16 @@ pub struct GraphNode {
     pub description: String,
     #[serde(default)]
     pub deps: Vec<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GraphEdge {
+    pub from: i64,
+    pub to: i64,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

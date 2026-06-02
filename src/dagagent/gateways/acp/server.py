@@ -467,18 +467,38 @@ def _plan_graph(plan: dict[str, Any]) -> dict[str, Any]:
     """A dagagent extension carrying the plan's graph topology.
 
     ACP's ``plan`` update is a flat entry list with no edges; the TUI's DAG view
-    needs the dependency structure, so we send node types and ``context_needed``
-    edges once per plan. Generic ACP clients ignore the unknown update kind.
+    needs the dependency structure, so we send node types plus explicit data and
+    control edges once per plan. ``deps`` stays on each node for older clients.
+    Generic ACP clients ignore the unknown update kind.
     """
     nodes: list[dict[str, Any]] = plan.get("nodes") or []
     order: list[int] = plan.get("sorted_node_ids") or [n["id"] for n in nodes]
     by_id: dict[int, dict[str, Any]] = {n["id"]: n for n in nodes}
     out: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
     for node_id in order:
         node = by_id.get(node_id)
         if node is None:
             continue
         deps = [d for d in (node.get("context_needed") or []) if d in by_id]
+        for dep in deps:
+            edges.append({"from": dep, "to": node_id, "kind": "data"})
+        branches = node.get("branches")
+        if isinstance(branches, dict):
+            branch_map = cast("dict[object, Any]", branches)
+            for label, targets in branch_map.items():
+                if not isinstance(targets, list):
+                    continue
+                for target in targets:
+                    if isinstance(target, int) and not isinstance(target, bool) and target in by_id:
+                        edges.append(
+                            {
+                                "from": node_id,
+                                "to": target,
+                                "kind": "control",
+                                "label": str(label),
+                            }
+                        )
         out.append(
             {
                 "id": node_id,
@@ -487,7 +507,7 @@ def _plan_graph(plan: dict[str, Any]) -> dict[str, Any]:
                 "deps": deps,
             }
         )
-    return {"sessionUpdate": "plan_graph", "nodes": out}
+    return {"sessionUpdate": "plan_graph", "nodes": out, "edges": edges}
 
 
 def _prompt_text(prompt: Any) -> str:

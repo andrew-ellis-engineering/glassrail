@@ -50,9 +50,15 @@ fn plan(statuses: [&str; 3]) -> Value {
     let entries: Vec<Value> = titles
         .iter()
         .zip(statuses)
-        .map(
-            |(content, status)| json!({"content": content, "priority": "medium", "status": status}),
-        )
+        .enumerate()
+        .map(|(idx, (content, status))| {
+            json!({
+                "nodeId": idx + 1,
+                "content": content,
+                "priority": "medium",
+                "status": status
+            })
+        })
         .collect();
     json!({"sessionUpdate": "plan", "entries": entries})
 }
@@ -83,6 +89,10 @@ fn handle_prompt(session: &str, reply_id: &Value, reader: &mut impl BufRead) {
                 {"id": 1, "nodeType": "tool", "description": "read the brief", "deps": []},
                 {"id": 2, "nodeType": "synthesis", "description": "analyse the options", "deps": [1]},
                 {"id": 3, "nodeType": "result", "description": "write the answer", "deps": [2]},
+            ],
+            "edges": [
+                {"from": 1, "to": 2, "kind": "data"},
+                {"from": 2, "to": 3, "kind": "data"}
             ],
         }),
     );

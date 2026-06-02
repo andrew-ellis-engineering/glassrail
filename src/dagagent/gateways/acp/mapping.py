@@ -99,6 +99,7 @@ class PlanTracker:
                 content = f"{content} (failed)"
             out.append(
                 {
+                    "nodeId": node_id,
                     "content": content,
                     "priority": "medium",
                     "status": acp_plan_status(status, running=node_id in self._running),
