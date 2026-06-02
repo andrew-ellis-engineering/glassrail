@@ -132,8 +132,12 @@ def _build_prompt(task: Task) -> str:
     """
     raw = task.prompt.strip()
     if raw.startswith(_EXEC_PLAN_PREFIX):
-        relative = raw[len(_EXEC_PLAN_PREFIX):].strip()
-        return str(_find_fixture_source(task, relative).resolve())
+        # Directive is "__EXEC_PLAN__ fixtures/plan.json"; _find_fixture_source
+        # already prepends "fixtures/", so strip that prefix from the path.
+        directive_path = raw[len(_EXEC_PLAN_PREFIX):].strip()
+        fixture_parts = directive_path.split("/", 1)
+        source = fixture_parts[-1]  # "plan.json" (strips leading "fixtures/" if present)
+        return str(_find_fixture_source(task, source).resolve())
     parts = [task.prompt]
     if task.context_files:
         block = ["\n\n## Context files\n"]

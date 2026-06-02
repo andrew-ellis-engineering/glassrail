@@ -17,7 +17,7 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -43,6 +43,18 @@ class TierConfig(BaseModel):
     timeout_s: float = 60.0
     scripted_path: str = ""
     """Absolute path to a JSONL responses file. Required when ``kind=scripted``."""
+
+    @model_validator(mode="after")
+    def _check_required_fields(self) -> TierConfig:
+        if self.kind == "scripted":
+            if not self.scripted_path:
+                raise ValueError("kind=scripted requires scripted_path to be set")
+        elif self.kind == "openai_compat":
+            if not self.base_url:
+                raise ValueError("kind=openai_compat requires base_url to be set")
+            if not self.model:
+                raise ValueError("kind=openai_compat requires model to be set")
+        return self
 
 
 class NodeBudgets(BaseModel):

@@ -112,6 +112,12 @@ class Orchestrator:
         Used by ``dagagent exec-plan`` to inject a fixed plan JSON and run
         only the executor.  The caller is responsible for validating the plan
         and setting ``state.plan`` before calling.
+
+        Note: the executor sets ``state.status = COMPLETED`` unconditionally
+        after the node loop, even when individual nodes failed.  Top-level
+        ``status``/``is_error`` in the envelope is therefore not a reliable
+        pass/fail signal for harness grading — inspect the per-node
+        ``status`` fields in ``trajectory`` instead.
         """
         assert state.plan is not None, "execute_plan requires state.plan to be set"
         try:

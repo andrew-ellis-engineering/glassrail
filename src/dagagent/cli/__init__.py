@@ -160,7 +160,7 @@ def _trajectory(state: ExecutionState) -> list[dict[str, object]]:
         raw_out = result.output if result else None
         out_str: str | None = None
         if raw_out is not None:
-            s = str(raw_out)
+            s = json.dumps(raw_out) if isinstance(raw_out, (dict, list)) else str(raw_out)
             out_str = s[:2048] if len(s) > 2048 else s
         steps.append(
             {
@@ -222,30 +222,29 @@ def exec_plan(
     harness-mechanics eval suite to inject deterministic plans without running
     the planner.
     """
-    envelope = asyncio.run(_exec_plan(plan_file, no_validate=no_validate))
+    # Read the plan file synchronously before entering the event loop — this is
+    # a one-shot CLI command, not a server, so blocking I/O is fine here.
+    try:
+        raw = Path(plan_file).read_text(encoding="utf-8")
+        plan_data = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc:
+        msg = f"could not load plan file: {exc}"
+        if json_output:
+            typer.echo(json.dumps({"result": "", "trajectory": [], "status": "failed",
+                                   "is_error": True, "error": msg,
+                                   "total_cost_usd": None, "total_tokens": 0}))
+        else:
+            typer.echo(msg, err=True)
+        raise typer.Exit(code=2) from exc
+
+    envelope = asyncio.run(_exec_plan(plan_data, no_validate=no_validate))
     if json_output:
         typer.echo(json.dumps(envelope))
     else:
         typer.echo(envelope.get("result") or envelope.get("error") or "(no output)")
 
 
-async def _exec_plan(plan_file: str, *, no_validate: bool) -> dict[str, object]:
-    try:
-        raw = await asyncio.get_event_loop().run_in_executor(
-            None, Path(plan_file).read_text, "utf-8"
-        )
-        plan_data = json.loads(raw)
-    except (OSError, json.JSONDecodeError) as exc:
-        return {
-            "result": "",
-            "trajectory": [],
-            "status": "failed",
-            "is_error": True,
-            "error": f"could not load plan file: {exc}",
-            "total_cost_usd": None,
-            "total_tokens": 0,
-        }
-
+async def _exec_plan(plan_data: object, *, no_validate: bool) -> dict[str, object]:
     settings = get_settings()
     settings = settings.model_copy(update={"confirm_plans": False})
     rt = build_runtime(settings)
