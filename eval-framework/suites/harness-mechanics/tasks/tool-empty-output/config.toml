@@ -15,10 +15,10 @@ error.  This task requires one of:
   (b) Tool-return scripting in the provider (an extension to §4.2, which
       currently only scripts LLM call responses, not tool return values).
 
-Until that infra lands this task will produce COMPLETED (not EMPTY) and the
-criterion will detect the gap.  The plan uses a hypothetical `eval_noop` tool
-that the exec-plan backend must register.  Do not change the criterion to match
-COMPLETED — it must stay `empty` so the regression fires until the tool is wired.
+Until that infra lands this task will produce FAILED (not EMPTY) because
+`eval_noop` is unregistered and the executor raises ToolExecutionError, marking
+the node FAILED.  The criterion must stay `empty` so the regression fires until
+the tool is wired — do not change it to match FAILED or COMPLETED.
 """
 
 [fixtures]
