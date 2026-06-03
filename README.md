@@ -137,6 +137,15 @@ local model as your only tier, raise `DAGAGENT_TIER0__TIMEOUT_S` (e.g. to `120`)
 — a large local model can take longer than the 10 s default, and a timeout is
 treated as the tier being unavailable.
 
+### Generation ceiling
+
+`max_generation_tokens` (default `16384`) is a hard cap on `max_tokens` sent to
+any tier for any single request, applied by the router before the request leaves
+the process. Per-node budgets (below) are the goal; this is the safety backstop
+that prevents a single generation from consuming unbounded memory on a local
+model across long multi-step runs. Set it in `config.toml` or via
+`DAGAGENT_MAX_GENERATION_TOKENS`.
+
 ### Per-node token budgets
 
 Each node runs with a fresh context; these cap how many tokens it may *generate*

@@ -18,7 +18,7 @@ from typing import Any, NamedTuple
 
 import httpx
 
-from dagagent.providers.base import Chunk, Message, ProviderUnavailableError
+from dagagent.providers.base import Chunk, Message, ProviderError, ProviderUnavailableError
 
 
 class _EventFields(NamedTuple):
@@ -66,6 +66,32 @@ class OpenAICompatProvider:
     def model(self) -> str:
         return self._model
 
+    async def is_healthy(self, timeout_s: float = 3.0) -> bool:
+        """Return True if the endpoint is reachable and reports healthy.
+
+        Tries ``GET /health`` (rapid-mlx / most local servers) with a short
+        timeout so the router can skip a dead tier in seconds rather than
+        waiting for the full generation timeout.  Falls back to True on any
+        unexpected response shape so as not to block non-local providers that
+        don't expose /health.
+        """
+        # Derive the server root from base_url — strip any /v1 suffix so
+        # /v1/health doesn't accidentally become /v1/v1/health.
+        root = self._base_url
+        if root.endswith("/v1"):
+            root = root[: -len("/v1")]
+        url = f"{root}/health"
+        try:
+            async with httpx.AsyncClient(timeout=timeout_s) as client:
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    body = resp.json()
+                    return body.get("status") == "healthy"
+                # 404 → server doesn't implement /health; assume available.
+                return resp.status_code == 404
+        except (httpx.ConnectError, httpx.TimeoutException):
+            return False
+
     async def complete(
         self,
         messages: list[Message],
@@ -97,7 +123,7 @@ class OpenAICompatProvider:
             ):
                 if resp.status_code >= 400:
                     await resp.aread()
-                    resp.raise_for_status()
+                    self._raise_for_status(resp)
 
                 async for line in resp.aiter_lines():
                     event = _decode_sse_line(line)
@@ -123,6 +149,23 @@ class OpenAICompatProvider:
 
         if tool_content or finish_reason is not None or tokens is not None:
             yield Chunk(text=tool_content, finish_reason=finish_reason, tokens_used=tokens)
+
+    def _raise_for_status(self, resp: httpx.Response) -> None:
+        """Translate HTTP error codes into typed provider exceptions.
+
+        Auth failures, rate limits, and server errors fall through to the next
+        tier (ProviderUnavailableError). Malformed-request errors (400/422)
+        propagate — retrying a different tier with the same body won't help.
+        """
+        if resp.status_code in (401, 403, 429):
+            raise ProviderUnavailableError(f"{self._name}: HTTP {resp.status_code}")
+        if resp.status_code in (400, 422):
+            raise ProviderError(f"{self._name}: HTTP {resp.status_code}: {resp.text}")
+        if resp.status_code >= 500:
+            # Server errors (including 503 during a watchdog-triggered restart)
+            # are tier-level problems — fall through to the next tier.
+            raise ProviderUnavailableError(f"{self._name}: HTTP {resp.status_code}")
+        resp.raise_for_status()
 
     def _build_body(
         self,

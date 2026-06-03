@@ -38,10 +38,16 @@ log = logging.getLogger(__name__)
 class TierRouter:
     """Ordered list of providers with timeout-fallthrough."""
 
-    def __init__(self, providers: Sequence[LLMProvider]):
+    def __init__(
+        self,
+        providers: Sequence[LLMProvider],
+        *,
+        max_generation_tokens: int | None = None,
+    ):
         if not providers:
             raise ValueError("TierRouter requires at least one provider")
         self._providers: list[LLMProvider] = list(providers)
+        self._max_generation_tokens = max_generation_tokens
 
     @property
     def providers(self) -> list[LLMProvider]:
@@ -70,6 +76,14 @@ class TierRouter:
         if not eligible:
             raise ProviderError(f"No providers configured for tier range [{min_tier}, {max_tier}]")
 
+        if self._max_generation_tokens is not None and max_tokens > self._max_generation_tokens:
+            log.warning(
+                "max_tokens %d exceeds generation ceiling %d; clamping",
+                max_tokens,
+                self._max_generation_tokens,
+            )
+            max_tokens = self._max_generation_tokens
+
         # A leaf span over the whole call — started but not made "current", so
         # it nests under the active node/plan span without holding the context
         # open across the generator's yields.
@@ -79,6 +93,21 @@ class TierRouter:
         last_error: Exception | None = None
         try:
             for provider in eligible:
+                # Fast pre-flight check: if the provider exposes is_healthy(),
+                # call it with a short timeout before attempting generation.
+                # This lets the router skip a dead local server in ~3 seconds
+                # instead of waiting for the full generation timeout.
+                if hasattr(provider, "is_healthy") and not await provider.is_healthy():  # type: ignore[union-attr]
+                    log.warning(
+                        "Provider %s (tier %d) failed health check, skipping",
+                        provider.name,
+                        provider.tier,
+                    )
+                    last_error = ProviderUnavailableError(
+                        f"{provider.name} (tier {provider.tier}): health check failed"
+                    )
+                    continue
+
                 try:
                     stream = provider.complete(
                         messages,

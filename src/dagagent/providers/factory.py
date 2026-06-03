@@ -34,4 +34,4 @@ def _provider_from_tier(tier: int, cfg: TierConfig) -> LLMProvider:
 def router_from_settings(settings: Settings) -> TierRouter:
     """Construct a :class:`TierRouter` from the configured tier list."""
     providers = [_provider_from_tier(i, cfg) for i, cfg in enumerate(settings.tiers)]
-    return TierRouter(providers)
+    return TierRouter(providers, max_generation_tokens=settings.max_generation_tokens)

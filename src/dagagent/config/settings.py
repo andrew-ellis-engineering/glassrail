@@ -241,6 +241,16 @@ class Settings(BaseSettings):
     max_subplan_nodes: int = 12
     max_subplans_per_plan: int = 2
 
+    # ── Generation ceiling ───────────────────────────────────────────────
+    # A hard upper bound on max_tokens sent to any tier on a single request,
+    # independent of the per-node budget. The budget is the goal; this is the
+    # safety backstop that caps worst-case memory consumption per generation
+    # across long multi-step runs. Any per-node budget above this ceiling is
+    # clamped to it before the request leaves the router.
+    # Default matches the MLX server's --max-tokens 20000 so no budget is
+    # silently truncated out of the box; lower it to tighten the backstop.
+    max_generation_tokens: int = 20000
+
     # ── Per-node output-token budgets ────────────────────────────────────
     budgets: NodeBudgets = NodeBudgets()
 

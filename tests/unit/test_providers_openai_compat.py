@@ -143,10 +143,10 @@ async def test_timeout_becomes_provider_unavailable() -> None:
         _ = [c async for c in provider.complete(_MSG)]
 
 
-async def test_http_error_status_raises() -> None:
+async def test_http_5xx_falls_through() -> None:
     transport = httpx.MockTransport(lambda _req: httpx.Response(500, text="boom"))
     provider = _provider(transport)
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(ProviderUnavailableError, match="500"):
         _ = [c async for c in provider.complete(_MSG)]
 
 
