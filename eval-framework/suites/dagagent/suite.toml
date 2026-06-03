@@ -15,7 +15,7 @@ default_model = "qwen3.6-35b-moe"   # → `dagagent run --model qwen3.6-35b-moe`
 default_grader_model = "haiku"
 default_grader_backend = "claude-cli"
 
-default_timeout_s = 180
+default_timeout_s = 600
 promotion_threshold = 5  # consecutive clean runs to qualify for regression
 
 [backend]

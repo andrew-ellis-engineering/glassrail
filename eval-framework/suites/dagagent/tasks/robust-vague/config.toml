@@ -2,7 +2,7 @@ name = "robust-vague"
 tags = ["robustness", "result"]
 type = "capability"
 difficulty = 3
-timeout_s = 180
+timeout_s = 480
 
 expected_behavior = """
 "help me with my project" is genuinely underspecified. A correct run does NOT

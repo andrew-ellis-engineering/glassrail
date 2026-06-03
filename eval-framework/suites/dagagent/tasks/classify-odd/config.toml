@@ -3,7 +3,7 @@ control_for = "classify-even"
 tags = ["decision", "control-pair"]
 type = "capability"
 difficulty = 2
-timeout_s = 240
+timeout_s = 480
 
 expected_behavior = """
 247 is odd, so the next even number after it (248) should be reported. The

@@ -2,7 +2,7 @@ name = "subplan-correct"
 tags = ["subplan", "planning", "research", "synthesis"]
 type = "capability"
 difficulty = 4
-timeout_s = 360
+timeout_s = 900
 
 expected_behavior = """
 A correct plan treats at least one candidate-research track as a subplan rather

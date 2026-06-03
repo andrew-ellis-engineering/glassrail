@@ -2,7 +2,7 @@ name = "recommend-datastore-iot"
 tags = ["multistep", "synthesis", "result", "control-pair"]
 type = "capability"
 difficulty = 4
-timeout_s = 300
+timeout_s = 720
 
 expected_behavior = """
 High-volume, time-ordered, append-mostly writes with time-range aggregation

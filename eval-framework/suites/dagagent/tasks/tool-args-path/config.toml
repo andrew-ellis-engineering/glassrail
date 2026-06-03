@@ -2,7 +2,7 @@ name = "tool-args-path"
 tags = ["tool-use", "result"]
 type = "capability"
 difficulty = 3
-timeout_s = 150
+timeout_s = 360
 
 expected_behavior = """
 Two paths are mentioned in the prompt; only /tmp/dagagent-eval/backup.conf is

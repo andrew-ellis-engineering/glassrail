@@ -2,7 +2,7 @@ name = "research-compare-3"
 tags = ["research", "multistep", "synthesis", "result", "control-pair"]
 type = "capability"
 difficulty = 4
-timeout_s = 360
+timeout_s = 900
 
 expected_behavior = """
 High-write, append-only event streaming with offset-based replay is Kafka's

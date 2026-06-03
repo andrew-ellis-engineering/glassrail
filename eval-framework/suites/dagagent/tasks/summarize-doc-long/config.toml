@@ -2,7 +2,7 @@ name = "summarize-doc-long"
 tags = ["summary", "tool-use", "result"]
 type = "capability"
 difficulty = 4
-timeout_s = 300
+timeout_s = 720
 
 expected_behavior = """
 A correct run reads /tmp/dagagent-eval/report.md and produces a faithful

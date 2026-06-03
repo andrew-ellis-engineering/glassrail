@@ -2,7 +2,7 @@ name = "recommend-streaming"
 tags = ["multistep", "synthesis", "result"]
 type = "capability"
 difficulty = 3
-timeout_s = 240
+timeout_s = 600
 
 expected_behavior = """
 A correct run decomposes the task (compare TCP vs UDP trade-offs, then

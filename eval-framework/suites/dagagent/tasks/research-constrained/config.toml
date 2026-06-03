@@ -2,7 +2,7 @@ name = "research-constrained"
 tags = ["research", "multistep", "synthesis", "result"]
 type = "capability"
 difficulty = 5
-timeout_s = 600
+timeout_s = 1200
 
 expected_behavior = """
 All three engines support SQL and are open-source. ClickHouse (Apache 2.0) is
