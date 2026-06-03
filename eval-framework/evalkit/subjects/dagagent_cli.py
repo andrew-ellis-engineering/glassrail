@@ -90,6 +90,12 @@ def _result_from_proc(returncode: int, stdout: str, stderr: str) -> RunResult:
 
     rt = envelope.get("result")
     result_text = rt if isinstance(rt, str) else ""
+    # When the planner rejects a task it sets status="rejected" and puts its
+    # reasoning in the error field while result stays empty.  Surface that
+    # reasoning as result_text so graders can evaluate the rejection message
+    # the same way they would a normal result.
+    if not result_text and envelope.get("status") == "rejected":
+        result_text = str(envelope.get("error") or "")
     trajectory = envelope.get("trajectory")
     if not isinstance(trajectory, list):
         trajectory = []
