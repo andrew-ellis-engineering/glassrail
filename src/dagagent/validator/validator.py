@@ -14,6 +14,44 @@ from dagagent.core import Node, NodeType, Plan, PlanValidationError
 from dagagent.harness import ToolHarness
 
 
+def topo_sort(plan: Plan) -> list[int]:
+    """Return node ids in topological (dependency) order.
+
+    Kahn's algorithm with deterministic tie-breaking (ascending id). Raises
+    :class:`~dagagent.core.PlanValidationError` if ``context_needed``
+    references a missing node or the graph contains a cycle. Does not run any
+    other structural checks — use :class:`PlanValidator` for full validation.
+    """
+    all_ids = {n.id for n in plan.nodes}
+    in_degree: dict[int, int] = {n.id: 0 for n in plan.nodes}
+    graph: dict[int, list[int]] = defaultdict(list)
+
+    for node in plan.nodes:
+        for dep in node.context_needed:
+            if dep not in all_ids:
+                raise PlanValidationError(
+                    f"Node {node.id} declares context_needed={dep} which doesn't exist"
+                )
+            graph[dep].append(node.id)
+            in_degree[node.id] += 1
+
+    queue = sorted(sid for sid in all_ids if in_degree[sid] == 0)
+    sorted_ids: list[int] = []
+
+    while queue:
+        node_id = queue.pop(0)
+        sorted_ids.append(node_id)
+        for neighbour in sorted(graph[node_id]):
+            in_degree[neighbour] -= 1
+            if in_degree[neighbour] == 0:
+                queue.append(neighbour)
+
+    if len(sorted_ids) != len(plan.nodes):
+        raise PlanValidationError("Plan contains a dependency cycle")
+
+    return sorted_ids
+
+
 class PlanValidator:
     """Validates a plan's structure against settings and harness state."""
 
@@ -99,39 +137,7 @@ class PlanValidator:
                 )
 
     def _topological_sort(self, plan: Plan) -> list[int]:
-        """Kahn's algorithm with deterministic tie-breaking (ascending id).
-
-        Raises if ``context_needed`` references a missing node or if the
-        graph contains a cycle.
-        """
-        all_ids = {n.id for n in plan.nodes}
-        in_degree: dict[int, int] = {n.id: 0 for n in plan.nodes}
-        graph: dict[int, list[int]] = defaultdict(list)
-
-        for node in plan.nodes:
-            for dep in node.context_needed:
-                if dep not in all_ids:
-                    raise PlanValidationError(
-                        f"Node {node.id} declares context_needed={dep} which doesn't exist"
-                    )
-                graph[dep].append(node.id)
-                in_degree[node.id] += 1
-
-        queue = sorted(sid for sid in all_ids if in_degree[sid] == 0)
-        sorted_ids: list[int] = []
-
-        while queue:
-            node_id = queue.pop(0)
-            sorted_ids.append(node_id)
-            for neighbour in sorted(graph[node_id]):
-                in_degree[neighbour] -= 1
-                if in_degree[neighbour] == 0:
-                    queue.append(neighbour)
-
-        if len(sorted_ids) != len(plan.nodes):
-            raise PlanValidationError("Plan contains a dependency cycle")
-
-        return sorted_ids
+        return topo_sort(plan)
 
     def _check_decision_nesting(self, plan: Plan) -> None:
         node_map = {n.id: n for n in plan.nodes}

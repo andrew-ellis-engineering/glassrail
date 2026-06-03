@@ -8,6 +8,7 @@ jobs, and the interactive onboard flow (Phase 4).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from pathlib import Path
 
@@ -26,7 +27,7 @@ from dagagent.core import (
 from dagagent.gateways.acp import run_acp
 from dagagent.gateways.tui import DEFAULT_BASE_URL, run_tui
 from dagagent.runtime import build_runtime
-from dagagent.validator import PlanValidator
+from dagagent.validator import PlanValidator, topo_sort
 
 app = typer.Typer(
     name="dagagent",
@@ -230,9 +231,19 @@ def exec_plan(
     except (OSError, json.JSONDecodeError) as exc:
         msg = f"could not load plan file: {exc}"
         if json_output:
-            typer.echo(json.dumps({"result": "", "trajectory": [], "status": "failed",
-                                   "is_error": True, "error": msg,
-                                   "total_cost_usd": None, "total_tokens": 0}))
+            typer.echo(
+                json.dumps(
+                    {
+                        "result": "",
+                        "trajectory": [],
+                        "status": "failed",
+                        "is_error": True,
+                        "error": msg,
+                        "total_cost_usd": None,
+                        "total_tokens": 0,
+                    }
+                )
+            )
         else:
             typer.echo(msg, err=True)
         raise typer.Exit(code=2) from exc
@@ -242,6 +253,21 @@ def exec_plan(
         typer.echo(json.dumps(envelope))
     else:
         typer.echo(envelope.get("result") or envelope.get("error") or "(no output)")
+
+
+def _topo_sort_recursive(plan: Plan) -> None:
+    """Populate sorted_node_ids on plan and all nested subplans, best-effort.
+
+    Used by the --no-validate path so the executor can iterate nodes even when
+    full structural validation is skipped. Errors are silently ignored — invalid
+    deps or cycles in negative-test fixtures are intentional and will surface as
+    executor failures instead.
+    """
+    with contextlib.suppress(Exception):
+        plan.sorted_node_ids = topo_sort(plan)
+    for node in plan.nodes:
+        if node.subplan is not None:
+            _topo_sort_recursive(node.subplan)
 
 
 async def _exec_plan(plan_data: object, *, no_validate: bool) -> dict[str, object]:
@@ -276,6 +302,13 @@ async def _exec_plan(plan_data: object, *, no_validate: bool) -> dict[str, objec
                 "total_cost_usd": None,
                 "total_tokens": 0,
             }
+    else:
+        # Skipping full validation (negative harness tests), but the executor
+        # still needs sorted_node_ids to iterate nodes. Topo-sort the plan and
+        # any nested subplans without structural checks; ignore errors (invalid
+        # deps are intentional in some fixtures and will surface as executor
+        # failures instead).
+        _topo_sort_recursive(plan)
 
     state = ExecutionState(task_id=new_task_id(), user_request="<exec-plan>")
     state.plan = plan

@@ -628,7 +628,11 @@ class Executor:
                 error="SUBPLAN node has no nested plan",
             )
 
-        ctx = assemble_context(node, state.results)
+        ctx = assemble_context(
+            node,
+            state.results,
+            dependent_nodes=self._direct_dependents(node, state) or None,
+        )
         sub_request = (
             f"{node.description}\n\nContext from parent plan:\n{ctx}" if ctx else node.description
         )
