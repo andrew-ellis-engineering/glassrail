@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: mlx-server
+  namespace: inference
+  labels:
+    app: mlx-server
+spec:
+  selector:
+    matchLabels:
+      app: mlx-server
+  template:
+    metadata:
+      labels:
+        app: mlx-server
+    spec:
+      # Target only the Apple-silicon node. The MLX process needs direct
+      # Metal access, which requires running natively on the host.
+      nodeSelector:
+        hardware: apple-silicon
+      # Share the host network so the process binds port 8080 directly and
+      # the ClusterIP Service can reach it without NAT.
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: rapid-mlx
+          # A thin image that execs the host's native rapid-mlx binary.
+          # Build with: docker build -t dagagent/mlx-server:latest -f deploy/k8s/Dockerfile.mlx .
+          image: dagagent/mlx-server:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/Users/andrew/.venvs/rapid-mlx/bin/rapid-mlx"]
+          args:
+            - "serve"
+            - "mlx-community/Qwen3.6-35B-A3B-4bit"
+            - "--served-model-name"
+            - "qwen3.6-35b-moe"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8080"
+            - "--max-tokens"
+            - "20000"
+            - "--max-num-seqs"
+            - "1"
+            - "--gpu-memory-utilization"
+            - "0.85"
+            - "--no-memory-aware-cache"
+            - "--kv-cache-quantization"
+            - "--kv-cache-quantization-bits"
+            - "4"
+            - "--prefill-step-size"
+            - "8192"
+            - "--pin-system-prompt"
+            - "--reasoning-parser"
+            - "qwen3"
+            - "--enable-auto-tool-choice"
+            - "--tool-call-parser"
+            - "auto"
+            - "--default-temperature"
+            - "0.1"
+          ports:
+            - name: http
+              containerPort: 8080
+              hostPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            # Model load takes ~60s; don't probe before it's ready.
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 3
