@@ -93,6 +93,14 @@ rather than duplicating across files.
   `result`, `subplan`. The four single-LLM-call types (synthesis/think/summary/
   result) share `Executor._execute_llm_node` via `_LLM_NODE_SPECS` — add a new
   one by extending that table, not by copying a method.
+- **DAG acyclicity is a permanent, load-bearing invariant.** Plans are directed
+  *acyclic* graphs; the validator enforces topological sort and cycle detection.
+  Iteration is expressed *within* a node (a future `foreach` node fans out over
+  a list using the subplan mechanism), never as a graph cycle. Cycles would
+  break the validator, the topological executor, the ACP plan mapping, and the
+  OTel span tree simultaneously. Do not add cycles to the plan grammar.
+  Conditional loops ("repeat until X") belong at the orchestrator/session layer,
+  not the plan layer. See `vault/Spec - Foreach Node (Loops).md`.
 
 ## Package map
 

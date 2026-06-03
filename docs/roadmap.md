@@ -87,7 +87,13 @@ first PyPI publish.
 
 ## Phase 2 — Foundation Assistant
 
-Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, reasoning mode (`/think`).
+Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing, `foreach` node, registry output schemas.
+
+- **File editing tools** *(first Phase 2 item — unblocks TUI coding harness)* — `file_edit(path, old_str, new_str)` with exact-once match semantics (fails closed if old_str matches zero or multiple times), `file_create` (new files only), `file_write` (full overwrite). Requires: path-root confinement (`tools.fs_roots` in Settings — currently missing), git-repo guard (configurable), risk-derived HITL defaults (write tools default to `ask`), diff-in-approval payload so humans approve a *change* not raw args. Also closes a latent gap: `_approve_tool_call` does not currently honour the `risk` field despite it being documented as governing execution. `obsidian_write` is a thin specialisation of this (vault root as `fs_roots`), not a parallel implementation. See `vault/Spec - File Editing Tools.md`.
+
+- **Tool registry output schemas** *(ships alongside file editing)* — tools declare their output shape at `@harness.tool` registration time. The validator checks `args_template` references against the producing tool's registered schema at plan-validation time, catching tool→tool key mismatches before execution. No burden on the LLM planner — schemas are author-supplied, not LLM-generated. Retroactively add schemas to existing built-in tools. See `vault/Spec - Node Contracts and Context Flow.md`.
+
+- **`foreach` node type** *(after upstream context awareness and registry schemas land)* — fan-out iteration over a list using the existing subplan mechanism. Fields: `foreach_source` (upstream node id or literal list), `foreach_body` (nested Plan), `foreach_aggregation` (`collect` or `synthesis`). Iterations are independent and parallelisable with a bounded concurrency semaphore. Aggregation v1: `collect` (list of outputs) and `synthesis` (hand off to a synthesis node). No `reduce` or conditional loops. Conditional loops ("repeat until X") belong at the orchestrator layer. See `vault/Spec - Foreach Node (Loops).md`.
 
 - **HITL clarifying-questions node** — a new node type that pauses execution to
   ask the user a targeted question before proceeding, distinct from plan
