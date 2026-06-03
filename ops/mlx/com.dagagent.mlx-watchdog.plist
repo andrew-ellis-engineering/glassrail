@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.dagagent.mlx-watchdog</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/andrew/dag-agent/ops/mlx/memory_watchdog.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>MLX_RSS_LIMIT_MB</key>
+        <string>110000</string>
+        <key>MLX_POLL_INTERVAL</key>
+        <string>30</string>
+        <key>MLX_PROC_PATTERN</key>
+        <string>/Users/andrew/.venvs/rapid-mlx/bin/rapid-mlx</string>
+    </dict>
+
+    <!-- Restart the watchdog itself if it exits unexpectedly -->
+    <key>KeepAlive</key>
+    <true/>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/andrew/Library/Logs/dagagent-mlx-watchdog.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/andrew/Library/Logs/dagagent-mlx-watchdog.err.log</string>
+</dict>
+</plist>
