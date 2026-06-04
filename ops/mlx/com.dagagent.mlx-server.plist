@@ -17,12 +17,11 @@
         <string>--port</string>
         <string>8080</string>
         <string>--max-tokens</string>
-        <string>20000</string>
+        <string>12000</string>
         <string>--max-num-seqs</string>
         <string>1</string>
         <string>--gpu-memory-utilization</string>
-        <string>0.85</string>
-        <string>--no-memory-aware-cache</string>
+        <string>0.72</string>
         <string>--kv-cache-quantization</string>
         <string>--kv-cache-quantization-bits</string>
         <string>4</string>
