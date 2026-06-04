@@ -237,6 +237,16 @@ class Settings(BaseSettings):
     planner_stall_char_multiplier: int = 4
     """Classify invalid planner output longer than planner max_tokens times
     this multiplier as a stall and feed the raw output into the retry prompt."""
+    planner_initial_timeout_s: int = 90
+    """Ceiling on the first (no-think) planning attempt, in seconds.
+    Only effective when the tier's ``timeout_s`` is longer than this value.
+    For local MLX models set ``DAGAGENT_TIER0__TIMEOUT_S`` to at least 120.
+    Empirically: qwen3.6-35b-moe at ~54 tok/s generates ~4800 tokens in 90s —
+    enough for any plan JSON without extended reasoning."""
+    planner_retry_timeout_s: int = 240
+    """Ceiling on the retry attempt (thinking re-enabled) in seconds.
+    Same tier-timeout interaction applies — the tier timeout must be >= this
+    value for the ceiling to be effective."""
     confidence_threshold: float = 0.75
     max_subplan_nodes: int = 12
     max_subplans_per_plan: int = 2

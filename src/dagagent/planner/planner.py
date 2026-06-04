@@ -7,6 +7,7 @@ the planner) decides whether to replan.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -56,18 +57,57 @@ class Planner:
 
         ``feedback`` (set on a guided replan after a user rejects a plan) is
         woven into the planning prompt so the next plan addresses it.
+
+        Strategy: first attempt suppresses thinking (``/no_think``) for speed.
+        If that attempt fails with a rejection or validation error — problems
+        that may benefit from extended reasoning — a second attempt is made with
+        thinking re-enabled. Timeout/stall/JSON failures don't improve with
+        thinking and are surfaced immediately.
         """
         attempt = await self.plan_attempt(
             request,
             attempt=0,
             min_tier=min_tier,
             feedback=feedback,
+            thinking=False,
         )
+
+        if attempt.plan is not None:
+            return attempt.plan
+
+        # Retry with thinking on errors that extended reasoning might fix.
+        if attempt.error_type in ("rejection", "validation"):
+            if attempt.filepath:
+                log.warning(
+                    "Plan attempt 0 failed (%s), retrying with thinking; written to %s",
+                    attempt.error_type,
+                    attempt.filepath,
+                )
+            else:
+                log.info(
+                    "Plan attempt 0 failed (%s), retrying with thinking",
+                    attempt.error_type,
+                )
+            retry = await self.plan_attempt(
+                request,
+                attempt=1,
+                min_tier=min_tier,
+                feedback=feedback,
+                thinking=True,
+                validation_feedback=attempt.error if attempt.error_type == "validation" else None,
+            )
+            if retry.filepath:
+                log.warning("Retry plan failed, written to %s", retry.filepath)
+            if retry.plan is not None:
+                return retry.plan
+            if retry.error_type == "rejection":
+                raise PlanRejectedError(retry.error or "Task rejected by planner")
+            if retry.error_type == "validation":
+                raise PlanValidationError(retry.error or "Plan failed validation")
+            raise ValueError(retry.error or "Planner failed")
 
         if attempt.filepath:
             log.warning("Plan failed, written to %s", attempt.filepath)
-        if attempt.plan is not None:
-            return attempt.plan
         if attempt.error_type == "rejection":
             raise PlanRejectedError(attempt.error or "Task rejected by planner")
         if attempt.error_type == "validation":
@@ -169,6 +209,7 @@ class Planner:
         feedback: str | None = None,
         prior_reasoning: str | None = None,
         validation_feedback: str | None = None,
+        thinking: bool = False,
     ) -> PlanningAttempt:
         """Generate one plan attempt and retain raw output plus validation errors.
 
@@ -179,6 +220,10 @@ class Planner:
         ``validation_feedback`` carries the validator/schema failure from the
         immediately preceding attempt, letting the model correct a concrete plan
         defect instead of retrying cold.
+
+        ``thinking`` re-enables extended reasoning on the model by stripping the
+        ``/no_think`` directive. Used on the retry attempt after a rejection or
+        validation failure when additional reasoning may help.
         """
         with get_tracer().start_as_current_span(SPAN_PLAN) as span:
             span.set_attribute(ATTR_MIN_TIER, min_tier)
@@ -218,8 +263,15 @@ class Planner:
                     "problem while preserving the user's intent:\n"
                     f"<validation_feedback>\n{validation_feedback}\n</validation_feedback>"
                 )
+            system_prompt = self._settings.prompts.planner
+            if thinking:
+                # Re-enable extended reasoning by stripping the /no_think directive
+                # that the default planner prompt appends. Used on retry attempts
+                # where initial fast planning rejected or failed validation.
+                system_prompt = system_prompt.removesuffix("\n/no_think")
+
             messages: list[Message] = [
-                {"role": "system", "content": self._settings.prompts.planner},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
             ]
 
@@ -229,7 +281,23 @@ class Planner:
                 json_mode=True,
                 max_tokens=self._settings.budgets.planner,
             )
-            raw, tokens = await collect(stream)
+            timeout = (
+                self._settings.planner_retry_timeout_s
+                if thinking
+                else self._settings.planner_initial_timeout_s
+            )
+            try:
+                raw, tokens = await asyncio.wait_for(collect(stream), timeout=float(timeout))
+            except TimeoutError:
+                return self._failed(
+                    PlanningAttempt(
+                        attempt=attempt,
+                        raw_output="",
+                        error=f"Planner timed out after {timeout}s",
+                        error_type="timeout",
+                        tokens_used=0,
+                    )
+                )
             log.info("Plan generated (%d tokens)", tokens)
 
             cleaned = strip_model_output(raw)
@@ -286,25 +354,15 @@ class Planner:
             try:
                 plan = Plan.model_validate(parsed)
                 self._validator.validate(plan)
-            except PlanValidationError as exc:
+            except (PlanValidationError, ValueError) as exc:
+                etype = "validation" if isinstance(exc, PlanValidationError) else "schema"
                 return self._failed(
                     PlanningAttempt(
                         attempt=attempt,
                         raw_output=raw,
                         parsed=parsed,
                         error=str(exc),
-                        error_type="validation",
-                        tokens_used=tokens,
-                    )
-                )
-            except ValueError as exc:
-                return self._failed(
-                    PlanningAttempt(
-                        attempt=attempt,
-                        raw_output=raw,
-                        parsed=parsed,
-                        error=str(exc),
-                        error_type="schema",
+                        error_type=etype,
                         tokens_used=tokens,
                     )
                 )

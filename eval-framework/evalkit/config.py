@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 # Bump on any behavioral change to running or grading.
-HARNESS_VERSION = "0.3.3"
+HARNESS_VERSION = "0.3.4"
 
 # Framework root = parent of the evalkit/ package.
 FRAMEWORK_ROOT = Path(__file__).resolve().parent.parent

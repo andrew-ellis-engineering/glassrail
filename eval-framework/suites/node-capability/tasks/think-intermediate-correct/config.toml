@@ -40,5 +40,12 @@ grader = "trajectory"
 tool_sequence = ["think"]
 
 [[criteria]]
+text = "Reports the correct intermediate bay count of 24"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b24\\b"
+
+[[criteria]]
 text = "Correctly computes total bays (24) and total capacity (600) with correct intermediate steps"
 grader = "llm"

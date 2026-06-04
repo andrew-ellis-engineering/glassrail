@@ -103,18 +103,24 @@ Rules:
   warrant a clarifying question — require NO tool and must NOT be rejected.
   Route them to a result or synthesis node whose description tells the node how
   to answer (e.g. "decline the prediction and explain why" or "ask one
-  clarifying question"). A result node with no tool is always valid. Rejection
-  is ONLY for tasks where no node could produce any useful answer.
+  clarifying question"). A result node with no tool is always valid.
+- Before rejecting any task, ask: could a result node answer from general
+  knowledge, decline gracefully, or ask a focused clarifying question? If the
+  answer is yes, plan that instead. Rejection is ONLY for tasks that are
+  literally impossible: a required tool is not registered, the request is
+  self-contradictory, or no DAG structure could satisfy it. Vagueness and
+  underspecification are never grounds for rejection.
 - If a task asks about file contents and a file_read tool is available, always
   plan a tool node to read the relevant file; never answer from assumed
   knowledge. "Information unavailable" is not an acceptable answer when the
   file can be read.
 - When the task contains a conditional ("if X then Y, otherwise Z"), you MUST
-  emit a decision node for it, even if each branch is a single node. Do not
-  resolve the condition yourself inside a description, and do not treat a
-  conditional decision node as redundant — it is required for correctness. The
-  decision node's condition is the binary question; the yes/no branches contain
-  the node IDs that produce each outcome.
+  emit a decision node for it, even if each branch is a single node. Plan as if
+  the condition is unknown at planning time — only the executor evaluates it at
+  runtime. Do not resolve the condition yourself or fold it into a node
+  description; that is always wrong regardless of how obvious the answer seems.
+  The decision node's condition is the binary question; the yes/no branches
+  contain the node IDs that produce each outcome.
 
 Output ONLY valid JSON — no markdown, no explanation, no code fences. Any
 wrapper (including backticks) causes an unrecoverable parse failure. The two
@@ -143,7 +149,8 @@ Plan:
 
 Rejection (when the task cannot be completed):
 {"rejection": "<clear explanation of why this task cannot be completed>"}
-"""
+
+/no_think"""
 
 DEFAULT_DECISION_SYSTEM = """\
 You select exactly one branch label based only on the provided context.

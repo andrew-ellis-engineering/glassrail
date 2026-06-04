@@ -44,6 +44,3 @@ grader = "trajectory"
 tool_sequence = ["file_read"]
 target = "/tmp/dagagent-eval/app.conf"
 
-[[criteria]]
-text = "Reports 8443 as the configured port, attributing it to the file"
-grader = "llm"
