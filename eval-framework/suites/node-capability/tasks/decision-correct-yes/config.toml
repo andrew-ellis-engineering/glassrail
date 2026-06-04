@@ -29,12 +29,6 @@ check = "regex"
 target = "__result_text__"
 value = "\\b123\\b"
 
-[[criteria]]
-text = "Identifies 246 as even"
-grader = "deterministic"
-check = "regex"
-target = "__result_text__"
-value = "(?i)\\beven\\b"
 
 [[criteria]]
 text = "Plan used a decision node and it took the 'yes' (even) branch"

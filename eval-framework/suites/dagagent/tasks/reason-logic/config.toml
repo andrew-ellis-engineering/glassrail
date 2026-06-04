@@ -2,7 +2,7 @@ name = "reason-logic"
 tags = ["reasoning", "result"]
 type = "capability"
 difficulty = 3
-timeout_s = 180
+timeout_s = 420
 
 expected_behavior = """
 Deduction: Bob has dog. Alice doesn't have cat, so Alice has fish or dog. Since

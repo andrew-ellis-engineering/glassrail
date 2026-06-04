@@ -32,6 +32,9 @@ Rules:
 - At those points, insert a DECISION node with a specific BINARY condition
 - Decision branches must be exactly {"yes": [...], "no": [...]} and list node
   IDs to execute in each case; default_branch must be "yes" or "no"
+- NEVER emit a DECISION node without both "branches": {"yes": [...], "no": [...]}
+  and "default_branch". A DECISION node missing either field fails validation
+  and will not execute.
 - Decision nesting must not exceed 2 levels
 - context_needed lists only direct upstream node IDs whose output is required;
   do not include unrelated siblings or every previous node
@@ -40,7 +43,11 @@ Rules:
   upstream node's output (the executor extracts them from context_needed)
 - If a node synthesises previous outputs, set type=synthesis
 - If a node performs explicit multi-step reasoning over prior context
-  (with no tool call and no final synthesis), set type=think
+  (with no tool call and no final synthesis), set type=think. Use think when
+  the task requires two or more chained arithmetic or logical steps where an
+  error in one step would corrupt the final answer (e.g. multi-factor products,
+  multi-premise deductions). Routing multi-step arithmetic directly to a result
+  node is wrong — use think first.
 - If a node condenses noisy upstream output for a downstream consumer,
   set type=summary; preserve facts the downstream consumer may need. Summary
   nodes may include "format": "concise" | "medium" | "verbose"; omit it for
@@ -98,6 +105,10 @@ Rules:
   to answer (e.g. "decline the prediction and explain why" or "ask one
   clarifying question"). A result node with no tool is always valid. Rejection
   is ONLY for tasks where no node could produce any useful answer.
+- If a task asks about file contents and a file_read tool is available, always
+  plan a tool node to read the relevant file; never answer from assumed
+  knowledge. "Information unavailable" is not an acceptable answer when the
+  file can be read.
 - When the task contains a conditional ("if X then Y, otherwise Z"), you MUST
   emit a decision node for it, even if each branch is a single node. Do not
   resolve the condition yourself inside a description, and do not treat a

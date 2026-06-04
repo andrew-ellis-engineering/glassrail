@@ -32,9 +32,10 @@ The agent's output:
 First, briefly decide for yourself what a correct response looks like. Then \
 judge the output against THIS criterion only.
 
-Respond with PASS, FAIL, or UNKNOWN on the first line (UNKNOWN only if the \
-evidence is genuinely insufficient). Optionally one sentence of rationale on \
-the second line."""
+Your response must be exactly two lines. Line 1: the single word PASS, FAIL, \
+or UNKNOWN — nothing else on that line, no prefix, no label, no punctuation \
+(UNKNOWN only if the evidence is genuinely insufficient). Line 2: one sentence \
+of rationale (optional)."""
 
 
 def _result(criterion: Criterion, passed: bool, evidence: str) -> CriterionResult:
