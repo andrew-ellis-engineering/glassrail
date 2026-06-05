@@ -10,6 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from dagagent.config.settings import (
+    ImageToolConfig,
     NodeBudgets,
     NodePrompts,
     Settings,
@@ -22,6 +23,7 @@ from dagagent.config.settings import (
 )
 
 __all__ = [
+    "ImageToolConfig",
     "NodeBudgets",
     "NodePrompts",
     "Settings",

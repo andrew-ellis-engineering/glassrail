@@ -26,3 +26,9 @@ def register_integrations(harness: ToolHarness, settings: Settings) -> None:
         from dagagent.harness.integrations.web import register_web  # noqa: PLC0415
 
         register_web(harness, web)
+
+    image = settings.tools.image
+    if image.enabled:
+        from dagagent.harness.integrations.image import register_image  # noqa: PLC0415
+
+        register_image(harness, image)

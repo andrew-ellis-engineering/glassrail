@@ -138,6 +138,33 @@ class WebToolConfig(BaseModel):
     """Number of search results to return."""
 
 
+class ImageToolConfig(BaseModel):
+    """Configuration for the image generation tool (mflux / Flux.1 Schnell).
+
+    Opt-in: set ``enabled = true`` under ``[tools.image]`` in ``config.toml``.
+    The mflux binary is auto-discovered at ``~/.venvs/mflux/bin/mflux-generate``
+    or resolved from PATH; override with ``mflux_bin``.
+    """
+
+    enabled: bool = False
+    mflux_bin: str = ""
+    """Absolute path to the mflux-generate binary. Empty = auto-discover."""
+    model: str = "schnell"
+    """Flux model variant: ``schnell`` (fast, 4-step) or ``dev`` (quality)."""
+    quantize: int = 4
+    """Quantization bits for the mmdit transformer (4 or 8)."""
+    default_steps: int = 4
+    """Default diffusion steps. 4 is the right value for schnell."""
+    default_width: int = 1024
+    default_height: int = 1024
+    low_ram: bool = True
+    """Pass ``--low-ram`` to mflux to reduce peak memory pressure."""
+    mlx_cache_limit_gb: int = 8
+    """Cap the MLX cache (``--mlx-cache-limit-gb``) to bound memory usage."""
+    timeout_s: float = 300.0
+    """Per-generation timeout in seconds. First run may download weights."""
+
+
 class ToolsSettings(BaseModel):
     """First-party tool integrations, each bundled and toggled by config.
 
@@ -146,6 +173,7 @@ class ToolsSettings(BaseModel):
     """
 
     web: WebToolConfig = WebToolConfig()
+    image: ImageToolConfig = ImageToolConfig()
 
 
 class ToolApprovalPolicy(StrEnum):
