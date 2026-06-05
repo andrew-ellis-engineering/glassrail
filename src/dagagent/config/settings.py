@@ -5,8 +5,10 @@ Settings are loaded with the following precedence (highest first):
 1. Values passed to ``Settings(...)`` directly (used in tests).
 2. Environment variables prefixed ``DAGAGENT_``.
 3. A ``.env`` file in the current working directory.
-4. A ``config.toml`` file in the current working directory.
-5. Defaults declared on the model.
+4. A ``config.toml`` file in the current working directory (dev / project override).
+5. ``~/.dagagent/config.toml`` — the persistent user config, always loaded
+   regardless of working directory (used by the TUI and launchd services).
+6. Defaults declared on the model.
 
 Nested fields use the double-underscore delimiter, e.g.
 ``DAGAGENT_TIER0__MODEL=anthropic/claude-sonnet-4-6``.
@@ -334,10 +336,23 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
+        # Two TOML sources in descending priority order:
+        # 1. config.toml in CWD — used during development / eval runs from the
+        #    project root, and lets per-project settings override the home config.
+        # 2. ~/.dagagent/config.toml — the persistent user config. Loaded
+        #    regardless of CWD so the TUI (which spawns dagagent acp from an
+        #    arbitrary directory) always picks up the user's settings.
+        #    Override the home directory via DAGAGENT_CONFIG_HOME (used in tests
+        #    to point at a non-existent path so the home config is not loaded).
+        import os  # noqa: PLC0415
+
+        _cfg_home = Path(os.environ.get("DAGAGENT_CONFIG_HOME", Path.home() / ".dagagent"))
+        _home_cfg = _cfg_home / "config.toml"
         return (
             init_settings,
             env_settings,
             dotenv_settings,
-            TomlConfigSettingsSource(settings_cls),
+            TomlConfigSettingsSource(settings_cls, toml_file="config.toml"),
+            TomlConfigSettingsSource(settings_cls, toml_file=_home_cfg),
             file_secret_settings,
         )

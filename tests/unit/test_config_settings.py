@@ -15,6 +15,9 @@ def _clear_env(monkeypatch: MonkeyPatch) -> None:
     for key in list(os.environ):
         if key.startswith("DAGAGENT_"):
             monkeypatch.delenv(key, raising=False)
+    # Keep the home config dir pointed at a non-existent path so tests
+    # that exercise pure defaults are not affected by ~/.dagagent/config.toml.
+    monkeypatch.setenv("DAGAGENT_CONFIG_HOME", "/nonexistent/dagagent-test")
 
 
 def test_defaults(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
