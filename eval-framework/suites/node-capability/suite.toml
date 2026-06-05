@@ -24,12 +24,12 @@ default_grader_backend = "claude-cli"
 command = ["uv", "run", "dagagent", "run"]
 
 [backend.env]
-DAGAGENT_TIER0__BASE_URL = "http://localhost:8080/v1"
+DAGAGENT_TIER0__BASE_URL = "http://localhost:8090/v1"
 DAGAGENT_TIER0__MODEL = "qwen3.6-35b-moe"
 DAGAGENT_TIER0__TIMEOUT_S = "600"
-DAGAGENT_TIER1__BASE_URL = "http://localhost:8080/v1"
+DAGAGENT_TIER1__BASE_URL = "http://localhost:8090/v1"
 DAGAGENT_TIER1__MODEL = "qwen3.6-35b-moe"
 DAGAGENT_TIER1__TIMEOUT_S = "600"
-DAGAGENT_TIER2__BASE_URL = "http://localhost:8080/v1"
+DAGAGENT_TIER2__BASE_URL = "http://localhost:8090/v1"
 DAGAGENT_TIER2__MODEL = "qwen3.6-35b-moe"
 DAGAGENT_TIER2__TIMEOUT_S = "600"
