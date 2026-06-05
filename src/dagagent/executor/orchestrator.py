@@ -314,6 +314,7 @@ class Orchestrator:
                 plan_attempt = await self._planner.plan_attempt(
                     state.user_request,
                     attempt=attempt,
+                    min_tier=self._settings.planner_min_tier,
                     feedback=feedback,
                     prior_reasoning=prior_reasoning,
                     validation_feedback=validation_feedback,

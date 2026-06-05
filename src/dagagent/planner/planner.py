@@ -52,7 +52,9 @@ class Planner:
         # an arbitrary directory).
         self._failed_plan_dir = Path.home() / ".dagagent" / "failed_plans"
 
-    async def plan(self, request: str, *, min_tier: int = 0, feedback: str | None = None) -> Plan:
+    async def plan(
+        self, request: str, *, min_tier: int | None = None, feedback: str | None = None
+    ) -> Plan:
         """Generate and validate a plan for ``request``.
 
         ``feedback`` (set on a guided replan after a user rejects a plan) is
@@ -64,10 +66,11 @@ class Planner:
         thinking re-enabled. Timeout/stall/JSON failures don't improve with
         thinking and are surfaced immediately.
         """
+        effective_min_tier = self._settings.planner_min_tier if min_tier is None else min_tier
         attempt = await self.plan_attempt(
             request,
             attempt=0,
-            min_tier=min_tier,
+            min_tier=effective_min_tier,
             feedback=feedback,
             thinking=False,
         )
@@ -91,7 +94,7 @@ class Planner:
             retry = await self.plan_attempt(
                 request,
                 attempt=1,
-                min_tier=min_tier,
+                min_tier=effective_min_tier,
                 feedback=feedback,
                 thinking=True,
                 validation_feedback=attempt.error if attempt.error_type == "validation" else None,

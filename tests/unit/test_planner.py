@@ -53,7 +53,7 @@ def harness() -> ToolHarness:
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings()
+    return Settings(planner_min_tier=0)
 
 
 def _planner_from(provider: _FixedProvider, harness: ToolHarness, settings: Settings) -> Planner:
@@ -113,7 +113,7 @@ async def test_planner_uses_its_configured_budget(harness: ToolHarness) -> None:
     """The plan generation call is capped at the configured planner budget."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
     provider = _CapturingProvider(payload=payload)
-    settings = Settings(budgets=NodeBudgets(planner=5005))
+    settings = Settings(budgets=NodeBudgets(planner=5005), planner_min_tier=0)
     planner = _planner_from(provider, harness, settings)
 
     await planner.plan("anything")
@@ -124,7 +124,7 @@ async def test_planner_uses_its_configured_prompt(harness: ToolHarness) -> None:
     """A custom planner prompt is sent as the system message."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
     provider = _CapturingProvider(payload=payload)
-    settings = Settings(prompts=NodePrompts(planner="CUSTOM PLANNER PROMPT"))
+    settings = Settings(prompts=NodePrompts(planner="CUSTOM PLANNER PROMPT"), planner_min_tier=0)
     planner = _planner_from(provider, harness, settings)
 
     await planner.plan("anything")
@@ -141,6 +141,7 @@ async def test_planner_tells_model_the_node_limits(harness: ToolHarness) -> None
         max_subplans_per_plan=2,
         max_subplan_nodes=12,
         prompts=NodePrompts(planner="CUSTOM"),
+        planner_min_tier=0,
     )
     planner = _planner_from(provider, harness, settings)
 
@@ -172,7 +173,7 @@ async def test_planner_includes_plan_cookbook(harness: ToolHarness) -> None:
     """The planner receives reusable plan patterns even with a custom system prompt."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
     provider = _CapturingProvider(payload=payload)
-    settings = Settings(prompts=NodePrompts(planner="CUSTOM"))
+    settings = Settings(prompts=NodePrompts(planner="CUSTOM"), planner_min_tier=0)
     planner = _planner_from(provider, harness, settings)
 
     await planner.plan("Do a web search for Raft consensus")
@@ -188,7 +189,7 @@ async def test_planner_includes_tool_capability_digest(harness: ToolHarness) -> 
     """The planner sees a coarse capability map before raw tool schemas."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
     provider = _CapturingProvider(payload=payload)
-    planner = _planner_from(provider, harness, Settings())
+    planner = _planner_from(provider, harness, Settings(planner_min_tier=0))
 
     await planner.plan("read a local file")
     user_msg = provider.user_seen[0]

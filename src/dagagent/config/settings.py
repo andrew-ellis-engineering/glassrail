@@ -237,6 +237,9 @@ class Settings(BaseSettings):
     planner_stall_char_multiplier: int = 4
     """Classify invalid planner output longer than planner max_tokens times
     this multiplier as a stall and feed the raw output into the retry prompt."""
+    planner_min_tier: int = 0
+    """Minimum tier the planner is allowed to use. Set to 1 when a faster/cheaper
+    model occupies tier 0 so that planning always uses the quality tier."""
     planner_initial_timeout_s: int = 90
     """Ceiling on the first (no-think) planning attempt, in seconds.
     Only effective when the tier's ``timeout_s`` is longer than this value.

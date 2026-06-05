@@ -3,31 +3,28 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.dagagent.mlx-server</string>
+    <string>com.dagagent.mlx-subagent</string>
 
     <key>ProgramArguments</key>
     <array>
         <string>/Users/andrew/.venvs/rapid-mlx/bin/rapid-mlx</string>
         <string>serve</string>
-        <string>mlx-community/Qwen3.6-35B-A3B-4bit</string>
+        <string>mlx-community/Qwen3-8B-4bit</string>
         <string>--served-model-name</string>
-        <string>qwen3.6-35b-moe</string>
+        <string>qwen3-8b</string>
         <string>--host</string>
         <string>0.0.0.0</string>
         <string>--port</string>
-        <string>8080</string>
+        <string>8081</string>
         <string>--max-tokens</string>
-        <string>12000</string>
+        <string>4096</string>
         <string>--max-num-seqs</string>
         <string>1</string>
         <string>--gpu-memory-utilization</string>
-        <string>0.60</string>
+        <string>0.16</string>
         <string>--kv-cache-quantization</string>
         <string>--kv-cache-quantization-bits</string>
         <string>4</string>
-        <string>--prefill-step-size</string>
-        <string>8192</string>
-        <string>--pin-system-prompt</string>
         <string>--reasoning-parser</string>
         <string>qwen3</string>
         <string>--enable-auto-tool-choice</string>
@@ -53,9 +50,9 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/andrew/Library/Logs/dagagent-mlx-server.out.log</string>
+    <string>/Users/andrew/Library/Logs/dagagent-mlx-subagent.out.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/andrew/Library/Logs/dagagent-mlx-server.err.log</string>
+    <string>/Users/andrew/Library/Logs/dagagent-mlx-subagent.err.log</string>
 </dict>
 </plist>
