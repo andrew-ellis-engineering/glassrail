@@ -2,7 +2,7 @@ name = "fact-http"
 tags = ["calibration", "result"]
 type = "capability"
 difficulty = 1
-timeout_s = 120
+timeout_s = 420
 
 expected_behavior = """
 HTTP expands to Hypertext Transfer Protocol. A correct run states this plainly

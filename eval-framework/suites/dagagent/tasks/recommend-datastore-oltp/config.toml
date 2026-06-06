@@ -3,7 +3,7 @@ tags = ["multistep", "synthesis", "result", "control-pair"]
 type = "capability"
 difficulty = 4
 control_for = "recommend-datastore-iot"
-timeout_s = 720
+timeout_s = 1200
 
 expected_behavior = """
 ACID transactions, complex joins, and mixed read/write OLTP patterns are the

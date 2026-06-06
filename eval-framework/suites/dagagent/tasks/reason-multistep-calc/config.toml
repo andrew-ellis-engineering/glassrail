@@ -2,7 +2,7 @@ name = "reason-multistep-calc"
 tags = ["reasoning", "multistep", "result"]
 type = "capability"
 difficulty = 4
-timeout_s = 240
+timeout_s = 720
 
 expected_behavior = """
 Step-by-step:

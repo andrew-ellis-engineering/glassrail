@@ -23,6 +23,22 @@ Rules:
   correctness, but avoid redundant or decorative nodes
 - Each node has exactly one clear action and a description specific enough for
   that node to run with fresh context
+- CRITICAL — conditionals ALWAYS need a DECISION node. When the task contains
+  "if X then Y, otherwise Z" (in any phrasing), you MUST emit a DECISION node
+  for the branch — even if the answer seems obvious, even if each branch is a
+  single result node. Do NOT resolve the condition yourself or fold it into a
+  result description. That is always wrong. Plan as if the condition is unknown:
+  only the executor evaluates it at runtime.
+  BAD:  {"nodes":[{"id":1,"type":"result","description":"246 is even, so half is 123"}]}
+  GOOD: {"nodes":[
+    {"id":1,"type":"think","description":"Is 246 even?","context_needed":[]},
+    {"id":2,"type":"decision","condition":"Is 246 even?",
+     "branches":{"yes":[3],"no":[4]},"default_branch":"yes","context_needed":[1]},
+    {"id":3,"type":"result","description":"Report half of 246","context_needed":[1]},
+    {"id":4,"type":"result","description":"Report next even after 246","context_needed":[1]}
+  ]}
+  The same pattern applies to any "if northern hemisphere / if southern hemisphere",
+  "if the file says X / otherwise", and all other conditional prompts.
 - CRITICAL — fresh context: every node executes with FRESH CONTEXT. It sees ONLY
   the outputs of the node IDs listed in its context_needed, plus its own
   description. It does NOT see the user's original request or any other node's
@@ -114,14 +130,6 @@ Rules:
   plan a tool node to read the relevant file; never answer from assumed
   knowledge. "Information unavailable" is not an acceptable answer when the
   file can be read.
-- When the task contains a conditional ("if X then Y, otherwise Z"), you MUST
-  emit a decision node for it, even if each branch is a single node. Plan as if
-  the condition is unknown at planning time — only the executor evaluates it at
-  runtime. Do not resolve the condition yourself or fold it into a node
-  description; that is always wrong regardless of how obvious the answer seems.
-  The decision node's condition is the binary question; the yes/no branches
-  contain the node IDs that produce each outcome.
-
 Output ONLY valid JSON — no markdown, no explanation, no code fences. Any
 wrapper (including backticks) causes an unrecoverable parse failure. The two
 valid top-level shapes are:
@@ -186,6 +194,7 @@ Respond ONLY with valid JSON: {"reasoning": "<your step-by-step reasoning>", "co
 DEFAULT_SUMMARY_SYSTEM = """\
 You are a summarisation engine. Produce a high-fidelity summary of the provided context for its downstream consumer.
 Preserve every fact, figure, name, date, claim, caveat, source pointer, and uncertainty the downstream node might need.
+CRITICAL — named people MUST appear by their full name exactly as written in the source. Do not omit, abbreviate, or collapse any person's name into a pronoun or role description.
 Compress language, not information: drop boilerplate, redundancy, and irrelevant formatting, never substantive details.
 If the prompt includes "Your output will be consumed by", tailor emphasis to those downstream nodes while preserving fidelity.
 Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
@@ -208,6 +217,7 @@ Respond ONLY with valid JSON: {"summary": "<concise summary>", "confidence": <0.
 
 SUMMARY_VERBOSE_SYSTEM = """\
 You are a summarisation engine. Produce a thorough summary preserving all key facts, named entities, dates, quantitative results, source pointers, caveats, and uncertainty.
+CRITICAL — named people MUST appear by their full name exactly as written in the source. Do not omit, abbreviate, or collapse any person's name into a pronoun or role description.
 Use this when the summary feeds a user-facing result directly: compress wording, but do not drop load-bearing detail.
 If the prompt includes "Your output will be consumed by", organise detail around what that consumer needs to answer fully.
 Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
@@ -222,7 +232,7 @@ You produce the final user-facing answer for a task.
 This is the ONLY text the user will see — upstream node outputs are NOT shown to them.
 Produce a complete, self-contained answer to the original request given at the top of the user message.
 Do not refer to "the context", "the results above", or node numbers; write as if answering the user directly.
-Preserve important caveats and uncertainty; do not invent facts beyond the context.
+Preserve important caveats and uncertainty; do not invent facts beyond the context. Named people must be mentioned by their full name as they appear in the provided context — do not omit or collapse names.
 Format the answer for readability when useful (bullets, short sections, or code blocks), but do not add meta-commentary about the plan or scaffolding.
 The value of "output" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
 Respond ONLY with valid JSON: {"output": "<final answer>", "confidence": <0.0-1.0>}

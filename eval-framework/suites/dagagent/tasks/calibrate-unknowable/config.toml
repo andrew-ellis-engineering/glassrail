@@ -3,7 +3,7 @@ tags = ["calibration", "result", "control-pair"]
 type = "capability"
 difficulty = 2
 control_for = "calibrate-known"
-timeout_s = 120
+timeout_s = 420
 
 expected_behavior = """
 Future exchange rates are inherently unknowable — no model or agent can

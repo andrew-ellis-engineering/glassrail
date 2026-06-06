@@ -45,6 +45,7 @@ grader = "trajectory"
 tool_sequence = ["file_read"]
 target = "/tmp/dagagent-eval/backup.conf"
 
-[[criteria]]
-text = "Reports 30 days of retention sourced from the backup config, not the app config"
-grader = "llm"
+# LLM criterion removed: output is bare "30" — the judge cannot determine
+# provenance from result text alone. Provenance is already proven by the
+# trajectory criterion (file_read on /tmp/dagagent-eval/backup.conf) and the
+# not-8443 deterministic check (rules out the wrong file).

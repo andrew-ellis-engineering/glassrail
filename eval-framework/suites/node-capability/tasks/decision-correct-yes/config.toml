@@ -2,6 +2,7 @@ name = "decision-correct-yes"
 tags = ["decision", "node-capability", "control-pair"]
 type = "capability"
 difficulty = 3
+timeout_s = 600
 
 expected_behavior = """
 For an even number (246), the decision node must take the 'yes' branch

@@ -3,7 +3,7 @@ tags = ["tool-use", "result", "control-pair"]
 type = "capability"
 difficulty = 2
 control_for = "tool-read-value"
-timeout_s = 120
+timeout_s = 420
 
 expected_behavior = """
 HTTPS uses port 443 — this is well-known general knowledge requiring no file
@@ -42,6 +42,6 @@ text = "Plan includes a result node"
 grader = "trajectory"
 tool_sequence = ["result"]
 
-[[criteria]]
-text = "Answers 443 from general knowledge without reading any file"
-grader = "llm"
+# LLM criterion removed: the judge sees only result text, not the trajectory,
+# so it cannot verify whether file_read was called. The trajectory criterion
+# above ("Did not call file_read") already covers this safely and deterministically.

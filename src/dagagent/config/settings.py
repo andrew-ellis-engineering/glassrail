@@ -270,12 +270,13 @@ class Settings(BaseSettings):
     planner_min_tier: int = 0
     """Minimum tier the planner is allowed to use. Set to 1 when a faster/cheaper
     model occupies tier 0 so that planning always uses the quality tier."""
-    planner_initial_timeout_s: int = 90
+    planner_initial_timeout_s: int = 150
     """Ceiling on the first (no-think) planning attempt, in seconds.
     Only effective when the tier's ``timeout_s`` is longer than this value.
-    For local MLX models set ``DAGAGENT_TIER0__TIMEOUT_S`` to at least 120.
-    Empirically: qwen3.6-35b-moe at ~54 tok/s generates ~4800 tokens in 90s —
-    enough for any plan JSON without extended reasoning."""
+    For local MLX models set ``DAGAGENT_TIER0__TIMEOUT_S`` to at least 180.
+    Empirically: qwen3.6-35b-moe on Apple Silicon needs 60-150s to prefill
+    and emit plan JSON for complex prompts (decision, research, subplan tasks)
+    without extended reasoning; 150s covers the observed range with headroom."""
     planner_retry_timeout_s: int = 240
     """Ceiling on the retry attempt (thinking re-enabled) in seconds.
     Same tier-timeout interaction applies — the tier timeout must be >= this

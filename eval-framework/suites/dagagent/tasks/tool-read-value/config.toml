@@ -2,7 +2,7 @@ name = "tool-read-value"
 tags = ["tool-use", "result", "control-pair"]
 type = "capability"
 difficulty = 2
-timeout_s = 240
+timeout_s = 540
 
 expected_behavior = """
 The agent must read /tmp/dagagent-eval/app.conf via file_read and report the

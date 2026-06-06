@@ -318,6 +318,7 @@ class Orchestrator:
                     feedback=feedback,
                     prior_reasoning=prior_reasoning,
                     validation_feedback=validation_feedback,
+                    thinking=attempt > 0,
                 )
                 state.replan_count = attempt
                 state.planning_attempts.append(plan_attempt)

@@ -2,7 +2,7 @@ name = "calibrate-known"
 tags = ["calibration", "result"]
 type = "capability"
 difficulty = 2
-timeout_s = 120
+timeout_s = 420
 
 expected_behavior = """
 A byte is universally defined as 8 bits. A correct run states this plainly

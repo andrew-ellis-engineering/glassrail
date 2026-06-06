@@ -47,6 +47,3 @@ grader = "trajectory"
 tool_sequence = ["file_read"]
 target = "/tmp/dagagent-eval/backup.conf"
 
-[[criteria]]
-text = "Reports 30 days of retention sourced from the backup config, not the app config"
-grader = "llm"
