@@ -103,7 +103,7 @@ Items deferred to Phase 2 (were not shipped, do not block the gate):
 
 ## Phase 2 — Foundation Assistant
 
-Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing, `foreach` node, registry output schemas.
+Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing, `foreach` node, registry output schemas, file viewer TUI panel.
 
 - **Subplan node-type prompt fix** *(first tracked improvement against the Phase
   1 baseline)* — add a concrete example to the planner subplan guidance showing
@@ -179,10 +179,30 @@ Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing
   the Markdown rendering and wrap-aware scrolling work, since all three affect
   how output text is laid out and selectable. Applies to both the Rust TUI
   (`clients/tui`) and the Python Rich TUI (`glassrail tui`).
+- **TUI: file viewer panel** *(ships with file editing tools — they are a unit)*
+  — a dedicated tab in the Rust TUI for browsing the local file tree and
+  viewing file contents. Primary role is surfacing diffs when the agent proposes
+  an edit: instead of approving raw tool args through the HITL gate, the user
+  sees an inline diff of the proposed change and approves or rejects it with
+  full context. Secondary role: general file inspection without leaving the TUI.
+  Requires: tab bar + mouse support (above), file editing tools, and the
+  diff-in-approval payload those tools produce. Sequence constraint — do not
+  ship the file editing tools without this panel; approving blind edits is a
+  worse UX than the current no-edit state.
 
 ## Phase 2.5 — Dreaming
 
-Memory consolidation cron, audit trail, user-curation workflow, cloud tier routing.
+Memory consolidation cron, audit trail, user-curation workflow, cloud tier routing, observability TUI panel.
+
+- **TUI: observability panel** *(gates on: tab bar + mouse from Phase 2)* — a
+  dedicated tab surfacing the run telemetry that already exists but has no
+  visual home: OTel span tree (task → plan → node → LLM call), per-node token
+  counts and latency, tier routing decisions (which tier was used, whether
+  fallthrough occurred), and confidence scores per node. All data flows over the
+  existing typed event stream and OTel; this is a rendering job, not new
+  plumbing. Pairs naturally with the audit trail work also in this phase.
+  Read-only; no interaction required beyond navigation. Primary surface: Rust
+  TUI.
 
 - **Long / medium / short-term memory model** — define the three tiers (what
   qualifies, lifetime, retrieval) and how they are managed and surfaced to
@@ -238,7 +258,18 @@ Memory consolidation cron, audit trail, user-curation workflow, cloud tier routi
 
 ## Phase 3 — Insomnia
 
-Autonomous research, scheduler, web tools, emergent subplans, mid-graph subplans, parallel sub-agents.
+Autonomous research, scheduler, web tools, emergent subplans, mid-graph subplans, parallel sub-agents, multi-chat TUI panel.
+
+- **TUI: multi-chat panel** *(gates on: chat session mode from Phase 2 + session
+  multiplexing from Phase 3 parallelism work)* — evolve the TUI from a
+  single-task workspace into a multi-task one. A session list pane shows all
+  active and recent tasks with live status indicators; switching between them
+  swaps the chat and DAG views to the selected session. New tasks can be
+  submitted without waiting for the current one to finish. Deliberately deferred
+  to Phase 3 because building it earlier would require session multiplexing
+  infrastructure twice — Phase 3's scheduler and parallel sub-agent work builds
+  that substrate; the multi-chat panel consumes it. Sequence: do not attempt
+  this before the runtime can hold concurrent sessions.
 
 - **Loops in plans** — allow the planner to emit a loop construct with an
   explicit termination condition (iterate a list, retry until predicate, etc.)
@@ -248,7 +279,26 @@ Autonomous research, scheduler, web tools, emergent subplans, mid-graph subplans
 
 ## Phase 4 — Production & Community
 
-Security & sandboxing, MCP client, SKILL.md plugin format, plugin SDK + marketplace, A2A, voice, K8s manifests, automated tier-ROI cron.
+Security & sandboxing, MCP client, SKILL.md plugin format, plugin SDK + marketplace, A2A, voice, K8s manifests, automated tier-ROI cron, config panel, setup wizard.
+
+- **TUI: config options panel** *(gates on: stable config schema, tier health
+  reporting; sequence after config panel before setup wizard)* — a live view
+  and edit surface for the active settings: tier status (healthy/degraded, which
+  model is loaded, last latency), tool enable/disable toggles, fast mode toggle,
+  token budgets. Writes back to `~/.glassrail/config.toml` on save. Kept in
+  Phase 4 because it implies mutable runtime config — a production concern that
+  overlaps with the security and plugin work. A read-only tier-status strip
+  could appear earlier, but the editable panel waits for the config surface to
+  stabilise through Phases 2–3.
+
+- **TUI: setup wizard panel** *(gates on: config panel primitives; build after
+  config panel, not before)* — a guided first-run flow: detect running local MLX
+  servers, walk through API key entry for OpenRouter tiers, configure provider
+  endpoints, run a smoke test against each tier, and write `~/.glassrail/config.toml`.
+  Replaces manual TOML editing for new users. Belongs in Phase 4 because it is
+  an onboarding/community surface — it only pays off once the config schema has
+  stopped moving and you are optimising for first-impressions. Reuses the config
+  panel's write primitives rather than re-implementing them.
 
 - **Automated nightly tier-ROI cron** *(builds on the Phase 2.5 `routing recompute`
   CLI; requires several weeks of manual operation to establish confidence)* —
