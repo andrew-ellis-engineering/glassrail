@@ -21,21 +21,23 @@ from glassrail.runtime import build_runtime
 __all__ = ["run_acp"]
 
 
-def _settings_for_acp() -> Settings:
+def _settings_for_acp(*, fast_mode: bool = False) -> Settings:
     # The adapter drives the HITL plan gate over ACP session/request_permission,
     # so confirmation is on: the orchestrator pauses at AWAITING_CONFIRMATION and
     # the client approves or rejects-with-feedback (guided replan).
     settings = get_settings()
+    if fast_mode:
+        settings = settings.with_fast_mode()
     return settings.model_copy(update={"confirm_plans": True})
 
 
-async def run_acp() -> None:
+async def run_acp(*, fast_mode: bool = False) -> None:
     """Serve ACP over stdio until stdin closes.
 
     stdout is reserved for the protocol, so all logging is forced to stderr.
     """
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
-    runtime = build_runtime(_settings_for_acp(), interactive_tool_approval=True)
+    runtime = build_runtime(_settings_for_acp(fast_mode=fast_mode), interactive_tool_approval=True)
     reader, writer = await stdio_streams()
     server = AcpServer(runtime, Connection(reader, writer))
     await server.serve()

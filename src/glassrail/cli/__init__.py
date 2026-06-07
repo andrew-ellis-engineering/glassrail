@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 from pathlib import Path
 
 import typer
@@ -29,6 +30,8 @@ from glassrail.gateways.tui import DEFAULT_BASE_URL, run_tui
 from glassrail.harness.builtin import register_eval_tools
 from glassrail.runtime import build_runtime
 from glassrail.validator import PlanValidator, topo_sort
+
+log = logging.getLogger(__name__)
 
 app = typer.Typer(
     name="glassrail",
@@ -54,7 +57,14 @@ def tui(
 
 
 @app.command()
-def acp() -> None:
+def acp(
+    fast: bool = typer.Option(
+        False,
+        "--fast",
+        help="Route all tiers through OpenRouter instead of local models. "
+        "Requires OPENROUTER_API_KEY or fast.api_key in config.",
+    ),
+) -> None:
     """Speak the Agent Client Protocol over stdio (for the Rust TUI / ACP clients).
 
     A long-running JSON-RPC 2.0 process: stdin/stdout carry the protocol,
@@ -62,7 +72,7 @@ def acp() -> None:
     this as a subprocess, submits tasks via ``session/prompt``, and watches the
     plan and node execution stream back as ``session/update`` notifications.
     """
-    asyncio.run(run_acp())
+    asyncio.run(run_acp(fast_mode=fast))
 
 
 @app.command()
@@ -80,6 +90,12 @@ def run(
         "--confirm/--no-confirm",
         help="Honor the HITL confirmation gate (off by default for headless runs).",
     ),
+    fast: bool = typer.Option(
+        False,
+        "--fast",
+        help="Route all tiers through OpenRouter instead of local models. "
+        "Requires OPENROUTER_API_KEY or fast.api_key in config.",
+    ),
 ) -> None:
     """Run a task end to end in-process and print its result.
 
@@ -87,7 +103,9 @@ def run(
     a normalized trajectory (nodes, tiers, branch decisions), status, and token
     count — which the eval framework's ``glassrail-cli`` backend consumes.
     """
-    envelope = asyncio.run(_run_task(request, model=model, confirm=confirm, timeout_s=timeout))
+    envelope = asyncio.run(
+        _run_task(request, model=model, confirm=confirm, timeout_s=timeout, fast=fast)
+    )
     if json_output:
         typer.echo(json.dumps(envelope))
     else:
@@ -97,8 +115,10 @@ def run(
 # ── headless run plumbing ────────────────────────────────────────────────────
 
 
-def _settings_for_run(*, model: str | None, confirm: bool) -> Settings:
+def _settings_for_run(*, model: str | None, confirm: bool, fast: bool) -> Settings:
     settings = get_settings()
+    if fast:
+        settings = settings.with_fast_mode()
     updates: dict[str, object] = {}
     if not confirm:
         updates["confirm_plans"] = False
@@ -108,9 +128,9 @@ def _settings_for_run(*, model: str | None, confirm: bool) -> Settings:
 
 
 async def _run_task(
-    request: str, *, model: str | None, confirm: bool, timeout_s: float | None
+    request: str, *, model: str | None, confirm: bool, timeout_s: float | None, fast: bool
 ) -> dict[str, object]:
-    settings = _settings_for_run(model=model, confirm=confirm)
+    settings = _settings_for_run(model=model, confirm=confirm, fast=fast)
     rt = build_runtime(settings)
     state = ExecutionState(task_id=new_task_id(), user_request=request)
     await rt.store.save_task(state)

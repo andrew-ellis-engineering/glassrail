@@ -215,6 +215,14 @@ class ToolApprovalSettings(BaseModel):
         return self.overrides.get(tool_name, self.default)
 
 
+_OPENROUTER_QWEN_EXTRA_BODY: dict[str, Any] = {
+    "reasoning": {"effort": "none"},
+    "provider": {"require_parameters": True},
+}
+"""Extra body required for Qwen3 models on OpenRouter to disable extended
+thinking. Without this, all tokens stream into delta.reasoning and content is
+empty, producing a JSON-parse failure downstream."""
+
 _DEFAULT_TIER0 = TierConfig(
     base_url="http://localhost:8080/v1",
     model="qwen3.6-35b-moe",
@@ -232,6 +240,55 @@ _DEFAULT_TIER3 = TierConfig(
     base_url="https://openrouter.ai/api/v1",
     model="anthropic/claude-sonnet-4-6",
 )
+
+
+class FastModeConfig(BaseModel):
+    """OpenRouter overrides applied when ``--fast`` is active.
+
+    In fast mode every tier routes through OpenRouter instead of local MLX
+    servers. Useful when local inference is unavailable, slow, or you want a
+    quick cloud-backed run without reconfiguring the full tier stack.
+
+    Model defaults mirror the ``glassrail-openrouter`` eval suite so the
+    quality/cost profile is known and the reasoning-disable ``extra_body`` is
+    guaranteed to work. Override any field under ``[fast]`` in ``config.toml``
+    or ``GLASSRAIL_FAST__*`` env vars.
+
+    **API key resolution (in order):** ``fast.api_key`` → ``OPENROUTER_API_KEY``
+    env var. An empty key after resolution raises an error at build time rather
+    than sending a credentialless request.
+    """
+
+    base_url: str = "https://openrouter.ai/api/v1"
+    api_key: str = ""
+    """Leave empty to resolve from ``OPENROUTER_API_KEY`` at build time."""
+    extra_body: dict[str, Any] = Field(default_factory=lambda: dict(_OPENROUTER_QWEN_EXTRA_BODY))
+    """Merged into every chat-completions request for all fast-mode tiers.
+    Defaults to the Qwen3/OpenRouter reasoning-disable params."""
+    max_generation_tokens: int = 32768
+    """Raised from the local default (which caps for Metal OOM safety)."""
+
+    # Model slugs — exact values from the glassrail-openrouter eval suite.
+    tier0_model: str = "qwen/qwen3-8b"
+    tier1_model: str = "qwen/qwen3.6-35b-a3b"
+    tier2_model: str = "qwen/qwen3.6-35b-a3b"
+    tier3_model: str = "qwen/qwen3.6-35b-a3b"
+
+    # Per-tier timeouts — cloud needs more headroom than local health checks.
+    tier0_timeout_s: float = 60.0
+    tier1_timeout_s: float = 90.0
+    tier2_timeout_s: float = 90.0
+    tier3_timeout_s: float = 90.0
+
+    # Per-tier extra_body overrides. ``None`` means fall back to the shared
+    # ``extra_body`` above. Set a non-None value when a tier uses a model that
+    # needs different request params — e.g. ``{}`` to send no extra fields when
+    # overriding tier3_model to a non-Qwen model like Claude that doesn't need
+    # the reasoning-disable params.
+    tier0_extra_body: dict[str, Any] | None = None
+    tier1_extra_body: dict[str, Any] | None = None
+    tier2_extra_body: dict[str, Any] | None = None
+    tier3_extra_body: dict[str, Any] | None = None
 
 
 class Settings(BaseSettings):
@@ -321,6 +378,11 @@ class Settings(BaseSettings):
     confirm_plans: bool = False
     tool_approval: ToolApprovalSettings = ToolApprovalSettings()
 
+    # ── Fast mode ────────────────────────────────────────────────────────
+    fast: FastModeConfig = FastModeConfig()
+    """Cloud-routing profile applied when ``--fast`` is passed on the CLI.
+    Configure under ``[fast]`` in ``config.toml`` or ``GLASSRAIL_FAST__*``."""
+
     # ── Observability ────────────────────────────────────────────────────
     # Tracing is a no-op unless turned on here. Setting an OTLP endpoint
     # implies enabling it. See glassrail.telemetry.configure_tracing.
@@ -335,6 +397,60 @@ class Settings(BaseSettings):
     def tiers(self) -> list[TierConfig]:
         """Ordered list of configured tiers — index matches tier number."""
         return [self.tier0, self.tier1, self.tier2, self.tier3]
+
+    def with_fast_mode(self, *, api_key: str = "") -> Settings:
+        """Return a copy of these settings with all tiers remapped to OpenRouter.
+
+        Resolves the API key in order: explicit ``api_key`` arg →
+        ``fast.api_key`` → ``OPENROUTER_API_KEY`` env var. Raises
+        :exc:`ValueError` if all three are empty so the caller gets a clear
+        error rather than a silent 401 from OpenRouter.
+
+        The returned ``Settings`` object shares all non-tier fields with the
+        original; only the four tier configs and ``max_generation_tokens`` are
+        replaced.
+
+        Each tier's ``extra_body`` is taken from the tier-specific override
+        (``fast.tier{n}_extra_body``) if set, falling back to the shared
+        ``fast.extra_body``. Set a tier-specific override to ``{}`` when
+        swapping a tier's model to one that doesn't accept the Qwen
+        reasoning-disable params (e.g. a non-Qwen cloud model).
+        """
+        import logging  # noqa: PLC0415
+        import os  # noqa: PLC0415
+
+        fm = self.fast
+        resolved_key = api_key or fm.api_key or os.environ.get("OPENROUTER_API_KEY", "")
+        if not resolved_key:
+            raise ValueError(
+                "Fast mode requires an API key. Set OPENROUTER_API_KEY, "
+                "pass --api-key, or set fast.api_key in config.toml."
+            )
+
+        logging.getLogger(__name__).info("Fast mode active — all tiers routed through OpenRouter")
+
+        shared_eb = dict(fm.extra_body)
+
+        def _cloud_tier(
+            model: str, timeout_s: float, tier_extra_body: dict[str, Any] | None
+        ) -> TierConfig:
+            return TierConfig(
+                base_url=fm.base_url,
+                model=model,
+                api_key=resolved_key,
+                timeout_s=timeout_s,
+                extra_body=dict(tier_extra_body) if tier_extra_body is not None else shared_eb,
+            )
+
+        return self.model_copy(
+            update={
+                "tier0": _cloud_tier(fm.tier0_model, fm.tier0_timeout_s, fm.tier0_extra_body),
+                "tier1": _cloud_tier(fm.tier1_model, fm.tier1_timeout_s, fm.tier1_extra_body),
+                "tier2": _cloud_tier(fm.tier2_model, fm.tier2_timeout_s, fm.tier2_extra_body),
+                "tier3": _cloud_tier(fm.tier3_model, fm.tier3_timeout_s, fm.tier3_extra_body),
+                "max_generation_tokens": fm.max_generation_tokens,
+            }
+        )
 
     @classmethod
     def settings_customise_sources(
