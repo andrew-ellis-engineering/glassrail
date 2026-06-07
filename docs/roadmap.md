@@ -105,7 +105,7 @@ Items deferred to Phase 2 (were not shipped, do not block the gate):
 
 Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing, `foreach` node, registry output schemas, file viewer TUI panel.
 
-- **Subplan node-type prompt fix** *(first tracked improvement against the Phase
+- **Subplan node-type prompt fix** ✓ *(first tracked improvement against the Phase
   1 baseline)* — add a concrete example to the planner subplan guidance showing
   the correct inside-subplan node shape: `"type": "tool", "tool": "web_search"`
   not `"type": "web_search"`. Also reinforce the `max_subplans_per_plan` limit

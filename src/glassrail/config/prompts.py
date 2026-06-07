@@ -85,6 +85,19 @@ Rules:
     top-level plan: {"nodes": [...]}. The nested plan's final result node
     becomes the subplan node's output for the parent plan. Respect the node and
     subplan limits stated in the request.
+  - Inside a subplan, tools are still ordinary tool nodes. The tool name goes
+    in the "tool" field, never in "type".
+    GOOD nested tool node:
+      {"id": 1, "type": "tool", "tool": "web_search",
+       "description": "Search for Option A evidence", "context_needed": []}
+    BAD nested tool node:
+      {"id": 1, "type": "web_search",
+       "description": "Search for Option A evidence", "context_needed": []}
+    This is wrong because "web_search" is a tool name, not a node type.
+  - Count subplan nodes before emitting the plan. If the limit says "At most 2
+    subplan node(s)", a plan with three sibling subplan nodes is invalid even
+    when each nested plan is small. Convert the least self-contained track to
+    flat tool/summary/synthesis nodes instead of exceeding the limit.
   - Well-formed example:
     {"id": 2, "type": "subplan",
      "description": "Research Option A end to end",

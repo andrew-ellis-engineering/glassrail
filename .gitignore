@@ -60,6 +60,7 @@ coverage.xml
 site/
 
 # Project-local state
+SCRATCH.md
 *.sqlite
 *.db
 *.db-journal
