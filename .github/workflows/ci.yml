@@ -91,8 +91,8 @@ jobs:
         working-directory: eval-framework
         run: |
           python run.py list suites/example
-          python run.py list suites/dagagent
-          python run.py suite suites/dagagent --dry-run
+          python run.py list suites/glassrail
+          python run.py suite suites/glassrail --dry-run
       - name: Stats smoke
         working-directory: eval-framework
         run: python -c "from evalkit.stats import pass_at_k; assert pass_at_k(3,1,3)==1.0"
@@ -149,18 +149,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build image
-        run: docker build -t dagagent:ci .
+        run: docker build -t glassrail:ci .
       - name: Smoke test (health, tools, non-root)
         run: |
-          docker run -d --name dagagent -p 8000:8000 dagagent:ci
+          docker run -d --name glassrail -p 8000:8000 glassrail:ci
           for _ in $(seq 1 30); do
             curl -fsS http://localhost:8000/health && ok=1 && break
             sleep 1
           done
-          if [ "$ok" != "1" ]; then docker logs dagagent; exit 1; fi
+          if [ "$ok" != "1" ]; then docker logs glassrail; exit 1; fi
           curl -fsS http://localhost:8000/tools > /dev/null
-          uid=$(docker exec dagagent id -u)
+          uid=$(docker exec glassrail id -u)
           if [ "$uid" != "10001" ]; then
             echo "expected non-root uid 10001, got $uid"; exit 1
           fi
-          docker rm -f dagagent
+          docker rm -f glassrail
