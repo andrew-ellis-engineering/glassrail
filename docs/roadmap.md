@@ -114,7 +114,7 @@ Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing
   re-running `suites/glassrail-openrouter` and comparing against the Phase 1
   baseline.
 
-- **Upstream context awareness** — when assembling a node's context, include the
+- **Upstream context awareness** ✓ — when assembling a node's context, include the
   descriptions of its direct dependents so upstream nodes (synthesis, summary)
   know what aspect the downstream node needs. One change in the executor's
   context-assembly logic. *(deferred from Phase 1)*

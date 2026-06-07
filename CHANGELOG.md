@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shape (`"type": "tool", "tool": "web_search"`), contrasts it with the invalid
   `"type": "web_search"` schema, and reminds the model to count subplan nodes
   before exceeding the configured cap.
+- Executor context assembly includes direct dependent-node descriptions in the
+  current node's prompt, so upstream summary, synthesis, tool, decision, and
+  subplan nodes can shape their output for known downstream consumers without
+  seeing unrelated sibling results.
 - Planner invalid-JSON failures now distinguish short parse errors from
   generation stalls using a configurable planner-budget character multiplier.
   Stall attempts preserve the raw output as `error_detail` and feed a truncated
