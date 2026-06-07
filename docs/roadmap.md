@@ -157,6 +157,18 @@ Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing
   instead of displaying raw Markdown text. This should pair with the planned
   wrap-aware/freeform scrolling work so formatted output does not clip or make
   copy/selection worse.
+- **TUI mouse support and tab navigation** — the TUI should be fully mouse-aware:
+  clicking on text input focuses it, clicking on output selects/highlights it,
+  and the top-level chrome uses a tab bar so distinct surfaces (chat, DAG view,
+  and future panels) are navigable by click as well as keyboard shortcut. The
+  tab bar is the load-bearing primitive here — it gates the ability to add new
+  first-class surfaces (task history, tool trace, memory inspector, settings)
+  without the layout becoming a keyboard-only maze. Design constraints: tabs
+  must be keyboard-accessible too (arrow keys or number shortcuts) so the TUI
+  stays usable over SSH; mouse support should degrade gracefully in terminals
+  that don't report mouse events. Applies primarily to the Rust TUI
+  (`clients/tui` / ratatui); the Python Rich TUI is a simpler read-only viewer
+  and a lower priority for mouse work.
 - **TUI copy/paste support** — the TUI currently captures raw keyboard input,
   blocking OS clipboard shortcuts (`Cmd+C`/`Cmd+V`) and making it impossible to
   copy agent output without terminal-emulator-specific workarounds (e.g.
