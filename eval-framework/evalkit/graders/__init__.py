@@ -48,6 +48,20 @@ def grade(task: Task, trial: Trial, *, judge: Judge, cost_optimize: bool = True)
     ordered = [results[i] for i in range(len(task.criteria))]
     passed = sum(1 for r in ordered if r.passed)
     total = len(ordered)
+
+    # Detect infrastructure failures so they are not silently counted as model
+    # quality failures.  Signals: planning/provider error strings, OR a trial
+    # that produced neither result text nor trajectory with no recorded error
+    # (the "empty trajectory, no error" fingerprint of a silent tier-0 failure).
+    _infra_keywords = ("timed out", "planning failed", "provider", "http ", "connect")
+    error_str = (trial.error or "").lower()
+    infra_error = bool(trial.error and any(kw in error_str for kw in _infra_keywords)) or (
+        not trial.success
+        and not trial.result_text
+        and not trial.trajectory
+        and trial.error is None
+    )
+
     return Score(
         task_id=task.id,
         trial_num=trial.run_number,
@@ -56,4 +70,5 @@ def grade(task: Task, trial: Trial, *, judge: Judge, cost_optimize: bool = True)
         failed=total - passed,
         total=total,
         pass_rate=(passed / total) if total else 0.0,
+        infra_error=infra_error,
     )

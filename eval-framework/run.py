@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+import threading
 from collections.abc import Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -63,6 +65,75 @@ def _make_judge(meta: dict[str, Any], args: argparse.Namespace) -> Judge:
     )
 
 
+# ── Parallel-execution helpers ────────────────────────────────────────────────
+
+# Per-fixture-path locks: tasks that manage the same /tmp path serialize against
+# each other; tasks with disjoint fixture sets run fully in parallel.
+_fixture_path_locks: dict[str, threading.Lock] = {}
+_fixture_path_locks_guard = threading.Lock()
+# Serialise progress prints so interleaved workers don't garble output.
+_print_lock = threading.Lock()
+
+
+def _get_fixture_lock(resolved_path: str) -> threading.Lock:
+    with _fixture_path_locks_guard:
+        if resolved_path not in _fixture_path_locks:
+            _fixture_path_locks[resolved_path] = threading.Lock()
+        return _fixture_path_locks[resolved_path]
+
+
+def _task_managed_paths(task: Task) -> list[str]:
+    """Return sorted resolved fixture paths this task manages.
+
+    Sorting is required to acquire multiple locks in a deterministic order and
+    avoid deadlock when two tasks share a subset of fixture paths.
+    """
+    seen: set[str] = set()
+    paths: list[str] = []
+    for raw in [*task.fixtures.install.keys(), *task.fixtures.capture]:
+        resolved = str(Path(raw).expanduser().resolve())
+        if resolved not in seen:
+            seen.add(resolved)
+            paths.append(resolved)
+    return sorted(paths)
+
+
+def _run_task_locked(
+    task: Task,
+    *,
+    trials: int,
+    model: str | None,
+    judge: Judge,
+    timeout: int | None,
+    skip_grading: bool,
+    backend_override: str | None,
+) -> TaskResult:
+    """Run *task* while holding its fixture-path locks for the full duration.
+
+    Acquiring all locks before any trial starts (and releasing after the last)
+    ensures that two workers cannot concurrently back up / install / restore
+    the same filesystem path.  Tasks with disjoint fixture sets acquire
+    disjoint lock sets and therefore run fully in parallel.
+    """
+    managed = _task_managed_paths(task)
+    locks = [_get_fixture_lock(p) for p in managed]
+    for lock in locks:
+        lock.acquire()
+    try:
+        return run_task(
+            task,
+            trials=trials,
+            model=model,
+            judge=judge,
+            timeout=timeout,
+            skip_grading=skip_grading,
+            backend_override=backend_override,
+        )
+    finally:
+        for lock in locks:
+            lock.release()
+
+
 def run_task(
     task: Task,
     *,
@@ -80,7 +151,8 @@ def run_task(
     trial_records: list[Trial] = []
     score_records: list[Score] = []
     for run_number in range(1, trials + 1):
-        print(f"  · {task.id}: trial {run_number}/{trials} (backend={backend} model={effective_model})…")
+        with _print_lock:
+            print(f"  · {task.id}: trial {run_number}/{trials} (backend={backend} model={effective_model})…")
         trial = runner.run_trial(
             task, run_number, subject=subject, model=effective_model, timeout_s=effective_timeout
         )
@@ -172,19 +244,40 @@ def cmd_suite(args: argparse.Namespace) -> int:
             _print_task_summary(task)
         return EXIT_OK
 
-    results: list[TaskResult] = []
-    for task in tasks:
-        results.append(
-            run_task(
-                task,
-                trials=args.trials,
-                model=args.model,
-                judge=judge,
-                timeout=args.timeout,
-                skip_grading=args.skip_grading,
-                backend_override=args.backend,
+    workers: int = getattr(args, "workers", 1)
+    results: list[TaskResult]
+    if workers > 1 and len(tasks) > 1:
+        futures: list[Future[TaskResult]] = []
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for task in tasks:
+                futures.append(
+                    pool.submit(
+                        _run_task_locked,
+                        task,
+                        trials=args.trials,
+                        model=args.model,
+                        judge=judge,
+                        timeout=args.timeout,
+                        skip_grading=args.skip_grading,
+                        backend_override=args.backend,
+                    )
+                )
+        # Collect in original submission order so the summary table is stable.
+        results = [f.result() for f in futures]
+    else:
+        results = []
+        for task in tasks:
+            results.append(
+                run_task(
+                    task,
+                    trials=args.trials,
+                    model=args.model,
+                    judge=judge,
+                    timeout=args.timeout,
+                    skip_grading=args.skip_grading,
+                    backend_override=args.backend,
+                )
             )
-        )
 
     suite_result = SuiteResult(
         suite_name=str(meta["name"]),
@@ -400,6 +493,14 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_flags(p_suite)
     p_suite.add_argument("--tags", nargs="+", default=None)
     p_suite.add_argument("--type", choices=["regression", "capability"], default=None)
+    p_suite.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        metavar="N",
+        help="number of tasks to run in parallel (default: 1); tasks that share fixture"
+        " paths are automatically serialised against each other",
+    )
     p_suite.set_defaults(func=cmd_suite)
 
     p_list = sub.add_parser("list", help="validate + summarize a suite")

@@ -200,12 +200,14 @@ def print_task_result(result: TaskResult) -> None:
         print(f"  {label:<{width}} {cells} {grader_for[text]}")
 
     perfect = sum(1 for s in scores if s.pass_rate == 1.0)
+    infra_count = sum(1 for s in scores if s.infra_error)
     lo, hi = stats.wilson_ci(perfect, k)
     _total, mean_s = _task_seconds(result)
+    infra_note = f"  ⚠ {infra_count}/{k} infra-error" if infra_count else ""
     print(
         f"  → pass@{k}={result.pass_at_k:.2f}  pass^{k}={result.pass_pow_k:.2f}  "
         f"mean={result.mean_pass_rate:.2f}  pass^k 95% CI=[{lo:.2f}, {hi:.2f}]  "
-        f"mean trial={_fmt_secs(mean_s)}"
+        f"mean trial={_fmt_secs(mean_s)}{infra_note}"
     )
 
 
@@ -215,12 +217,17 @@ def print_suite_summary(suite: SuiteResult) -> None:
     print(f"  model={suite.model}  grader={suite.grader_model}  harness={suite.harness_version}")
     print(f"{'=' * 64}")
     reg_fail = 0
+    total_infra = 0
     agent_secs = 0.0
     for tr in suite.task_results:
         flag = ""
+        infra_count = sum(1 for s in tr.scores if s.infra_error)
+        total_infra += infra_count
         if tr.task.type == "regression" and tr.pass_pow_k == 0.0:
             flag = "  ← REGRESSION (pass^k=0)"
             reg_fail += 1
+        if infra_count:
+            flag += f"  ⚠{infra_count}infra"
         total_s, mean_s = _task_seconds(tr)
         agent_secs += total_s
         print(
@@ -239,7 +246,8 @@ def print_suite_summary(suite: SuiteResult) -> None:
         f"  agent time: {_fmt_secs(agent_secs)} over {suite.trials_per_task * len(suite.task_results)}"
         f" trials   wall clock: {_fmt_secs(wall)}"
     )
-    print(f"  regression failures: {reg_fail}   total cost: ${suite.total_cost_usd:.4f}")
+    infra_note = f"   infra-errors: {total_infra}" if total_infra else ""
+    print(f"  regression failures: {reg_fail}   total cost: ${suite.total_cost_usd:.4f}{infra_note}")
     print(f"{'=' * 64}\n")
 
 

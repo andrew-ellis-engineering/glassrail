@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from dagagent.config import NodeBudgets, NodePrompts, Settings
+from dagagent.config import NodeBudgets, NodePrompts, Settings, TierConfig
 from dagagent.core import NodeType, PlanRejectedError, PlanValidationError
 from dagagent.harness import ToolHarness, register_builtins
 from dagagent.planner import Planner
@@ -156,7 +156,13 @@ async def test_planner_tells_model_the_tier_surface(harness: ToolHarness) -> Non
     """The planner sees which tiers are eligible/configured before shaping a plan."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
     provider = _CapturingProvider(payload=payload, tier=1)
-    settings = Settings(prompts=NodePrompts(planner="CUSTOM"))
+    settings = Settings(
+        prompts=NodePrompts(planner="CUSTOM"),
+        tier0=TierConfig(base_url="http://localhost:8080/v1", model="tier-0", api_key=""),
+        tier1=TierConfig(base_url="https://example.invalid/v1", model="tier-1", api_key=""),
+        tier2=TierConfig(base_url="https://example.invalid/v1", model="tier-2", api_key=""),
+        tier3=TierConfig(base_url="https://example.invalid/v1", model="tier-3", api_key=""),
+    )
     planner = _planner_from(provider, harness, settings)
 
     await planner.plan_attempt("anything", attempt=0, min_tier=1)

@@ -108,6 +108,11 @@ class Score:
     failed: int
     total: int
     pass_rate: float                # passed / total
+    # True when the trial failure is attributable to infrastructure rather than
+    # model quality: planning timeout, provider error, or empty trajectory with
+    # no result text.  Surfaced in reports so infra failures are not silently
+    # counted against the model.
+    infra_error: bool = False
 
 
 @dataclass

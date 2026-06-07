@@ -25,6 +25,7 @@ class _EventFields(NamedTuple):
     """The pieces of one SSE event the provider cares about."""
 
     content: str | None
+    reasoning: str | None
     finish_reason: str | None
     tool_name: str | None
     tool_args: str
@@ -43,6 +44,7 @@ class OpenAICompatProvider:
         model: str,
         api_key: str = "",
         default_timeout_s: float = 60.0,
+        extra_body: dict[str, Any] | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._name = name
@@ -51,6 +53,7 @@ class OpenAICompatProvider:
         self._model = model
         self._api_key = api_key
         self._default_timeout_s = default_timeout_s
+        self._extra_body: dict[str, Any] = extra_body or {}
         # Injectable for tests (httpx.MockTransport). None → httpx default.
         self._transport = transport
 
@@ -85,8 +88,13 @@ class OpenAICompatProvider:
             async with httpx.AsyncClient(timeout=timeout_s) as client:
                 resp = await client.get(url)
                 if resp.status_code == 200:
-                    body = resp.json()
-                    return body.get("status") == "healthy"
+                    try:
+                        body = resp.json()
+                        return body.get("status") == "healthy"
+                    except Exception:
+                        # Non-JSON 200 (e.g. an HTML landing page from a cloud
+                        # provider that doesn't expose /health) — assume available.
+                        return True
                 # 404 → server doesn't implement /health; assume available.
                 return resp.status_code == 404
         except (httpx.ConnectError, httpx.TimeoutException):
@@ -111,6 +119,7 @@ class OpenAICompatProvider:
         # Accumulated across deltas: tool calls arrive fragmented, and the
         # finish_reason / usage land on separate trailing events.
         emitted_content = False
+        saw_reasoning = False
         tool_call_name: str | None = None
         tool_call_args = ""
         finish_reason: str | None = None
@@ -133,6 +142,7 @@ class OpenAICompatProvider:
                     if fields.content:
                         emitted_content = True
                         yield Chunk(text=fields.content)
+                    saw_reasoning = saw_reasoning or bool(fields.reasoning)
                     if fields.finish_reason is not None:
                         finish_reason = fields.finish_reason
                     if fields.tool_name is not None:
@@ -142,6 +152,18 @@ class OpenAICompatProvider:
                         tokens = fields.tokens
         except (httpx.TimeoutException, httpx.ConnectError) as exc:
             raise ProviderUnavailableError(f"{self._name}: {type(exc).__name__}: {exc}") from exc
+
+        # If the model returned reasoning tokens but no content, the reasoning
+        # parameter was not honoured by the underlying provider. Surface a clear
+        # error instead of letting the caller receive an empty string and produce
+        # a confusing JSON parse failure downstream.
+        if not emitted_content and saw_reasoning and tool_call_name is None:
+            raise ProviderError(
+                f"{self._name}: model returned only reasoning tokens with no content. "
+                "Reasoning is not disabled on this provider. "
+                "Set reasoning.effort=none with provider.require_parameters=true "
+                "in extra_body to ensure OpenRouter routes only to compliant providers."
+            )
 
         tool_content = ""
         if not emitted_content and tool_call_name is not None:
@@ -157,7 +179,7 @@ class OpenAICompatProvider:
         tier (ProviderUnavailableError). Malformed-request errors (400/422)
         propagate — retrying a different tier with the same body won't help.
         """
-        if resp.status_code in (401, 403, 429):
+        if resp.status_code in (401, 403, 404, 429):
             raise ProviderUnavailableError(f"{self._name}: HTTP {resp.status_code}")
         if resp.status_code in (400, 422):
             raise ProviderError(f"{self._name}: HTTP {resp.status_code}: {resp.text}")
@@ -185,6 +207,8 @@ class OpenAICompatProvider:
         }
         if json_mode:
             body["response_format"] = {"type": "json_object"}
+        if self._extra_body:
+            body.update(self._extra_body)
         return body
 
 
@@ -206,8 +230,9 @@ def _decode_sse_line(line: str) -> Any | None:
 
 
 def _parse_event(event: Any) -> _EventFields:
-    """Extract content / finish_reason / tool-call / usage from one event."""
+    """Extract content / reasoning / finish_reason / tool-call / usage from one event."""
     content: str | None = None
+    reasoning: str | None = None
     finish_reason: str | None = None
     tool_name: str | None = None
     tool_args = ""
@@ -220,6 +245,13 @@ def _parse_event(event: Any) -> _EventFields:
         raw_content = delta.get("content")
         if isinstance(raw_content, str) and raw_content:
             content = raw_content
+
+        # OpenRouter streams reasoning tokens in delta.reasoning (not delta.content).
+        # We track their presence to detect reasoning-only responses and raise a
+        # clear error rather than silently returning empty content.
+        raw_reasoning = delta.get("reasoning")
+        if isinstance(raw_reasoning, str) and raw_reasoning:
+            reasoning = raw_reasoning
 
         raw_reason = choice0.get("finish_reason")
         if isinstance(raw_reason, str):
@@ -242,7 +274,7 @@ def _parse_event(event: Any) -> _EventFields:
         if isinstance(total, int):
             tokens = total
 
-    return _EventFields(content, finish_reason, tool_name, tool_args, tokens)
+    return _EventFields(content, reasoning, finish_reason, tool_name, tool_args, tokens)
 
 
 def _synthesise_tool_content(name: str, raw_args: str) -> str:

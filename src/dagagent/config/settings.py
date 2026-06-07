@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import (
@@ -45,6 +46,13 @@ class TierConfig(BaseModel):
     timeout_s: float = 60.0
     scripted_path: str = ""
     """Absolute path to a JSONL responses file. Required when ``kind=scripted``."""
+    extra_body: dict[str, Any] = Field(default_factory=dict)
+    """Extra fields merged into every chat-completions request body for this
+    tier.  Use this to pass provider-specific knobs that the provider doesn't
+    expose as first-class settings — e.g. disabling extended thinking on
+    OpenRouter Qwen3 models:
+    ``DAGAGENT_TIER1__EXTRA_BODY='{"thinking":{"type":"disabled"}}'``
+    """
 
     @model_validator(mode="after")
     def _check_required_fields(self) -> TierConfig:

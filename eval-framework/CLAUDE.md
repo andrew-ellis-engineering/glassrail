@@ -48,6 +48,49 @@ A live `python3 run.py suite suites/dagagent` needs the agent reachable
 (`dagagent` on PATH + your MLX tier up) and spends model usage; the `example`
 suite needs the `claude` CLI. See Cost discipline before running broadly.
 
+## Running against OpenRouter instead of local MLX
+
+Local inference takes 12+ hours for a meaningful eval cycle. When local
+servers are down or you need fast iteration, use the cloud mirror suites —
+same tasks, same models served via OpenRouter:
+
+```bash
+# One-time: export your key (add to ~/.zshenv so subprocesses see it)
+export DAGAGENT_TIER0__API_KEY=$OPENROUTER_API_KEY
+export DAGAGENT_TIER1__API_KEY=$OPENROUTER_API_KEY
+export DAGAGENT_TIER2__API_KEY=$OPENROUTER_API_KEY
+export DAGAGENT_TIER3__API_KEY=$OPENROUTER_API_KEY
+
+python3 run.py suite suites/dagagent-openrouter --workers 5
+python3 run.py suite suites/node-capability-openrouter --workers 5
+```
+
+The suites live in `suites/dagagent-openrouter/` and
+`suites/node-capability-openrouter/`. Their `[backend.env]` blocks handle
+everything: tier URLs, model slugs, `DAGAGENT_MAX_GENERATION_TOKENS`,
+and the Qwen3-on-OpenRouter reasoning fix (`reasoning.effort=none` +
+`provider.require_parameters=true` via `EXTRA_BODY`). Do not add
+`:no-thinking` model suffixes — they are routing hints only and do not
+guarantee reasoning is disabled on all providers; the `EXTRA_BODY` parameter
+is the authoritative control.
+
+**Qwen3 / OpenRouter integration notes** (captured here to avoid re-learning):
+
+- Qwen3 models on OpenRouter default to extended thinking. All tokens go to
+  `delta.reasoning`; `delta.content` is empty. The agent's SSE parser reads
+  only `delta.content`, so an unmitigated thinking response looks like an
+  empty reply and fails with `Expecting value: line 1 column 1 (char 0)`.
+- The correct fix is `"reasoning":{"effort":"none"}` in the request body,
+  passed via `DAGAGENT_TIER*__EXTRA_BODY`. You must also set
+  `"provider":{"require_parameters":true}` — without it OpenRouter may route
+  to a provider that ignores the parameter and silently re-enables thinking.
+- The `is_healthy()` pre-flight check hits `<base_url_root>/health`. Cloud
+  providers (OpenRouter, etc.) return an HTML 200, not JSON. The provider
+  handles this gracefully (treats non-JSON 200 as available), but local-only
+  servers return `{"status":"healthy"}` as expected.
+- `total_tokens` in the run envelope counts execution-node tokens only.
+  Planner token counts live in `planning_attempts[*].tokens_used`.
+
 ## Cost discipline
 
 Each trial is one subject invocation plus one call per `llm` criterion; usage ≈

@@ -304,6 +304,7 @@ class Orchestrator:
 
         attempts = self._settings.max_replan_attempts + 1
         last_error: str | None = None
+        last_error_type: str | None = None
         # Carries raw output from a previous planner stall so the next attempt
         # can explicitly avoid repeating it.
         prior_reasoning: str | None = None
@@ -318,7 +319,13 @@ class Orchestrator:
                     feedback=feedback,
                     prior_reasoning=prior_reasoning,
                     validation_feedback=validation_feedback,
-                    thinking=attempt > 0,
+                    # Enable thinking on retry only when the previous attempt
+                    # failed for a non-timeout reason.  Thinking makes the
+                    # planner slower; retrying a timeout with thinking enabled
+                    # just burns the full retry budget for a near-certain second
+                    # timeout.  On a stall, rejection, or parse failure, thinking
+                    # can genuinely help.
+                    thinking=attempt > 0 and last_error_type != "timeout",
                 )
                 state.replan_count = attempt
                 state.planning_attempts.append(plan_attempt)
@@ -349,6 +356,7 @@ class Orchestrator:
                 )
 
                 last_error = plan_attempt.error
+                last_error_type = plan_attempt.error_type
                 log.warning(
                     "[%s] Plan invalid (attempt %d): %s",
                     state.task_id,
@@ -357,6 +365,7 @@ class Orchestrator:
                 )
             except (PlanValidationError, ValueError) as exc:
                 last_error = str(exc)
+                last_error_type = "validation"
                 prior_reasoning = None
                 validation_feedback = str(exc)
                 log.warning(

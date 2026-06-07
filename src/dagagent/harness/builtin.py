@@ -37,6 +37,16 @@ async def file_read(path: str) -> dict[str, Any]:
     return {"path": path, "content": content}
 
 
+async def eval_noop() -> dict[str, Any]:
+    """Eval-only no-op tool — always returns an empty dict.
+
+    Used by harness-mechanics tests to exercise the executor's empty-result
+    (NodeStatus.EMPTY) code path without requiring real infrastructure.
+    Never register this in production; it is a test fixture only.
+    """
+    return {}
+
+
 def register_builtins(harness: ToolHarness) -> None:
     """Attach every built-in tool to ``harness``."""
     harness.tool(
@@ -78,3 +88,14 @@ def register_builtins(harness: ToolHarness) -> None:
         },
         risk="read",
     )(file_read)
+
+
+def register_eval_tools(harness: ToolHarness) -> None:
+    """Attach eval-only tools used by fixed-plan harness tests."""
+
+    harness.tool(
+        name="eval_noop",
+        description="Eval-only no-op — always returns an empty result (test fixture only).",
+        parameters={"type": "object", "properties": {}, "required": []},
+        risk="read",
+    )(eval_noop)

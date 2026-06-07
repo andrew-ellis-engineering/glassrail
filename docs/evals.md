@@ -101,6 +101,68 @@ Branch *labels* are planner-chosen and unstable, so branch correctness is graded
 on the observable result text (or the judge), not on the trajectory token — the
 token for any decision node is simply `decision`.
 
+## Running against cloud models (OpenRouter)
+
+Local MLX evals take hours per iteration — cold boot, model load, and
+generation are all slow. When you need a faster signal (ruling out infra
+issues, iterating on tasks, running CI without Apple Silicon), the repo ships
+two OpenRouter-backed mirror suites that run the same tasks against the same
+Qwen models served from the cloud:
+
+| Suite | Mirror of | Typical wall time |
+|---|---|---|
+| `suites/dagagent-openrouter` | `suites/dagagent` | ~5 min for 7 tasks |
+| `suites/node-capability-openrouter` | `suites/node-capability` | ~2 min for 7 tasks |
+
+**One-time setup — API key:**
+
+```bash
+# Add to ~/.zshenv so it's available to subprocesses and launchd services
+echo 'export OPENROUTER_API_KEY="sk-or-..."' >> ~/.zshenv
+source ~/.zshenv
+
+# Derive the per-tier keys dagagent expects
+for i in 0 1 2 3; do
+  echo "export DAGAGENT_TIER${i}__API_KEY=\"\$OPENROUTER_API_KEY\""
+done >> ~/.zshenv
+source ~/.zshenv
+```
+
+**Running:**
+
+```bash
+cd eval-framework
+python3 run.py suite suites/dagagent-openrouter --workers 5
+python3 run.py suite suites/node-capability-openrouter --workers 5
+
+# Or all three cloud suites at once:
+python3 run.py suite suites/dagagent-openrouter --workers 5 && \
+python3 run.py suite suites/node-capability-openrouter --workers 5
+```
+
+**How it works:** each suite's `[backend.env]` sets all four `DAGAGENT_TIER*`
+vars to OpenRouter endpoints, overriding the local config. It also sets
+`DAGAGENT_MAX_GENERATION_TOKENS=32768` (the local config caps this at 8192 for
+Metal OOM safety; cloud has no such constraint) and passes
+`reasoning.effort=none` with `provider.require_parameters=true` via
+`DAGAGENT_TIER*__EXTRA_BODY` — required because Qwen3 models on OpenRouter
+default to extended thinking mode, which streams all tokens into
+`delta.reasoning` and leaves `delta.content` empty.
+
+**Cost:** OpenRouter charges per token. A full `dagagent-openrouter` run at
+default `--trials 3` costs roughly $0.05–0.15 depending on task complexity.
+Keep `--workers` at 5 or below to avoid rate-limit 429s.
+
+**When to use each:**
+
+- **Cloud first** for any iteration cycle under a day — local models take
+  12+ hours for a meaningful run.
+- **Local for final gates** — the cloud suites use the same model family but
+  not the same inference stack as production; use them for signal, not as the
+  ship-gate.
+- **Cloud to isolate infra vs model quality** — if cloud passes and local
+  fails the same task, the failure is in the serving stack, not the model.
+
 ## Cost discipline
 
 Trials cost real inference. Keep criteria deterministic where possible (only

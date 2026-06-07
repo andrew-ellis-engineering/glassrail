@@ -56,18 +56,40 @@ observability, then the operational surfaces.
   tasks, and cancel a run — all without a running gateway. Deferred to later:
   token-level streaming, session persistence/`session/load`, structural plan
   editing, and additional ACP clients (desktop/IDE).
-- **Planner subplan guidance** — add explicit instruction to the planner system
+- **Planner subplan guidance** ✓ — explicit instruction in the planner system
   prompt covering when and how to emit a `subplan` node, with examples. No code
   change; pure prompt improvement.
-- **Planning failure mode detection** — the planner can reason indefinitely
-  without emitting a valid plan (streaming stall). Detect this with a timeout
-  or token budget and push accumulated reasoning content into the next attempt
-  rather than starting cold, so the retry has context on what was tried.
-  Additionally, give the planner an explicit escape hatch: a structured
-  `rejection` response (distinct from a plan) it can emit when the task is
-  outside its capabilities — e.g. required tools are not registered, the
-  request is contradictory, or it cannot construct a valid DAG. The
-  orchestrator surfaces this to the user rather than retrying indefinitely.
+- **Planning failure mode detection** ✓ — stall detection (configurable
+  character multiplier), accumulated reasoning fed into the retry prompt, and a
+  structured `rejection` response the planner emits when the task is outside
+  its capabilities. The orchestrator surfaces rejections to the user rather
+  than retrying indefinitely.
+- **Summary node format variants** ✓ — `format` field (`concise` / `medium` /
+  `verbose`) on summary nodes, routed through `_LLM_NODE_SPECS`.
+
+Exit gate: eval scores meet the bar defined below — this is the gate that
+unlocks the first PyPI publish.
+
+**Gate met. Phase 1 complete.**
+
+Baseline established 2026-06-07 against Qwen3-8b (tier 0) + Qwen3.6-35b (tier
+1) via OpenRouter (`suites/dagagent-openrouter`, `suites/node-capability-openrouter`):
+
+| Suite | Result | Bar |
+|---|---|---|
+| dagagent-openrouter (23 tasks, 3 trials) | **19/23 full-pass (83%), 0 all-fail** | ≥ 80% full-pass, 0 all-fail |
+| node-capability-openrouter (7 tasks, 3 trials) | **7/7 full-pass (100%)** | 100% |
+| harness-mechanics (32 tasks, 3 trials) | **32/32 full-pass (100%)** | 100% |
+
+Known gap at baseline: **subplan generation is the weakest surface.** All 4
+partial-pass tasks fail with planner schema errors — the 35B model occasionally
+uses tool names as node types inside subplans (`"type": "web_search"` instead
+of `"type": "tool", "tool": "web_search"`) and exceeds the subplan count limit.
+These are intermittent (each task passes 2/3 trials) and are the first tracked
+prompt-improvement target in Phase 2.
+
+Items deferred to Phase 2 (were not shipped, do not block the gate):
+
 - **Upstream context awareness** — when assembling a node's context, include the
   descriptions of its direct dependents so upstream nodes (synthesis, summary)
   know what aspect the downstream node needs. One change in the executor's
@@ -78,18 +100,31 @@ observability, then the operational surfaces.
   invoking and pauses for user confirmation when required. The ACP
   `session/request_permission` primitive is already in place. *[needs further
   spec: policy schema, default, how auto-mode decides]*
-- **Summary node format variants** — add a `format` field (`concise` / `medium`
-  / `verbose`) to summary nodes, routed through `_LLM_NODE_SPECS`. Lets the
-  planner match compression level to downstream purpose.
-
-Exit gate: eval scores meet an agreed bar — this is the gate that unlocks the
-first PyPI publish.
 
 ## Phase 2 — Foundation Assistant
 
 Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing, `foreach` node, registry output schemas.
 
-- **File editing tools** *(first Phase 2 item — unblocks TUI coding harness)* — `file_edit(path, old_str, new_str)` with exact-once match semantics (fails closed if old_str matches zero or multiple times), `file_create` (new files only), `file_write` (full overwrite). Requires: path-root confinement (`tools.fs_roots` in Settings — currently missing), git-repo guard (configurable), risk-derived HITL defaults (write tools default to `ask`), diff-in-approval payload so humans approve a *change* not raw args. Also closes a latent gap: `_approve_tool_call` does not currently honour the `risk` field despite it being documented as governing execution. `obsidian_write` is a thin specialisation of this (vault root as `fs_roots`), not a parallel implementation. See `vault/Spec - File Editing Tools.md`.
+- **Subplan node-type prompt fix** *(first tracked improvement against the Phase
+  1 baseline)* — add a concrete example to the planner subplan guidance showing
+  the correct inside-subplan node shape: `"type": "tool", "tool": "web_search"`
+  not `"type": "web_search"`. Also reinforce the `max_subplans_per_plan` limit
+  with a counter-example. Pure prompt change; expected to clear the iot/oltp
+  partial-pass tasks and improve `subplan-correct` reliability. Measure by
+  re-running `suites/dagagent-openrouter` and comparing against the Phase 1
+  baseline.
+
+- **Upstream context awareness** — when assembling a node's context, include the
+  descriptions of its direct dependents so upstream nodes (synthesis, summary)
+  know what aspect the downstream node needs. One change in the executor's
+  context-assembly logic. *(deferred from Phase 1)*
+
+- **Per-tool HITL configuration** — extend HITL beyond plan approval to
+  individual tool calls. Each registered tool gets a configurable approval
+  policy; the executor checks it before invoking and pauses for confirmation
+  when required. *(deferred from Phase 1, needs further spec)*
+
+- **File editing tools** *(unblocks TUI coding harness)* — `file_edit(path, old_str, new_str)` with exact-once match semantics (fails closed if old_str matches zero or multiple times), `file_create` (new files only), `file_write` (full overwrite). Requires: path-root confinement (`tools.fs_roots` in Settings — currently missing), git-repo guard (configurable), risk-derived HITL defaults (write tools default to `ask`), diff-in-approval payload so humans approve a *change* not raw args. Also closes a latent gap: `_approve_tool_call` does not currently honour the `risk` field despite it being documented as governing execution. `obsidian_write` is a thin specialisation of this (vault root as `fs_roots`), not a parallel implementation. See `vault/Spec - File Editing Tools.md`.
 
 - **Tool registry output schemas** *(ships alongside file editing)* — tools declare their output shape at `@harness.tool` registration time. The validator checks `args_template` references against the producing tool's registered schema at plan-validation time, catching tool→tool key mismatches before execution. No burden on the LLM planner — schemas are author-supplied, not LLM-generated. Retroactively add schemas to existing built-in tools. See `vault/Spec - Node Contracts and Context Flow.md`.
 

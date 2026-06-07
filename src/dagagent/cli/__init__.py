@@ -26,6 +26,7 @@ from dagagent.core import (
 )
 from dagagent.gateways.acp import run_acp
 from dagagent.gateways.tui import DEFAULT_BASE_URL, run_tui
+from dagagent.harness.builtin import register_eval_tools
 from dagagent.runtime import build_runtime
 from dagagent.validator import PlanValidator, topo_sort
 
@@ -274,6 +275,7 @@ async def _exec_plan(plan_data: object, *, no_validate: bool) -> dict[str, objec
     settings = get_settings()
     settings = settings.model_copy(update={"confirm_plans": False})
     rt = build_runtime(settings)
+    register_eval_tools(rt.harness)
 
     try:
         plan = Plan.model_validate(plan_data)
