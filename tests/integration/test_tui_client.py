@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 from rich.console import Console
 
-from dagagent.gateways.tui import run_tui, stream_task_events
+from glassrail.gateways.tui import run_tui, stream_task_events
 
 _TASK_ID = "01TESTTASKID"
 _EVENTS: list[dict[str, Any]] = [

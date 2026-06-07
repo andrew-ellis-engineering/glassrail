@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import dagagent
+import glassrail
 
 
 def test_version_is_string() -> None:
-    assert isinstance(dagagent.__version__, str)
-    assert dagagent.__version__ != ""
+    assert isinstance(glassrail.__version__, str)
+    assert glassrail.__version__ != ""

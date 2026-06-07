@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from dagagent.providers import (
+from glassrail.providers import (
     Chunk,
     Message,
     ProviderError,

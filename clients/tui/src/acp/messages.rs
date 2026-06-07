@@ -51,17 +51,17 @@ pub enum SessionUpdate {
     },
     AgentMessageChunk {
         content: Content,
-        /// dagagent extension: node id for intermediate node output chunks.
+        /// glassrail extension: node id for intermediate node output chunks.
         #[serde(default, rename = "nodeId")]
         node_id: Option<i64>,
-        /// dagagent extension: node type for intermediate/final text.
+        /// glassrail extension: node type for intermediate/final text.
         #[serde(default, rename = "nodeType")]
         node_type: String,
-        /// dagagent extension: true when this chunk is the final task result.
+        /// glassrail extension: true when this chunk is the final task result.
         #[serde(default, rename = "isFinal")]
         is_final: bool,
     },
-    /// A dagagent extension: per-node tier/confidence metadata. Standard ACP
+    /// A glassrail extension: per-node tier/confidence metadata. Standard ACP
     /// clients ignore unknown update kinds; ours renders a dim annotation.
     NodeMeta {
         #[serde(default, rename = "nodeType")]
@@ -73,7 +73,7 @@ pub enum SessionUpdate {
         #[serde(default)]
         flagged: bool,
     },
-    /// A dagagent extension: the plan's graph topology (ACP's flat plan omits
+    /// A glassrail extension: the plan's graph topology (ACP's flat plan omits
     /// edges), used to render the DAG view. Sent once per plan.
     PlanGraph {
         #[serde(default)]

@@ -14,7 +14,7 @@ confidence 1.0, tier 0, and not flagged.
 capture = []
 
 [fixtures.install]
-"/tmp/dagagent-eval/test.conf" = "test.conf"
+"/tmp/glassrail-eval/test.conf" = "test.conf"
 
 [[criteria]]
 text = "Tool node completed successfully"
@@ -38,7 +38,7 @@ expect_flagged = false
 text = "Tool received the exact templated path"
 grader = "trajectory"
 node_id = 1
-expect_args_contains = "/tmp/dagagent-eval/test.conf"
+expect_args_contains = "/tmp/glassrail-eval/test.conf"
 
 [[criteria]]
 text = "Result node completed"

@@ -11,7 +11,7 @@ from typing import Any
 
 from rich.console import Console
 
-from dagagent.gateways.tui import TaskView
+from glassrail.gateways.tui import TaskView
 
 
 def _happy_path() -> list[dict[str, Any]]:
@@ -62,7 +62,7 @@ def test_view_renders_at_every_stage() -> None:
     for event in _happy_path():
         view.ingest(event)
         console.print(view.render())  # must never raise
-    assert "dagagent" in buf.getvalue()
+    assert "Glassrail" in buf.getvalue()
 
 
 def test_view_renders_dag_when_plan_present() -> None:

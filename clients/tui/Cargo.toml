@@ -1,13 +1,13 @@
 [package]
-name = "dagagent-tui"
+name = "glassrail-tui"
 version = "0.1.0"
 edition = "2021"
-description = "A fast terminal client for the dagagent agent, over the Agent Client Protocol."
+description = "A fast terminal client for the glassrail agent, over the Agent Client Protocol."
 license = "Apache-2.0"
 publish = false
 
 [[bin]]
-name = "dagagent-tui"
+name = "glassrail-tui"
 path = "src/main.rs"
 
 [dependencies]

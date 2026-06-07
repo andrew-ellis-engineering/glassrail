@@ -1,6 +1,4 @@
-# dagagent
-
-> *Working name — to be replaced. See `Name Ideas.md` in the design vault for candidates.*
+# Glassrail
 
 A DAG-planning agent with deterministic tier routing, fresh context per node, and plan-as-document semantics.
 
@@ -46,13 +44,13 @@ a local OpenAI-compatible server (`http://localhost:8080/v1`, model
 # endpoint). Nothing else to configure; tier 0 is the default.
 
 # Option B — use OpenRouter for the cloud tiers:
-export DAGAGENT_TIER1__API_KEY=sk-or-...
+export GLASSRAIL_TIER1__API_KEY=sk-or-...
 ```
 
 Then run a task:
 
 ```bash
-uv run dagagent run "summarise the CAP theorem in three bullets"
+uv run glassrail run "summarise the CAP theorem in three bullets"
 ```
 
 If no tier is reachable, the router walks tier 0 → tier 3 and then fails with
@@ -64,10 +62,10 @@ backend is wired up, not a bug.
 **Headless, one-shot** — the full engine in one process; prints the result:
 
 ```bash
-uv run dagagent run "<task>"
-uv run dagagent run "<task>" --json            # machine-readable result envelope
-uv run dagagent run "<task>" --model <name>    # override tier 0's model
-uv run dagagent run "<task>" --timeout 120     # wall-clock budget in seconds
+uv run glassrail run "<task>"
+uv run glassrail run "<task>" --json            # machine-readable result envelope
+uv run glassrail run "<task>" --model <name>    # override tier 0's model
+uv run glassrail run "<task>" --timeout 120     # wall-clock budget in seconds
 ```
 
 The `--json` envelope includes the accepted `plan` when planning succeeds and
@@ -78,8 +76,8 @@ eval artefacts.
 **Gateway + live viewer** — start the REST gateway, then watch a task stream:
 
 ```bash
-uv run uvicorn dagagent.gateways.rest:app      # serves on :8000
-uv run dagagent tui "<task>"                   # POSTs the task, renders the live DAG + stream
+uv run uvicorn glassrail.gateways.rest:app      # serves on :8000
+uv run glassrail tui "<task>"                   # POSTs the task, renders the live DAG + stream
 ```
 
 The viewer draws the plan as colour-coded node boxes connected by edges
@@ -93,7 +91,7 @@ so an ACP client (the in-repo Rust TUI, or Zed) can spawn the agent as a
 subprocess, submit tasks, and watch the plan and nodes stream back:
 
 ```bash
-uv run dagagent acp                            # JSON-RPC over stdin/stdout; logs to stderr
+uv run glassrail acp                            # JSON-RPC over stdin/stdout; logs to stderr
 ```
 
 The in-repo Rust terminal client speaks this protocol — submit a task, watch the
@@ -101,7 +99,7 @@ plan stream, approve or revise it, all in the terminal. See
 [clients/tui](./clients/tui/README.md):
 
 ```bash
-cd clients/tui && cargo run -- uv run dagagent acp
+cd clients/tui && cargo run -- uv run glassrail acp
 ```
 
 It implements `initialize`, `session/new`, `session/prompt`, and
@@ -123,17 +121,17 @@ parsed by `pydantic-settings`. Tiers are nested, so use the `__` delimiter:
 
 | Setting | Env var | Default |
 |---|---|---|
-| Tier 0 model | `DAGAGENT_TIER0__MODEL` | `qwen3.6-35b-moe` |
-| Tier 0 endpoint | `DAGAGENT_TIER0__BASE_URL` | `http://localhost:8080/v1` |
-| Tier 0 timeout (s) | `DAGAGENT_TIER0__TIMEOUT_S` | `10.0` |
-| Tier 1 API key | `DAGAGENT_TIER1__API_KEY` | *(empty)* |
-| HITL plan gate | `DAGAGENT_CONFIRM_PLANS` | `false` |
-| Tool approval mode | `DAGAGENT_TOOL_APPROVAL__MODE` | `interactive` |
-| Planner stall char multiplier | `DAGAGENT_PLANNER_STALL_CHAR_MULTIPLIER` | `4` |
-| Load tool plugins | `DAGAGENT_LOAD_TOOL_PLUGINS` | `false` |
+| Tier 0 model | `GLASSRAIL_TIER0__MODEL` | `qwen3.6-35b-moe` |
+| Tier 0 endpoint | `GLASSRAIL_TIER0__BASE_URL` | `http://localhost:8080/v1` |
+| Tier 0 timeout (s) | `GLASSRAIL_TIER0__TIMEOUT_S` | `10.0` |
+| Tier 1 API key | `GLASSRAIL_TIER1__API_KEY` | *(empty)* |
+| HITL plan gate | `GLASSRAIL_CONFIRM_PLANS` | `false` |
+| Tool approval mode | `GLASSRAIL_TOOL_APPROVAL__MODE` | `interactive` |
+| Planner stall char multiplier | `GLASSRAIL_PLANNER_STALL_CHAR_MULTIPLIER` | `4` |
+| Load tool plugins | `GLASSRAIL_LOAD_TOOL_PLUGINS` | `false` |
 
 Tiers 1–3 default to OpenRouter models; override any field the same way. With a
-local model as your only tier, raise `DAGAGENT_TIER0__TIMEOUT_S` (e.g. to `120`)
+local model as your only tier, raise `GLASSRAIL_TIER0__TIMEOUT_S` (e.g. to `120`)
 — a large local model can take longer than the 10 s default, and a timeout is
 treated as the tier being unavailable.
 
@@ -144,14 +142,14 @@ any tier for any single request, applied by the router before the request leaves
 the process. Per-node budgets (below) are the goal; this is the safety backstop
 that prevents a single generation from consuming unbounded memory on a local
 model across long multi-step runs. Set it in `config.toml` or via
-`DAGAGENT_MAX_GENERATION_TOKENS`.
+`GLASSRAIL_MAX_GENERATION_TOKENS`.
 
 ### Per-node token budgets
 
 Each node runs with a fresh context; these cap how many tokens it may *generate*
 (output), so reasoning and summaries get room while structured micro-calls stay
 small. Override any field under `[budgets]` in `config.toml` (or
-`DAGAGENT_BUDGETS__<FIELD>`):
+`GLASSRAIL_BUDGETS__<FIELD>`):
 
 | Budget | Default | Used by |
 |---|---|---|
@@ -176,8 +174,8 @@ to repeat it.
 
 Each node role (planner, decision, think, synthesis, summary, result, and the
 tool-output shape check) has a system prompt you can override without editing
-source — under `[prompts]` in `config.toml` or `DAGAGENT_PROMPTS__<FIELD>`. The
-defaults live in `dagagent.config.prompts`. A custom prompt must keep
+source — under `[prompts]` in `config.toml` or `GLASSRAIL_PROMPTS__<FIELD>`. The
+defaults live in `glassrail.config.prompts`. A custom prompt must keep
 instructing the model to emit the JSON shape its node expects (e.g. a summary
 prompt must still ask for `{"summary": ..., "confidence": ...}`).
 
@@ -221,8 +219,8 @@ file_write = "ask"
 shell_exec = "deny"
 ```
 
-**Third-party plugins** advertised through the `dagagent.tools` entry-point
-group are a separate opt-in: set `DAGAGENT_LOAD_TOOL_PLUGINS=true` (or
+**Third-party plugins** advertised through the `glassrail.tools` entry-point
+group are a separate opt-in: set `GLASSRAIL_LOAD_TOOL_PLUGINS=true` (or
 `load_tool_plugins = true`) and the runtime discovers and registers them at
 startup.
 
@@ -232,11 +230,11 @@ Model-quality evals (multi-trial **pass@k** capability vs **pass^k** reliability
 against the real agent) live in the standalone [`eval-framework/`](./eval-framework):
 
 ```bash
-cd eval-framework && python3 run.py suite suites/dagagent
+cd eval-framework && python3 run.py suite suites/glassrail
 ```
 
-The `dagagent-cli` backend drives the real planner and executor over the agent's
-own tier routing via `dagagent run --json`. See [docs/evals.md](./docs/evals.md).
+The `glassrail-cli` backend drives the real planner and executor over the agent's
+own tier routing via `glassrail run --json`. See [docs/evals.md](./docs/evals.md).
 
 ## Development
 

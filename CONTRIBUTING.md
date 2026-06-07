@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in `dagagent`. This project is in early development
+Thanks for your interest in `glassrail`. This project is in early development
 (Phase 1); the foundation is stable but the public API may still shift.
 
 ## Development setup

@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from dagagent.core import ToolExecutionError, ToolRegistrationError
-from dagagent.harness import ToolHarness, register_builtins
+from glassrail.core import ToolExecutionError, ToolRegistrationError
+from glassrail.harness import ToolHarness, register_builtins
 
 
 @pytest.fixture

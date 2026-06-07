@@ -1,7 +1,7 @@
 # TUI / ACP — handoff
 
 Status as of commit `1bd7881` on branch **`acp-tui`**. This covers the Rust
-terminal client (`clients/tui`) and the Python ACP adapter (`dagagent acp`) that
+terminal client (`clients/tui`) and the Python ACP adapter (`glassrail acp`) that
 backs it. Read this top-to-bottom before touching the code; it captures the
 contract and the gotchas that aren't obvious from the source.
 
@@ -18,12 +18,12 @@ separate client can drive it:
 ```
 clients/tui  (Rust + ratatui)
       │  JSON-RPC 2.0 over stdio  (client spawns the agent as a child)
-dagagent acp   (src/dagagent/gateways/acp/)   ← ACP adapter
+glassrail acp   (src/glassrail/gateways/acp/)   ← ACP adapter
       │  build_runtime()  (unchanged composition root)
 Orchestrator · Planner · Executor · EventBus  ← unchanged engine
 ```
 
-The client spawns `dagagent acp`, performs the ACP handshake, submits tasks,
+The client spawns `glassrail acp`, performs the ACP handshake, submits tasks,
 streams the plan + node execution, gates plan approval, and renders it all in
 the terminal. No gateway needed.
 
@@ -67,11 +67,11 @@ cargo run -- ./target/debug/examples/fake_agent
 #   submit a task → approve (a) / revise (e) / reject (r); Tab = DAG view.
 
 # Real agent (needs the MLX server on :8080):
-cargo run -- uv run dagagent acp
+cargo run -- uv run glassrail acp
 ```
 
-Agent command resolves: positional args → `DAGAGENT_AGENT_CMD` env → default
-`dagagent acp`.
+Agent command resolves: positional args → `GLASSRAIL_AGENT_CMD` env → default
+`glassrail acp`.
 
 **Check sweeps — both must be green before any commit:**
 
@@ -95,7 +95,7 @@ CI runs the Rust checks in a dedicated `rust-tui` job (`.github/workflows/ci.yml
 
 ## 4. File map
 
-**Python adapter — `src/dagagent/gateways/acp/`**
+**Python adapter — `src/glassrail/gateways/acp/`**
 - `protocol.py` — JSON-RPC framing over stdio. `Connection`: `request` (with a
   pending-futures map for agent→client requests), `notify`, `respond`,
   `incoming()`.
@@ -140,7 +140,7 @@ Standard ACP we implement: `initialize`, `session/new`, `session/prompt`,
 `tool_call_update`, `agent_message_chunk`), `session/request_permission`.
 **Skipped** (advertised unsupported): `fs/*`, `terminal/*`, `session/load`.
 
-**dagagent extensions** — custom `session/update` kinds; a generic ACP client
+**glassrail extensions** — custom `session/update` kinds; a generic ACP client
 ignores unknown kinds, ours renders them:
 - `node_meta` `{nodeId, nodeType, tier, confidence, flagged}` — emitted on node
   completion (completed/failed only, not skipped). Client shows a dim
@@ -168,7 +168,7 @@ If you ever reorder one, fix all three.
 1. **DAG edge drawing** — the deferred 20% of the DAG view. The layered
    structure, status colours, and toggle are done; what's missing is the
    box-drawing connectors between layers. **Port the routing from
-   `src/dagagent/gateways/tui/dag.py`** (`_compute_layout`, `_Layout`,
+   `src/glassrail/gateways/tui/dag.py`** (`_compute_layout`, `_Layout`,
    `_layers`): it splits multi-layer edges with dummy pass-through vertices so
    every segment connects adjacent layers, then draws orthogonal connectors
    through the channel between layers. The client already has the layer
@@ -182,7 +182,7 @@ If you ever reorder one, fix all three.
    to a live "streaming cell" that finalizes on node completion (Codex's model).
    Needs provider deltas surfaced through the EventBus first.
 
-3. **Live validation against real `dagagent acp` + MLX** — only the fake agent
+3. **Live validation against real `glassrail acp` + MLX** — only the fake agent
    has been exercised interactively (no TTY + busy MLX during this arc). Do a
    real run, watch streaming/gate/cancel, fix anything that surfaces.
 

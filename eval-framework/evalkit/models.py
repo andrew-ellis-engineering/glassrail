@@ -64,7 +64,7 @@ class Task:
     context_files: dict[str, str]   # name → content
     # Which subject (system under test) runs this task, and its wiring config.
     # Defaults keep older claude-skill suites working unchanged.
-    backend: str = "claude-cli"     # claude-cli | dagagent-cli | dagagent-gateway | openai-compat
+    backend: str = "claude-cli"     # claude-cli | glassrail-cli | glassrail-gateway | openai-compat
     backend_config: dict[str, Any] = field(default_factory=dict)
 
 

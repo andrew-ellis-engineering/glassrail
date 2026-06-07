@@ -1,33 +1,33 @@
 [suite]
 name = "harness-mechanics"
 description = """
-Deterministic regression wall for the dagagent executor.  Every task injects a
+Deterministic regression wall for the glassrail executor.  Every task injects a
 fixed plan (no planner in the loop) against a scripted model (no real LLM
 calls) and asserts execution-model behaviour at the envelope level.  A single
 trial is a proof — pass@1 == pass^1 — so failures diagnose executor bugs, not
 model variance.
 
-Runs via `dagagent exec-plan <plan.json> --json` with all four tiers set to
+Runs via `glassrail exec-plan <plan.json> --json` with all four tiers set to
 KIND=scripted, so THINK and reasoning_required nodes routed to tier 2 are also
 model-free.  Responses are consumed from a single JSONL deque per tier;
 tasks that use multiple tiers must ensure all LLM calls for that task route
 to the same tier (via forced_tier) so call order is deterministic.
 """
-default_backend = "dagagent-exec-plan"
+default_backend = "glassrail-exec-plan"
 default_model = "scripted"
 default_type = "regression"
 default_timeout_s = 30
 promotion_threshold = 1   # deterministic — no ratchet needed, regression from creation
 
 [backend]
-# `dagagent exec-plan <plan_fixture> --json` skips the planner and runs the
+# `glassrail exec-plan <plan_fixture> --json` skips the planner and runs the
 # executor directly with the injected plan.  The scripted provider replays the
 # JSONL responses file in call order so the run is fully model-free.
-command = ["uv", "run", "dagagent", "exec-plan"]
+command = ["uv", "run", "glassrail", "exec-plan"]
 
 [backend.env]
-DAGAGENT_TIER0__KIND = "scripted"
-DAGAGENT_TIER1__KIND = "scripted"
-DAGAGENT_TIER2__KIND = "scripted"
-DAGAGENT_TIER3__KIND = "scripted"
+GLASSRAIL_TIER0__KIND = "scripted"
+GLASSRAIL_TIER1__KIND = "scripted"
+GLASSRAIL_TIER2__KIND = "scripted"
+GLASSRAIL_TIER3__KIND = "scripted"
 # SCRIPTED_PATH is injected for all four tiers by the runner via _inject_scripted_path.

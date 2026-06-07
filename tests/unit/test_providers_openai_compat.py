@@ -12,8 +12,8 @@ import json
 import httpx
 import pytest
 
-from dagagent.providers import Message, ProviderUnavailableError, collect
-from dagagent.providers.openai_compat import OpenAICompatProvider
+from glassrail.providers import Message, ProviderUnavailableError, collect
+from glassrail.providers.openai_compat import OpenAICompatProvider
 
 _MSG: list[Message] = [{"role": "user", "content": "hi"}]
 

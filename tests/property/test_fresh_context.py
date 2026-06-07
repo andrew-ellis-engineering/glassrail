@@ -15,8 +15,8 @@ from __future__ import annotations
 from hypothesis import given
 from hypothesis import strategies as st
 
-from dagagent.core import Node, NodeResult, NodeStatus, NodeType
-from dagagent.executor import assemble_context
+from glassrail.core import Node, NodeResult, NodeStatus, NodeType
+from glassrail.executor import assemble_context
 
 
 def _sentinel(node_id: int) -> str:

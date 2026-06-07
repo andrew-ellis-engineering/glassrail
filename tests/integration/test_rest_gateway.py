@@ -8,15 +8,15 @@ from collections.abc import Sequence as _Sequence
 import pytest
 from fastapi.testclient import TestClient
 
-from dagagent.config import Settings
-from dagagent.core import ExecutionState, NodeResult, NodeStatus, TaskStatus, new_task_id
-from dagagent.executor import Executor, Orchestrator
-from dagagent.gateways.rest import create_app
-from dagagent.harness import ToolHarness, register_builtins
-from dagagent.planner import Planner
-from dagagent.providers import Chunk, Message, TierRouter
-from dagagent.state import InMemoryStateStore
-from dagagent.validator import PlanValidator
+from glassrail.config import Settings
+from glassrail.core import ExecutionState, NodeResult, NodeStatus, TaskStatus, new_task_id
+from glassrail.executor import Executor, Orchestrator
+from glassrail.gateways.rest import create_app
+from glassrail.harness import ToolHarness, register_builtins
+from glassrail.planner import Planner
+from glassrail.providers import Chunk, Message, TierRouter
+from glassrail.state import InMemoryStateStore
+from glassrail.validator import PlanValidator
 
 
 class _Scripted:

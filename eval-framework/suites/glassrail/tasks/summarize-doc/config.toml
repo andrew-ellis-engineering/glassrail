@@ -1,0 +1,56 @@
+name = "summarize-doc"
+tags = ["summary", "tool-use", "result"]
+type = "capability"
+difficulty = 2
+timeout_s = 600
+
+expected_behavior = """
+A correct run reads /tmp/glassrail-eval/brief.md via file_read, extracts the key
+planted facts (42% latency reduction, Dr. Elena Voss, the 2024-03-15 date), and
+produces a faithful 3-bullet summary. It must not fabricate numbers that are not
+in the document (e.g. 99.9% uptime — the doc says 99.7%).
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+"/tmp/glassrail-eval/brief.md" = "brief.md"
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Mentions the 42% latency reduction"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b42%"
+
+[[criteria]]
+text = "Mentions Dr. Elena Voss"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)elena\\s+voss"
+
+[[criteria]]
+text = "Does not fabricate 99.9% uptime (the document says 99.7%)"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "99\\.9%"
+
+[[criteria]]
+text = "Used file_read on the source document"
+grader = "trajectory"
+tool_sequence = ["file_read"]
+target = "/tmp/glassrail-eval/brief.md"
+
+[[criteria]]
+text = "Summary is faithful to the source — contains the planted facts and invents nothing material"
+grader = "llm"

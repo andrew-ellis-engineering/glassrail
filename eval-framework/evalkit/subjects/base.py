@@ -3,7 +3,7 @@
 A :class:`Subject` takes a prompt and returns a :class:`RunResult`: the primary
 output text, a normalized trajectory, an optional cost, and the raw backend
 envelope. Every grader works off the ``RunResult`` / :class:`~evalkit.models.Trial`
-evidence alone, so backends are interchangeable — ``claude -p``, the dagagent
+evidence alone, so backends are interchangeable — ``claude -p``, the Glassrail
 CLI / gateway, or a raw OpenAI-compatible endpoint all look identical
 downstream. This is the one place the framework knows *how* to invoke a system;
 everything else is backend-agnostic.

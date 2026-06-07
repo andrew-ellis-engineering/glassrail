@@ -2,7 +2,7 @@
 
 No agent scaffolding: one ``/chat/completions`` call. Pointed at the local MLX
 server (the default ``base_url``) this measures the bare model you intend to
-ship — a useful baseline/control against the full dagagent pipeline. Stdlib
+ship — a useful baseline/control against the full glassrail pipeline. Stdlib
 only: the HTTP call uses ``urllib``.
 """
 

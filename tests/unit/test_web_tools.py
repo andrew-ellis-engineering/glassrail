@@ -11,9 +11,9 @@ import pytest
 pytest.importorskip("trafilatura")
 pytest.importorskip("lxml")
 
-from dagagent.config import WebToolConfig
-from dagagent.harness import ToolHarness
-from dagagent.harness.integrations.web import (
+from glassrail.config import WebToolConfig
+from glassrail.harness import ToolHarness
+from glassrail.harness.integrations.web import (
     DuckDuckGoProvider,
     SearxngProvider,
     extract_main_text,

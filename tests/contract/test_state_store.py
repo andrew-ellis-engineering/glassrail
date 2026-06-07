@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from dagagent.core import ExecutionState, TaskStatus, new_task_id
-from dagagent.state import InMemoryStateStore, StateStore
-from dagagent.state.sqlite import SqliteStateStore
+from glassrail.core import ExecutionState, TaskStatus, new_task_id
+from glassrail.state import InMemoryStateStore, StateStore
+from glassrail.state.sqlite import SqliteStateStore
 
 StoreFactory = Callable[[Path], Awaitable[StateStore]]
 

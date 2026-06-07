@@ -11,7 +11,7 @@ Promote capability tasks to regression once they hit the agreed pass^k bar
 across a clean eval run (provider healthy, no timeout-driven failures).
 
 Steps:
-1. Run `python3 eval-framework/run.py suite eval-framework/suites/dagagent` with
+1. Run `python3 eval-framework/run.py suite eval-framework/suites/glassrail` with
    a healthy provider.
 2. Identify tasks at 5/5 trials (pass^k = 1.0).
 3. For each, run `python3 eval-framework/run.py promote <suite> <task>` to raise

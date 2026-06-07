@@ -15,7 +15,7 @@ from typing import Any
 
 from rich.console import Console
 
-from dagagent.gateways.tui.dag import plan_layers, render_dag
+from glassrail.gateways.tui.dag import plan_layers, render_dag
 
 _BOX = "┌"  # a box corner — present only in the grid view, not the fallback
 

@@ -13,7 +13,7 @@ to 0.5 — it must NOT fail the node.
 capture = []
 
 [fixtures.install]
-"/tmp/dagagent-eval/test.conf" = "test.conf"
+"/tmp/glassrail-eval/test.conf" = "test.conf"
 
 [[criteria]]
 text = "Tool node is COMPLETED despite shape mismatch"

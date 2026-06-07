@@ -7,7 +7,7 @@ crash are restored before new fixtures are installed.
 
 The runner is backend-agnostic: it hands a prompt to a :class:`~evalkit.subjects.base.Subject`
 and records the normalized :class:`~evalkit.subjects.base.RunResult` into a
-:class:`~evalkit.models.Trial`. It knows nothing about claude vs dagagent.
+:class:`~evalkit.models.Trial`. It knows nothing about claude vs glassrail.
 """
 
 from __future__ import annotations
@@ -127,7 +127,7 @@ _EXEC_PLAN_PREFIX = "__EXEC_PLAN__"
 def _build_prompt(task: Task) -> str:
     """Build the prompt string passed to the subject.
 
-    For ``dagagent-exec-plan`` tasks the prompt.md contains a single line of
+    For ``glassrail-exec-plan`` tasks the prompt.md contains a single line of
     the form ``__EXEC_PLAN__ fixtures/plan.json``.  This directive is resolved
     to an absolute path here so the subject receives a ready-to-use path
     without needing access to the task directory itself.

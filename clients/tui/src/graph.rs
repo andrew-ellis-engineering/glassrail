@@ -1,6 +1,6 @@
 //! The plan graph the DAG view renders.
 //!
-//! ACP's `plan` update is a flat list, so dagagent sends topology separately
+//! ACP's `plan` update is a flat list, so glassrail sends topology separately
 //! via the `plan_graph` extension. This module turns that wire topology into a
 //! layered graph layout: nodes get dependency layers, long edges are split with
 //! dummy pass-through vertices, and every rendered connector spans adjacent

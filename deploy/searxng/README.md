@@ -1,7 +1,7 @@
-# SearXNG — local search backend for dag-agent
+# SearXNG — local search backend for glassrail
 
 A self-hosted [SearXNG](https://searxng.github.io/searxng/) instance that
-dag-agent's `SearxngProvider` talks to instead of scraping DuckDuckGo.
+glassrail's `SearxngProvider` talks to instead of scraping DuckDuckGo.
 
 ## First-time setup
 
@@ -31,7 +31,7 @@ cd deploy/searxng
 docker compose down
 ```
 
-## Wiring it into dag-agent
+## Wiring it into glassrail
 
 In your `config.toml` (project root):
 
@@ -44,8 +44,8 @@ searxng_url = "http://localhost:8888"
 Or via environment variables:
 
 ```
-DAGAGENT_TOOLS__WEB__SEARCH=searxng
-DAGAGENT_TOOLS__WEB__SEARXNG_URL=http://localhost:8888
+GLASSRAIL_TOOLS__WEB__SEARCH=searxng
+GLASSRAIL_TOOLS__WEB__SEARXNG_URL=http://localhost:8888
 ```
 
 These match the defaults in `WebToolConfig`, so if you haven't overridden them

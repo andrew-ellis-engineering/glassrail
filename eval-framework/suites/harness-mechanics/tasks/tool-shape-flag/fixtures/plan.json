@@ -5,7 +5,7 @@
       "type": "tool",
       "description": "Retrieve the calendar for next year — this description intentionally mismatches the file_read tool output so the shape-check will flag it",
       "tool": "file_read",
-      "args_template": {"path": "/tmp/dagagent-eval/test.conf"},
+      "args_template": {"path": "/tmp/glassrail-eval/test.conf"},
       "context_needed": [],
       "condition": null,
       "branches": null,

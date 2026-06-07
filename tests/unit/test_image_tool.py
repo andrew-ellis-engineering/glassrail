@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from dagagent.config.settings import ImageToolConfig
-from dagagent.core import ToolExecutionError, ToolRegistrationError
-from dagagent.harness import ToolHarness
-from dagagent.harness.integrations.image import image_generate, register_image
+from glassrail.config.settings import ImageToolConfig
+from glassrail.core import ToolExecutionError, ToolRegistrationError
+from glassrail.harness import ToolHarness
+from glassrail.harness.integrations.image import image_generate, register_image
 
 # ── Registration tests ────────────────────────────────────────────────────────
 

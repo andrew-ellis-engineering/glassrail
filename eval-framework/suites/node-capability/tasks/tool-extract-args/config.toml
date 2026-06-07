@@ -9,16 +9,16 @@ the upstream context and pass it to the tool.  The path is embedded in a
 noisier sentence rather than given as a bare path string, so simple substring
 matching in args_template is insufficient.
 
-A correct run calls file_read with exactly /tmp/dagagent-eval/backup.conf
-(not /tmp/dagagent-eval/app.conf or any other path) and reports 30.
+A correct run calls file_read with exactly /tmp/glassrail-eval/backup.conf
+(not /tmp/glassrail-eval/app.conf or any other path) and reports 30.
 """
 
 [fixtures]
 capture = []
 
 [fixtures.install]
-"/tmp/dagagent-eval/app.conf" = "app.conf"
-"/tmp/dagagent-eval/backup.conf" = "backup.conf"
+"/tmp/glassrail-eval/app.conf" = "app.conf"
+"/tmp/glassrail-eval/backup.conf" = "backup.conf"
 
 [[criteria]]
 text = "Run completes with a non-empty result"
@@ -45,5 +45,5 @@ value = "\\b8443\\b"
 text = "Used file_read on the correct backup config path"
 grader = "trajectory"
 tool_sequence = ["file_read"]
-target = "/tmp/dagagent-eval/backup.conf"
+target = "/tmp/glassrail-eval/backup.conf"
 

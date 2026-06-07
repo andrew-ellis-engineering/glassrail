@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 
-from dagagent.core import NodeStatus, new_task_id
-from dagagent.events import (
+from glassrail.core import NodeStatus, new_task_id
+from glassrail.events import (
     EventBus,
     NodeFinished,
     PlanningStarted,

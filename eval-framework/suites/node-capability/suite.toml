@@ -2,7 +2,7 @@
 name = "node-capability"
 description = """
 Model+harness capability evals: per-node model quality with a real LLM.
-Tasks use dagagent run with prompts designed to elicit a predictable plan
+Tasks use glassrail run with prompts designed to elicit a predictable plan
 shape (planner is in the loop).  Each task targets one node type so failures
 localise to model quality on that node, not planning quality.
 
@@ -11,7 +11,7 @@ execution (removing planner variance): think-intermediate-correct,
 synthesis-fuse-inputs, and the decision pair.  Until migrated, plan variance
 is an inherent source of trial noise — use k=5 trials minimum.
 """
-default_backend = "dagagent-cli"
+default_backend = "glassrail-cli"
 default_model = "qwen3.6-35b-moe"
 default_type = "capability"
 default_timeout_s = 540
@@ -21,15 +21,15 @@ default_grader_model = "haiku"
 default_grader_backend = "claude-cli"
 
 [backend]
-command = ["uv", "run", "dagagent", "run"]
+command = ["uv", "run", "glassrail", "run"]
 
 [backend.env]
-DAGAGENT_TIER0__BASE_URL = "http://localhost:8090/v1"
-DAGAGENT_TIER0__MODEL = "qwen3.6-35b-moe"
-DAGAGENT_TIER0__TIMEOUT_S = "600"
-DAGAGENT_TIER1__BASE_URL = "http://localhost:8090/v1"
-DAGAGENT_TIER1__MODEL = "qwen3.6-35b-moe"
-DAGAGENT_TIER1__TIMEOUT_S = "600"
-DAGAGENT_TIER2__BASE_URL = "http://localhost:8090/v1"
-DAGAGENT_TIER2__MODEL = "qwen3.6-35b-moe"
-DAGAGENT_TIER2__TIMEOUT_S = "600"
+GLASSRAIL_TIER0__BASE_URL = "http://localhost:8090/v1"
+GLASSRAIL_TIER0__MODEL = "qwen3.6-35b-moe"
+GLASSRAIL_TIER0__TIMEOUT_S = "600"
+GLASSRAIL_TIER1__BASE_URL = "http://localhost:8090/v1"
+GLASSRAIL_TIER1__MODEL = "qwen3.6-35b-moe"
+GLASSRAIL_TIER1__TIMEOUT_S = "600"
+GLASSRAIL_TIER2__BASE_URL = "http://localhost:8090/v1"
+GLASSRAIL_TIER2__MODEL = "qwen3.6-35b-moe"
+GLASSRAIL_TIER2__TIMEOUT_S = "600"

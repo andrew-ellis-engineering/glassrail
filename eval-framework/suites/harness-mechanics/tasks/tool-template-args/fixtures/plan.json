@@ -5,7 +5,7 @@
       "type": "tool",
       "description": "Read the test config file to get its contents",
       "tool": "file_read",
-      "args_template": {"path": "/tmp/dagagent-eval/test.conf"},
+      "args_template": {"path": "/tmp/glassrail-eval/test.conf"},
       "context_needed": [],
       "condition": null,
       "branches": null,

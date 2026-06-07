@@ -87,7 +87,7 @@ fn render_status(
 
     let left_line = Line::from(vec![
         Span::styled(
-            " dagagent ",
+            " glassrail ",
             Style::default()
                 .fg(Color::Black)
                 .bg(Color::Cyan)

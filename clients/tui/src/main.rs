@@ -1,6 +1,6 @@
-//! dagagent-tui: a fast terminal client for the dagagent agent over ACP.
+//! glassrail-tui: a fast terminal client for the glassrail agent over ACP.
 //!
-//! Spawns `dagagent acp` as a subprocess, performs the ACP handshake, and runs
+//! Spawns `glassrail acp` as a subprocess, performs the ACP handshake, and runs
 //! a ratatui loop that submits tasks, streams the plan and node execution, and
 //! gates plan approval — all over JSON-RPC on the child's stdio.
 
@@ -103,19 +103,19 @@ async fn run<O: Outbound>(
     Ok(())
 }
 
-/// Resolve the agent command: positional args, then `DAGAGENT_AGENT_CMD`, then
-/// the default `dagagent acp`. Mirrors the eval framework's configurable backend
-/// (the agent need not be on PATH — e.g. `dagagent-tui uv run dagagent acp`).
+/// Resolve the agent command: positional args, then `GLASSRAIL_AGENT_CMD`, then
+/// the default `glassrail acp`. Mirrors the eval framework's configurable backend
+/// (the agent need not be on PATH — e.g. `glassrail-tui uv run glassrail acp`).
 fn agent_command() -> Vec<String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if !args.is_empty() {
         return args;
     }
-    if let Ok(cmd) = std::env::var("DAGAGENT_AGENT_CMD") {
+    if let Ok(cmd) = std::env::var("GLASSRAIL_AGENT_CMD") {
         let parts: Vec<String> = cmd.split_whitespace().map(String::from).collect();
         if !parts.is_empty() {
             return parts;
         }
     }
-    vec!["dagagent".into(), "acp".into()]
+    vec!["glassrail".into(), "acp".into()]
 }

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from dagagent.config import Settings
-from dagagent.core import Node, NodeType, Plan, PlanValidationError
-from dagagent.harness import ToolHarness, register_builtins
-from dagagent.validator import PlanValidator
+from glassrail.config import Settings
+from glassrail.core import Node, NodeType, Plan, PlanValidationError
+from glassrail.harness import ToolHarness, register_builtins
+from glassrail.validator import PlanValidator
 
 
 @pytest.fixture

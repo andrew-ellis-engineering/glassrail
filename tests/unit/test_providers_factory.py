@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dagagent.config import Settings, TierConfig
-from dagagent.providers import OpenAICompatProvider, TierRouter, router_from_settings
+from glassrail.config import Settings, TierConfig
+from glassrail.providers import OpenAICompatProvider, TierRouter, router_from_settings
 
 
 def test_router_from_settings_builds_one_provider_per_tier() -> None:

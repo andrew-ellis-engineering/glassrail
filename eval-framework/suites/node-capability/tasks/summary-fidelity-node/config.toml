@@ -18,7 +18,7 @@ uptime (the document says 99.7%).
 capture = []
 
 [fixtures.install]
-"/tmp/dagagent-eval/brief.md" = "brief.md"
+"/tmp/glassrail-eval/brief.md" = "brief.md"
 
 [[criteria]]
 text = "Run completes with a non-empty result"
@@ -52,7 +52,7 @@ value = "99\\.9%"
 text = "Used file_read on the source document"
 grader = "trajectory"
 tool_sequence = ["file_read"]
-target = "/tmp/dagagent-eval/brief.md"
+target = "/tmp/glassrail-eval/brief.md"
 
 [[criteria]]
 text = "Summary is faithful to the source — preserves needles and does not fabricate"

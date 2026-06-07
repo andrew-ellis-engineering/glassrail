@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from dagagent.config import Settings
-from dagagent.providers import Chunk, Message, OpenAICompatProvider
-from dagagent.telemetry import configure_tracing, get_tracer, provider_model
+from glassrail.config import Settings
+from glassrail.providers import Chunk, Message, OpenAICompatProvider
+from glassrail.telemetry import configure_tracing, get_tracer, provider_model
 
 
 def test_configure_tracing_disabled_is_noop() -> None:

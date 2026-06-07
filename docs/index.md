@@ -1,4 +1,4 @@
-# dagagent
+# Glassrail
 
 A DAG-planning agent with deterministic tier routing, fresh context per node, and plan-as-document semantics.
 
@@ -6,7 +6,7 @@ A DAG-planning agent with deterministic tier routing, fresh context per node, an
 
 Most agents loop: think, act, observe, think again. That works, but it's hard to inspect, hard to test, and easy to lose track of what the model decided and why.
 
-`dagagent` plans first. Every task becomes a validated directed acyclic graph of nodes. Each node sees only the inputs it declared. The graph is the plan, the plan is the audit log, and the audit log replays.
+`glassrail` plans first. Every task becomes a validated directed acyclic graph of nodes. Each node sees only the inputs it declared. The graph is the plan, the plan is the audit log, and the audit log replays.
 
 ## Core invariants
 

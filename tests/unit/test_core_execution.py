@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from datetime import UTC, datetime
 
-from dagagent.core import (
+from glassrail.core import (
     ExecutionState,
     NodeResult,
     NodeStatus,

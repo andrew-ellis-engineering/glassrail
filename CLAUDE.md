@@ -2,7 +2,7 @@
 
 Always keep this file in sync with AGENTS.md if you make changes
 
-`dagagent` is a DAG-planning agent: every task becomes a validated graph of
+`glassrail` is a DAG-planning agent: every task becomes a validated graph of
 nodes, each node runs with fresh context, and tier routing is deterministic.
 This file is the operating manual for working in the repo. For *what's built*
 and *what's next*, see `CHANGELOG.md` and `docs/roadmap.md` — don't duplicate
@@ -36,7 +36,7 @@ once with `uv run pre-commit install`.
 
 ## Conventions (locked — don't relitigate without raising it first)
 
-- **Layout:** src-layout (`src/dagagent/...`), one repo, subpackages.
+- **Layout:** src-layout (`src/glassrail/...`), one repo, subpackages.
 - **Python:** 3.12+ floor. **Async:** stdlib `asyncio` only (no anyio).
 - **Deps:** `uv` with `uv.lock`. **Lint/format:** `ruff`. **Types:** `pyright`
   strict. Add a `# noqa`/rule-disable only with a reason, and prefer
@@ -47,7 +47,7 @@ once with `uv run pre-commit install`.
   after the Phase 1 eval gates — GitHub releases only.
 - **Docs:** MkDocs + Material (`mkdocs.yml`); the `nav` there is the source of
   truth for the published site, so add new pages to it. **Observability:**
-  structured logs plus OpenTelemetry tracing (`dagagent.telemetry`) — a no-op
+  structured logs plus OpenTelemetry tracing (`glassrail.telemetry`) — a no-op
   until configured; SDK + OTLP exporter in the optional `otel` extra. See
   `docs/observability.md`.
 
@@ -72,7 +72,7 @@ rather than duplicating across files.
 - `docs/streaming.md` — the task event stream (SSE and WebSocket transports).
 - `docs/observability.md` — OpenTelemetry span tree and how to enable tracing.
 - `docs/deployment.md` — the production `Dockerfile` and how to serve the gateway.
-- `docs/tui.md` — the `dagagent tui` live viewer (read-only SSE client).
+- `docs/tui.md` — the `glassrail tui` live viewer (read-only SSE client).
 
 ## Architectural primitives
 
@@ -88,7 +88,7 @@ rather than duplicating across files.
   subscribe via an async iterator. Built to swap for Redis/NATS without
   touching producers.
 - **Tools** register via the `@harness.tool` decorator (first-party) and the
-  `dagagent.tools` entry-point group (third-party).
+  `glassrail.tools` entry-point group (third-party).
 - **Node types:** `tool`, `decision`, `synthesis`, `think`, `summary`,
   `result`, `subplan`. The four single-LLM-call types (synthesis/think/summary/
   result) share `Executor._execute_llm_node` via `_LLM_NODE_SPECS` — add a new
@@ -105,7 +105,7 @@ rather than duplicating across files.
 ## Package map
 
 ```
-src/dagagent/
+src/glassrail/
 ├── core/       Plan, Node, NodeStatus, TaskId, errors (imports nothing else)
 ├── config/     pydantic-settings
 ├── events/     typed events + EventBus
@@ -121,14 +121,14 @@ src/dagagent/
 └── cli/        Typer entry point
 ```
 
-`core/` must not import from any other `dagagent` subpackage. Everything may
+`core/` must not import from any other `glassrail` subpackage. Everything may
 import `core`.
 
 ## Polyglot: `clients/`
 
 The repo is a polyglot monorepo. `clients/tui/` is a **Rust** crate
-(`dagagent-tui`) — the terminal client built on ratatui, talking to the agent
-over ACP by spawning `dagagent acp`. The Python agent core is unchanged; the
+(`glassrail-tui`) — the terminal client built on ratatui, talking to the agent
+over ACP by spawning `glassrail acp`. The Python agent core is unchanged; the
 client is a separate binary behind the protocol seam. Requires a Rust toolchain
 (`rustup`, stable). Its own check sweep, run from `clients/tui/`:
 
@@ -159,7 +159,7 @@ Grep existing tests for `_Scripted` for the pattern.
 
 Model-quality **evals** (planner/executor behaviour, multi-trial pass@k vs
 pass^k) are not pytest — they live in the standalone `eval-framework/` and run
-the real agent over its tier routing via `dagagent run --json`. See
+the real agent over its tier routing via `glassrail run --json`. See
 `docs/evals.md` and `eval-framework/CLAUDE.md`.
 
 ## Commits

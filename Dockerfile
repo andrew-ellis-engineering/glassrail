@@ -25,20 +25,20 @@ RUN uv sync --frozen --no-dev --no-editable --extra sqlite
 FROM python:3.12-slim-bookworm AS runtime
 
 # Run as an unprivileged user.
-RUN useradd --create-home --uid 10001 dagagent
+RUN useradd --create-home --uid 10001 glassrail
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
-    DAGAGENT_LOG_LEVEL=INFO
+    GLASSRAIL_LOG_LEVEL=INFO
 
 WORKDIR /app
-COPY --from=builder --chown=dagagent:dagagent /app/.venv /app/.venv
+COPY --from=builder --chown=glassrail:glassrail /app/.venv /app/.venv
 
-USER dagagent
+USER glassrail
 EXPOSE 8000
 
 # Stdlib-only health probe (the slim image has no curl).
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status == 200 else 1)"]
 
-CMD ["uvicorn", "dagagent.gateways.rest:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "glassrail.gateways.rest:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -8,16 +8,16 @@ from pathlib import Path
 import pytest
 from pytest import MonkeyPatch
 
-from dagagent.config import Settings, TierConfig, ToolApprovalMode, ToolApprovalPolicy
+from glassrail.config import Settings, TierConfig, ToolApprovalMode, ToolApprovalPolicy
 
 
 def _clear_env(monkeypatch: MonkeyPatch) -> None:
     for key in list(os.environ):
-        if key.startswith("DAGAGENT_"):
+        if key.startswith("GLASSRAIL_"):
             monkeypatch.delenv(key, raising=False)
     # Keep the home config dir pointed at a non-existent path so tests
-    # that exercise pure defaults are not affected by ~/.dagagent/config.toml.
-    monkeypatch.setenv("DAGAGENT_CONFIG_HOME", "/nonexistent/dagagent-test")
+    # that exercise pure defaults are not affected by ~/.glassrail/config.toml.
+    monkeypatch.setenv("GLASSRAIL_CONFIG_HOME", "/nonexistent/glassrail-test")
 
 
 def test_defaults(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
@@ -41,8 +41,8 @@ def test_defaults(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
 def test_env_var_overrides_top_level(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _clear_env(monkeypatch)
-    monkeypatch.setenv("DAGAGENT_MAX_PLAN_NODES", "20")
-    monkeypatch.setenv("DAGAGENT_CONFIRM_PLANS", "true")
+    monkeypatch.setenv("GLASSRAIL_MAX_PLAN_NODES", "20")
+    monkeypatch.setenv("GLASSRAIL_CONFIRM_PLANS", "true")
     settings = Settings()
     assert settings.max_plan_nodes == 20
     assert settings.confirm_plans is True
@@ -51,8 +51,8 @@ def test_env_var_overrides_top_level(tmp_path: Path, monkeypatch: MonkeyPatch) -
 def test_env_var_overrides_nested_tier(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _clear_env(monkeypatch)
-    monkeypatch.setenv("DAGAGENT_TIER1__MODEL", "openai/gpt-9000")
-    monkeypatch.setenv("DAGAGENT_TIER1__API_KEY", "secret-123")
+    monkeypatch.setenv("GLASSRAIL_TIER1__MODEL", "openai/gpt-9000")
+    monkeypatch.setenv("GLASSRAIL_TIER1__API_KEY", "secret-123")
     settings = Settings()
     assert settings.tier1.model == "openai/gpt-9000"
     assert settings.tier1.api_key == "secret-123"
@@ -63,9 +63,9 @@ def test_env_var_overrides_nested_tier(tmp_path: Path, monkeypatch: MonkeyPatch)
 def test_tool_approval_settings_parse(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _clear_env(monkeypatch)
-    monkeypatch.setenv("DAGAGENT_TOOL_APPROVAL__MODE", "auto")
-    monkeypatch.setenv("DAGAGENT_TOOL_APPROVAL__OVERRIDES__file_write", "ask")
-    monkeypatch.setenv("DAGAGENT_TOOL_APPROVAL__OVERRIDES__shell_exec", "deny")
+    monkeypatch.setenv("GLASSRAIL_TOOL_APPROVAL__MODE", "auto")
+    monkeypatch.setenv("GLASSRAIL_TOOL_APPROVAL__OVERRIDES__file_write", "ask")
+    monkeypatch.setenv("GLASSRAIL_TOOL_APPROVAL__OVERRIDES__shell_exec", "deny")
 
     settings = Settings()
 
@@ -78,7 +78,7 @@ def test_tool_approval_settings_parse(tmp_path: Path, monkeypatch: MonkeyPatch) 
 def test_init_kwargs_win_over_env(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _clear_env(monkeypatch)
-    monkeypatch.setenv("DAGAGENT_MAX_PLAN_NODES", "20")
+    monkeypatch.setenv("GLASSRAIL_MAX_PLAN_NODES", "20")
     settings = Settings(max_plan_nodes=99)
     assert settings.max_plan_nodes == 99
 
@@ -105,7 +105,7 @@ def test_env_beats_toml(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     _clear_env(monkeypatch)
     monkeypatch.chdir(tmp_path)
     (tmp_path / "config.toml").write_text("max_plan_nodes = 7\n")
-    monkeypatch.setenv("DAGAGENT_MAX_PLAN_NODES", "99")
+    monkeypatch.setenv("GLASSRAIL_MAX_PLAN_NODES", "99")
     settings = Settings()
     assert settings.max_plan_nodes == 99
 
@@ -129,7 +129,7 @@ def test_tiers_property_is_ordered() -> None:
 def test_extra_env_vars_ignored(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _clear_env(monkeypatch)
-    monkeypatch.setenv("DAGAGENT_UNKNOWN_FIELD", "whatever")
+    monkeypatch.setenv("GLASSRAIL_UNKNOWN_FIELD", "whatever")
     # Should not raise.
     settings = Settings()
     assert not hasattr(settings, "unknown_field")
@@ -147,6 +147,6 @@ def test_bool_parsing(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     _clear_env(monkeypatch)
-    monkeypatch.setenv("DAGAGENT_CONFIRM_PLANS", bool_str)
+    monkeypatch.setenv("GLASSRAIL_CONFIRM_PLANS", bool_str)
     settings = Settings()
     assert settings.confirm_plans is expected

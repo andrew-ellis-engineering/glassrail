@@ -16,14 +16,14 @@ never change:
 
 | backend | runs | for |
 |---|---|---|
-| `dagagent-cli` | `dagagent run --json` (subprocess) | the real planner + executor over the agent's own tier routing (your shipped model) |
-| `dagagent-gateway` | a running REST gateway (HTTP) | the deployed surface, end to end |
+| `glassrail-cli` | `glassrail run --json` (subprocess) | the real planner + executor over the agent's own tier routing (your shipped model) |
+| `glassrail-gateway` | a running REST gateway (HTTP) | the deployed surface, end to end |
 | `openai-compat` | one `/chat/completions` call | a raw-model baseline (e.g. the local MLX server) |
 | `claude-cli` | `claude -p` | a Claude Code skill (the original target) |
 
 The **judge** (the `llm` grader) is decoupled from the subject — keep it on a
 cheap Claude model, or point it at MLX with `--grader-backend openai-compat`.
-`claude-cli` backends need the `claude` CLI on `PATH`; `dagagent-*` need the
+`claude-cli` backends need the `claude` CLI on `PATH`; `glassrail-*` need the
 agent reachable.
 
 ## Quick start
@@ -35,8 +35,8 @@ python3 run.py list suites/example
 # See what a run would do without spending inference
 python3 run.py task suites/example/tasks/hello-known --dry-run --trials 3
 
-# Run the dagagent suite for real (needs the agent + MLX up); writes results/<run>/…
-python3 run.py suite suites/dagagent --trials 5
+# Run the glassrail suite for real (needs the agent + MLX up); writes results/<run>/…
+python3 run.py suite suites/glassrail --trials 5
 
 # Run the claude-skill example suite instead
 python3 run.py suite suites/example --trials 3 --timeout 60
@@ -54,7 +54,7 @@ model usage of a run is roughly:
 tasks × trials × (1 generation  +  #llm-judge criteria)
 ```
 
-Where that cost lands depends on the backend. The `dagagent-*` and
+Where that cost lands depends on the backend. The `glassrail-*` and
 `openai-compat` backends hit your own infrastructure (e.g. a local MLX server —
 no per-token dollars, token counts travel in the envelope). The judge is
 separate and, by default, runs on Claude.
@@ -72,7 +72,7 @@ For a `claude-cli` subject (or a Claude judge), how it's billed depends on how
 Keep runs cheap:
 
 - **Model is the big lever** — for a Claude subject/judge, haiku ≪ sonnet < opus
-  (the `example` suite defaults to `haiku`). For the `dagagent` backend the
+  (the `example` suite defaults to `haiku`). For the `glassrail` backend the
   model is whatever your tiers serve; `default_model` overrides tier 0.
 - **Trials scale linearly** — `--trials 1` while iterating, `3` for a result.
 - **Grading is mostly free** — deterministic and trajectory checks make **no**
@@ -107,15 +107,15 @@ evalkit/
   config.py            HARNESS_VERSION, paths, defaults
   models.py            dataclasses (Task, Trial, Score, …)
   loader.py            TOML → model
-  subjects/            the Subject seam + backends (claude_cli, dagagent_cli,
-                       dagagent_gateway, openai_compat) + build_subject
+  subjects/            the Subject seam + backends (claude_cli, glassrail_cli,
+                       glassrail_gateway, openai_compat) + build_subject
   judge.py             the LLM judge (backend-agnostic), build_judge
   runner.py            fixtures, subject invocation, evidence capture
   graders/             deterministic · trajectory · llm + dispatcher
   stats.py             pass@k (Chen), pass^k, Wilson CI
   reporter.py          tables + artifact save/load
   ratchet.py           promotion-candidate detection + TOML edits
-suites/dagagent/       end-to-end evals of the agent (dagagent-cli backend)
+suites/glassrail/       end-to-end evals of the agent (glassrail-cli backend)
 suites/example/        a paired claude-skill calibration suite
 results/               trial artifacts (gitignored)
 ```

@@ -1,7 +1,7 @@
 [suite]
 name = "node-capability-openrouter"
 description = "node-capability tasks routed through OpenRouter instead of local MLX."
-default_backend = "dagagent-cli"
+default_backend = "glassrail-cli"
 default_model = "qwen/qwen3-8b"
 default_type = "capability"
 default_timeout_s = 120
@@ -11,40 +11,40 @@ default_grader_model = "haiku"
 default_grader_backend = "claude-cli"
 
 [backend]
-command = ["uv", "run", "dagagent", "run"]
+command = ["uv", "run", "glassrail", "run"]
 
 [backend.env]
 # Raise the generation ceiling — local config.toml sets 8192 for Metal OOM
 # protection but cloud has no such constraint; planner needs room for plan JSON.
-DAGAGENT_MAX_GENERATION_TOKENS = "32768"
+GLASSRAIL_MAX_GENERATION_TOKENS = "32768"
 
 # Tier 0 — fast execution (mirrors local qwen3-8b)
-DAGAGENT_TIER0__BASE_URL      = "https://openrouter.ai/api/v1"
-DAGAGENT_TIER0__MODEL         = "qwen/qwen3-8b"
-DAGAGENT_TIER0__TIMEOUT_S     = "60"
+GLASSRAIL_TIER0__BASE_URL      = "https://openrouter.ai/api/v1"
+GLASSRAIL_TIER0__MODEL         = "qwen/qwen3-8b"
+GLASSRAIL_TIER0__TIMEOUT_S     = "60"
 # Disable reasoning via the OpenRouter-native unified parameter.
 # require_parameters=true ensures OpenRouter only routes to providers that
 # actually honour reasoning.effort — without it, some providers silently ignore
 # the parameter and stream all tokens into delta.reasoning (empty delta.content).
-DAGAGENT_TIER0__EXTRA_BODY    = '{"reasoning":{"effort":"none"},"provider":{"require_parameters":true}}'
+GLASSRAIL_TIER0__EXTRA_BODY    = '{"reasoning":{"effort":"none"},"provider":{"require_parameters":true}}'
 
 # Tier 1 — planner + quality nodes (mirrors local qwen3.6-35b-moe)
-DAGAGENT_TIER1__BASE_URL      = "https://openrouter.ai/api/v1"
-DAGAGENT_TIER1__MODEL         = "qwen/qwen3.6-35b-a3b"
-DAGAGENT_TIER1__TIMEOUT_S     = "90"
-DAGAGENT_TIER1__EXTRA_BODY    = '{"reasoning":{"effort":"none"},"provider":{"require_parameters":true}}'
+GLASSRAIL_TIER1__BASE_URL      = "https://openrouter.ai/api/v1"
+GLASSRAIL_TIER1__MODEL         = "qwen/qwen3.6-35b-a3b"
+GLASSRAIL_TIER1__TIMEOUT_S     = "90"
+GLASSRAIL_TIER1__EXTRA_BODY    = '{"reasoning":{"effort":"none"},"provider":{"require_parameters":true}}'
 
 # Tiers 2 and 3 — pinned to tier-1 model, no surprise fallback spend.
-DAGAGENT_TIER2__BASE_URL      = "https://openrouter.ai/api/v1"
-DAGAGENT_TIER2__MODEL         = "qwen/qwen3.6-35b-a3b"
-DAGAGENT_TIER2__TIMEOUT_S     = "90"
-DAGAGENT_TIER2__EXTRA_BODY    = '{"reasoning":{"effort":"none"},"provider":{"require_parameters":true}}'
+GLASSRAIL_TIER2__BASE_URL      = "https://openrouter.ai/api/v1"
+GLASSRAIL_TIER2__MODEL         = "qwen/qwen3.6-35b-a3b"
+GLASSRAIL_TIER2__TIMEOUT_S     = "90"
+GLASSRAIL_TIER2__EXTRA_BODY    = '{"reasoning":{"effort":"none"},"provider":{"require_parameters":true}}'
 
-DAGAGENT_TIER3__BASE_URL      = "https://openrouter.ai/api/v1"
-DAGAGENT_TIER3__MODEL         = "qwen/qwen3.6-35b-a3b"
-DAGAGENT_TIER3__TIMEOUT_S     = "90"
-DAGAGENT_TIER3__EXTRA_BODY    = '{"reasoning":{"effort":"none"},"provider":{"require_parameters":true}}'
+GLASSRAIL_TIER3__BASE_URL      = "https://openrouter.ai/api/v1"
+GLASSRAIL_TIER3__MODEL         = "qwen/qwen3.6-35b-a3b"
+GLASSRAIL_TIER3__TIMEOUT_S     = "90"
+GLASSRAIL_TIER3__EXTRA_BODY    = '{"reasoning":{"effort":"none"},"provider":{"require_parameters":true}}'
 
-DAGAGENT_PLANNER_INITIAL_TIMEOUT_S = "90"
-DAGAGENT_PLANNER_RETRY_TIMEOUT_S   = "120"
-DAGAGENT_PLANNER_MIN_TIER          = "1"
+GLASSRAIL_PLANNER_INITIAL_TIMEOUT_S = "90"
+GLASSRAIL_PLANNER_RETRY_TIMEOUT_S   = "120"
+GLASSRAIL_PLANNER_MIN_TIER          = "1"

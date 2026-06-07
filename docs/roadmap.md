@@ -26,14 +26,14 @@ observability, then the operational surfaces.
 - **Eval framework** ✓ — the standalone, stdlib-only `eval-framework/` runs each
   task *k* times against a pluggable subject backend and reports pass@k
   (capability) vs pass^k (reliability) with a deterministic → trajectory → LLM
-  grading cascade, control pairs, and a promotion ratchet. The `dagagent-cli`
+  grading cascade, control pairs, and a promotion ratchet. The `glassrail-cli`
   backend drives the real planner + executor over the agent's own tier routing
-  (your MLX model) via `dagagent run --json`. See [Evals](evals.md). The release
+  (your MLX model) via `glassrail run --json`. See [Evals](evals.md). The release
   gate below — promoting capability tasks to regression at an agreed pass^k bar —
   is still open.
 - **OpenTelemetry GenAI spans** ✓ — the planner, router, and executor emit a
   span tree (task → plan / node → LLM call) with GenAI semantic-convention
-  attributes (model, tier, tokens) plus `dagagent.*` ones. Tracing is a no-op
+  attributes (model, tier, tokens) plus `glassrail.*` ones. Tracing is a no-op
   until configured; the SDK + OTLP exporter live in the optional `otel` extra.
   See [Observability](observability.md).
 - **WebSocket event transport** ✓ — `WS /task/{id}/events` is a second
@@ -45,11 +45,11 @@ observability, then the operational surfaces.
   gateway from a slim (~60 MB), non-root `python:3.12-slim` image with a
   built-in health check. CI builds and smoke-tests it on every change. See
   [Deployment](deployment.md).
-- **TUI** ✓ — `dagagent tui "<request>"` submits a task to a running gateway
+- **TUI** ✓ — `glassrail tui "<request>"` submits a task to a running gateway
   and renders the live SSE stream with Rich: plan → per-node progress → final
   output (a terminal snapshot if it connects after the task finished). See
   [Terminal UI](tui.md).
-- **ACP adapter + Rust client** ✓ — `dagagent acp` exposes the agent over the
+- **ACP adapter + Rust client** ✓ — `glassrail acp` exposes the agent over the
   Agent Client Protocol (JSON-RPC 2.0 on stdio), and the in-repo Rust
   `clients/tui` client drives it: submit a task, stream the plan and nodes,
   approve or reject-with-feedback the plan (guided replan), dovetail follow-up
@@ -73,11 +73,11 @@ unlocks the first PyPI publish.
 **Gate met. Phase 1 complete.**
 
 Baseline established 2026-06-07 against Qwen3-8b (tier 0) + Qwen3.6-35b (tier
-1) via OpenRouter (`suites/dagagent-openrouter`, `suites/node-capability-openrouter`):
+1) via OpenRouter (`suites/glassrail-openrouter`, `suites/node-capability-openrouter`):
 
 | Suite | Result | Bar |
 |---|---|---|
-| dagagent-openrouter (23 tasks, 3 trials) | **19/23 full-pass (83%), 0 all-fail** | ≥ 80% full-pass, 0 all-fail |
+| glassrail-openrouter (23 tasks, 3 trials) | **19/23 full-pass (83%), 0 all-fail** | ≥ 80% full-pass, 0 all-fail |
 | node-capability-openrouter (7 tasks, 3 trials) | **7/7 full-pass (100%)** | 100% |
 | harness-mechanics (32 tasks, 3 trials) | **32/32 full-pass (100%)** | 100% |
 
@@ -111,7 +111,7 @@ Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing
   not `"type": "web_search"`. Also reinforce the `max_subplans_per_plan` limit
   with a counter-example. Pure prompt change; expected to clear the iot/oltp
   partial-pass tasks and improve `subplan-correct` reliability. Measure by
-  re-running `suites/dagagent-openrouter` and comparing against the Phase 1
+  re-running `suites/glassrail-openrouter` and comparing against the Phase 1
   baseline.
 
 - **Upstream context awareness** — when assembling a node's context, include the

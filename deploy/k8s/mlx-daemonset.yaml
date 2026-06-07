@@ -25,8 +25,8 @@ spec:
       containers:
         - name: rapid-mlx
           # A thin image that execs the host's native rapid-mlx binary.
-          # Build with: docker build -t dagagent/mlx-server:latest -f deploy/k8s/Dockerfile.mlx .
-          image: dagagent/mlx-server:latest
+          # Build with: docker build -t glassrail/mlx-server:latest -f deploy/k8s/Dockerfile.mlx .
+          image: glassrail/mlx-server:latest
           imagePullPolicy: IfNotPresent
           command: ["/Users/andrew/.venvs/rapid-mlx/bin/rapid-mlx"]
           args:

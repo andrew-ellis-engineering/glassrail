@@ -2,7 +2,7 @@
 
 Wires the real planner/executor/validator/orchestrator around a scripted
 provider, installs an in-memory span exporter, and asserts the exported spans
-form the expected tree with the key GenAI / dagagent attributes.
+form the expected tree with the key GenAI / glassrail attributes.
 
 Installing a tracer provider is process-global and set-once, so this is the
 only test that asserts on spans; others tolerate the provider being present.
@@ -17,14 +17,14 @@ from collections.abc import Sequence as _Sequence
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from dagagent.config import Settings
-from dagagent.core import ExecutionState, TaskStatus, new_task_id
-from dagagent.executor import Executor, Orchestrator
-from dagagent.harness import ToolHarness, register_builtins
-from dagagent.planner import Planner
-from dagagent.providers import Chunk, Message, TierRouter
-from dagagent.state import InMemoryStateStore
-from dagagent.telemetry import (
+from glassrail.config import Settings
+from glassrail.core import ExecutionState, TaskStatus, new_task_id
+from glassrail.executor import Executor, Orchestrator
+from glassrail.harness import ToolHarness, register_builtins
+from glassrail.planner import Planner
+from glassrail.providers import Chunk, Message, TierRouter
+from glassrail.state import InMemoryStateStore
+from glassrail.telemetry import (
     ATTR_GEN_AI_USAGE_TOTAL_TOKENS,
     ATTR_NODE_TYPE,
     ATTR_TASK_STATUS,
@@ -35,7 +35,7 @@ from dagagent.telemetry import (
     SPAN_TASK,
     configure_tracing,
 )
-from dagagent.validator import PlanValidator
+from glassrail.validator import PlanValidator
 
 
 class _Scripted:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from dagagent.providers import Chunk, LLMProvider, Message, collect
+from glassrail.providers import Chunk, LLMProvider, Message, collect
 
 
 async def _stream(chunks: list[Chunk]) -> AsyncIterator[Chunk]:

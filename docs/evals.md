@@ -5,7 +5,7 @@ Evals answer a different question from the unit and integration tests: not
 execute it *well, and reliably*?" They are model-dependent and non-deterministic,
 so they are measured with multiple trials — not asserted once.
 
-Evals live in the vendored [`eval-framework/`](https://github.com/andrewellis/dagagent/tree/main/eval-framework):
+Evals live in the vendored [`eval-framework/`](https://github.com/andrewellis/glassrail/tree/main/eval-framework):
 a standalone, stdlib-only harness that runs each task *k* times, captures the
 output / trajectory / side-effects, grades with a deterministic → trajectory →
 LLM cascade, and reports **pass@k** (capability — can it ever?) vs **pass^k**
@@ -19,39 +19,39 @@ backend returns the same normalized result, so the graders never change:
 
 | backend | what it runs | use it to… |
 |---|---|---|
-| `dagagent-cli` | `dagagent run --json` (subprocess) | eval the real planner + executor over **your** tier routing |
-| `dagagent-gateway` | a running REST gateway over HTTP | eval the deployed surface end to end |
+| `glassrail-cli` | `glassrail run --json` (subprocess) | eval the real planner + executor over **your** tier routing |
+| `glassrail-gateway` | a running REST gateway over HTTP | eval the deployed surface end to end |
 | `openai-compat` | one `/chat/completions` call | baseline the raw model with no agent scaffolding |
 | `claude-cli` | `claude -p` | eval a Claude Code skill (the framework's original target) |
 
-The dagagent backends route through the agent's **own** tier config, so they
+The glassrail backends route through the agent's **own** tier config, so they
 benchmark the model(s) you actually deploy — tier 0 is your local MLX server by
 default. There is no point benchmarking against a model you will not run: point
-your tiers at the shipped model (`config.toml` / `DAGAGENT_TIER*__…` env), or
+your tiers at the shipped model (`config.toml` / `GLASSRAIL_TIER*__…` env), or
 pass a tier-0 override via the suite's `default_model`.
 
 ## Running
 
 ```bash
 cd eval-framework
-python3 run.py list suites/dagagent                 # load + summarize
-python3 run.py suite suites/dagagent --dry-run       # zero-cost wiring check
-python3 run.py suite suites/dagagent --trials 5      # the real thing (needs MLX up)
+python3 run.py list suites/glassrail                 # load + summarize
+python3 run.py suite suites/glassrail --dry-run       # zero-cost wiring check
+python3 run.py suite suites/glassrail --trials 5      # the real thing (needs MLX up)
 ```
 
-A real run needs the agent reachable: `dagagent` on `PATH` (activate the venv,
-or set the suite's `[backend] command = ["uv", "run", "dagagent", "run"]`) and
+A real run needs the agent reachable: `glassrail` on `PATH` (activate the venv,
+or set the suite's `[backend] command = ["uv", "run", "glassrail", "run"]`) and
 your tier-0 MLX server serving the model. The judge is independent of the
 subject — it defaults to a cheap Claude model so semantic criteria grade
 consistently; point it at MLX instead with `--grader-backend openai-compat`.
 
-## The `dagagent run --json` contract
+## The `glassrail run --json` contract
 
-The `dagagent-cli` backend shells out to a headless run and reads one JSON
+The `glassrail-cli` backend shells out to a headless run and reads one JSON
 envelope from stdout:
 
 ```bash
-dagagent run "Is 246 even or odd?" --json --model qwen3.6-35b-moe
+glassrail run "Is 246 even or odd?" --json --model qwen3.6-35b-moe
 ```
 
 ```json
@@ -111,7 +111,7 @@ Qwen models served from the cloud:
 
 | Suite | Mirror of | Typical wall time |
 |---|---|---|
-| `suites/dagagent-openrouter` | `suites/dagagent` | ~5 min for 7 tasks |
+| `suites/glassrail-openrouter` | `suites/glassrail` | ~5 min for 7 tasks |
 | `suites/node-capability-openrouter` | `suites/node-capability` | ~2 min for 7 tasks |
 
 **One-time setup — API key:**
@@ -121,9 +121,9 @@ Qwen models served from the cloud:
 echo 'export OPENROUTER_API_KEY="sk-or-..."' >> ~/.zshenv
 source ~/.zshenv
 
-# Derive the per-tier keys dagagent expects
+# Derive the per-tier keys glassrail expects
 for i in 0 1 2 3; do
-  echo "export DAGAGENT_TIER${i}__API_KEY=\"\$OPENROUTER_API_KEY\""
+  echo "export GLASSRAIL_TIER${i}__API_KEY=\"\$OPENROUTER_API_KEY\""
 done >> ~/.zshenv
 source ~/.zshenv
 ```
@@ -132,24 +132,24 @@ source ~/.zshenv
 
 ```bash
 cd eval-framework
-python3 run.py suite suites/dagagent-openrouter --workers 5
+python3 run.py suite suites/glassrail-openrouter --workers 5
 python3 run.py suite suites/node-capability-openrouter --workers 5
 
 # Or all three cloud suites at once:
-python3 run.py suite suites/dagagent-openrouter --workers 5 && \
+python3 run.py suite suites/glassrail-openrouter --workers 5 && \
 python3 run.py suite suites/node-capability-openrouter --workers 5
 ```
 
-**How it works:** each suite's `[backend.env]` sets all four `DAGAGENT_TIER*`
+**How it works:** each suite's `[backend.env]` sets all four `GLASSRAIL_TIER*`
 vars to OpenRouter endpoints, overriding the local config. It also sets
-`DAGAGENT_MAX_GENERATION_TOKENS=32768` (the local config caps this at 8192 for
+`GLASSRAIL_MAX_GENERATION_TOKENS=32768` (the local config caps this at 8192 for
 Metal OOM safety; cloud has no such constraint) and passes
 `reasoning.effort=none` with `provider.require_parameters=true` via
-`DAGAGENT_TIER*__EXTRA_BODY` — required because Qwen3 models on OpenRouter
+`GLASSRAIL_TIER*__EXTRA_BODY` — required because Qwen3 models on OpenRouter
 default to extended thinking mode, which streams all tokens into
 `delta.reasoning` and leaves `delta.content` empty.
 
-**Cost:** OpenRouter charges per token. A full `dagagent-openrouter` run at
+**Cost:** OpenRouter charges per token. A full `glassrail-openrouter` run at
 default `--trials 3` costs roughly $0.05–0.15 depending on task complexity.
 Keep `--workers` at 5 or below to avoid rate-limit 429s.
 

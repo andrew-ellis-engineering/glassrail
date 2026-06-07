@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dagagent.core import Node, NodeResult, NodeStatus, NodeType
-from dagagent.executor import assemble_context
+from glassrail.core import Node, NodeResult, NodeStatus, NodeType
+from glassrail.executor import assemble_context
 
 
 def _node(*, ctx: list[int]) -> Node:

@@ -1,6 +1,6 @@
 //! A minimal JSON-RPC 2.0 client over a child process's stdio.
 //!
-//! Speaks the client half of ACP to a spawned `dagagent acp` subprocess: sends
+//! Speaks the client half of ACP to a spawned `glassrail acp` subprocess: sends
 //! requests and notifications on the child's stdin, and a background reader task
 //! demultiplexes the child's stdout into responses (correlated by id) and
 //! server-initiated messages (notifications + `request_permission`) forwarded
@@ -63,7 +63,7 @@ pub struct AcpClient {
 impl AcpClient {
     /// Spawn the agent command and wire up the reader task.
     ///
-    /// `command` is the argv to run (e.g. `["dagagent", "acp"]`). Server-initiated
+    /// `command` is the argv to run (e.g. `["glassrail", "acp"]`). Server-initiated
     /// messages are forwarded on `tx`, which the caller also clones for turn tasks.
     pub fn spawn(
         command: &[String],

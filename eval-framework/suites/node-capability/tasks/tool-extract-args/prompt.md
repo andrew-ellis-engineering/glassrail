@@ -1,1 +1,1 @@
-The ops team runs two configs in /tmp/dagagent-eval/ — app.conf for the main application and backup.conf for the backup service. What retention period (in days) is the backup service configured to use? Read the relevant config file to find the answer.
+The ops team runs two configs in /tmp/glassrail-eval/ — app.conf for the main application and backup.conf for the backup service. What retention period (in days) is the backup service configured to use? Read the relevant config file to find the answer.

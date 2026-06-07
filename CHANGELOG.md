@@ -19,10 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Summary nodes now support a `format` hint (`concise`, `medium`, `verbose`).
   The executor selects concise or verbose summary prompts when requested while
   preserving the existing configurable medium/default summary prompt.
-- Added a `subplan-correct` dagagent capability eval that requires a naturally
+- Added a `subplan-correct` glassrail capability eval that requires a naturally
   partitioned task to include a `subplan` trajectory step.
 - Streaming text events now carry node metadata: `NodeOutputChunk` includes the
-  node type, and ACP `agent_message_chunk` updates include dagagent extension
+  node type, and ACP `agent_message_chunk` updates include glassrail extension
   fields (`nodeId`, `nodeType`, `isFinal`) so clients can distinguish
   intermediate think/summary/synthesis output from the final result.
 - Planner prompts now include a tool capability digest that groups registered
@@ -88,11 +88,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   carries the previous task's `final_output` forward as a context preamble, so
   tasks build on one another. Threaded as task input, leaving the
   fresh-context-per-node invariant intact.
-- Rust terminal client (`clients/tui`, `dagagent-tui`): a ratatui app that
-  spawns `dagagent acp`, submits tasks, streams the plan and node execution,
+- Rust terminal client (`clients/tui`, `glassrail-tui`): a ratatui app that
+  spawns `glassrail acp`, submits tasks, streams the plan and node execution,
   and drives the plan-approval gate (approve / reject / reject-with-feedback).
   Polyglot monorepo: a dedicated `rust-tui` CI job runs fmt/clippy/build/test.
-- ACP adapter (`dagagent acp`): a JSON-RPC 2.0 server over stdio exposing the
+- ACP adapter (`glassrail acp`): a JSON-RPC 2.0 server over stdio exposing the
   agent via the Agent Client Protocol, for the forthcoming Rust TUI and other
   ACP clients. Implements `initialize`, `session/new`, `session/prompt`, and
   `session/cancel`, bridging the EventBus into `session/update` notifications
@@ -112,7 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration via `pydantic-settings` with env, `.env`, and `config.toml`
   precedence; structured `TierConfig` for each tier.
 - Tool harness: `@harness.tool` decorator, entry-point discovery
-  (`dagagent.tools` group), and built-in tool stubs.
+  (`glassrail.tools` group), and built-in tool stubs.
 - LLM provider abstraction: streaming `LLMProvider` Protocol,
   `TierRouter` with `ProviderUnavailableError`-driven fallthrough,
   OpenAI-compatible concrete provider that parses the SSE stream
@@ -148,10 +148,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/task/{id}/branch-log`, `/task/{id}/events` (SSE and WebSocket — the
   WebSocket streams the same typed events and closes on a terminal event),
   `/tools`, `/health`.
-- Typer CLI entry point with a `dagagent run` command — a headless run that
+- Typer CLI entry point with a `glassrail run` command — a headless run that
   plans and executes a task in-process and prints a JSON result envelope
   (final output, normalized trajectory, status, token count) for eval harnesses
-  to consume — and a `dagagent tui` command: a Rich terminal client that submits
+  to consume — and a `glassrail tui` command: a Rich terminal client that submits
   a task to a running gateway and renders its live SSE event stream (plan →
   per-node progress → final output), built from a thin event client and a pure,
   testable view model.
@@ -163,13 +163,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recoloured as the node starts, completes, or fails, and decisions show the
   branch they took. Pure render over the plan plus accumulated node statuses,
   onto a character grid that falls back to a compact list when the terminal is
-  too narrow; `dagagent tui --no-dag` shows only the table.
-- Shared runtime composition root (`dagagent.runtime.build_runtime`) that wires
+  too narrow; `glassrail tui --no-dag` shows only the table.
+- Shared runtime composition root (`glassrail.runtime.build_runtime`) that wires
   the harness, router, planner, validator, executor, store, and orchestrator
   from settings; the REST gateway and the CLI both build from it.
-- OpenTelemetry tracing (`dagagent.telemetry`): the planner, router, and
+- OpenTelemetry tracing (`glassrail.telemetry`): the planner, router, and
   executor emit a span tree (task → plan / node → LLM call) with GenAI
-  semantic-convention attributes (system, model, tokens) and `dagagent.*`
+  semantic-convention attributes (system, model, tokens) and `glassrail.*`
   attributes (tier, node type/status, task status). Tracing is a no-op until
   configured via settings; the SDK and OTLP/HTTP exporter ship in the optional
   `otel` extra. The REST gateway configures it at startup.
@@ -180,9 +180,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   each task k times against a pluggable subject backend, captures output /
   side-effects / trajectory, grades with a deterministic→trajectory→LLM cascade
   (the judge decoupled from the subject), and reports pass@k vs pass^k. Backends:
-  `dagagent-cli` and `dagagent-gateway` (drive the real planner + executor over
+  `glassrail-cli` and `glassrail-gateway` (drive the real planner + executor over
   the agent's own tier routing), `openai-compat` (baseline a raw model), and
-  `claude-cli`. Ships a `dagagent` suite (a decision-branch control pair, a
+  `claude-cli`. Ships a `glassrail` suite (a decision-branch control pair, a
   calibration fact, and a multistep recommendation). Self-documented (its own
   README/DECISIONS/CLAUDE) and kept out of the package's ruff/pyright/pytest
   scope.
@@ -191,19 +191,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   summary, synthesis, result, decision, extract_args, shape_check — with
   generous defaults so reasoning and summaries get room while structured
   micro-calls stay small. Override under `[budgets]` in `config.toml` or
-  `DAGAGENT_BUDGETS__<FIELD>`. Replaces the single `max_node_output_tokens`
+  `GLASSRAIL_BUDGETS__<FIELD>`. Replaces the single `max_node_output_tokens`
   setting and the previously hard-coded caps in the planner and executor.
 - Configurable per-node system prompts (`settings.prompts`, a `NodePrompts`
   table): the planner and executor read each role's prompt from settings
   instead of hard-coding it, so prompts can be tuned without editing source.
-  Defaults live in `dagagent.config.prompts`; override under `[prompts]` in
-  `config.toml` or `DAGAGENT_PROMPTS__<FIELD>`.
+  Defaults live in `glassrail.config.prompts`; override under `[prompts]` in
+  `config.toml` or `GLASSRAIL_PROMPTS__<FIELD>`.
 - First-party tool integrations layer (`settings.tools`): bundled, opt-in tools
   configured under `[tools.*]` and registered by `build_runtime`, distinct from
   third-party entry-point plugins. First integration: **web** — `web_fetch(url)`
   fetches a page and extracts its main text via trafilatura (boilerplate
   removed), for reading and high-fidelity summarisation of webpages. Off by
-  default; needs the optional `web` extra (`pip install dagagent[web]`) and
+  default; needs the optional `web` extra (`pip install glassrail[web]`) and
   `tools.web.fetch = true`. Adds `web_search(query)` behind a pluggable
   provider — `duckduckgo` (HTML scrape, no setup) or `searxng` (self-hosted
   JSON API); switching is a config flip (`tools.web.search`). A non-200 from
@@ -211,8 +211,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rather than a silently empty result set. The old `web_search` built-in stub
   is removed in favour of this real implementation.
 - Opt-in third-party tool plugins: with `load_tool_plugins = true`
-  (`DAGAGENT_LOAD_TOOL_PLUGINS`), `build_runtime` discovers and registers tools
-  advertised through the `dagagent.tools` entry-point group. The harness has
+  (`GLASSRAIL_LOAD_TOOL_PLUGINS`), `build_runtime` discovers and registers tools
+  advertised through the `glassrail.tools` entry-point group. The harness has
   supported entry-point discovery all along; the composition root now invokes
   it. Off by default — loading whatever is installed is a deliberate choice.
 - Tooling: uv, ruff, pyright strict, pytest + hypothesis, pre-commit,

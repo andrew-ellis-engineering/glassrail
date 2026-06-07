@@ -14,15 +14,15 @@ from typing import Any
 
 import pytest
 
-from dagagent.config import get_settings
-from dagagent.core import (
+from glassrail.config import get_settings
+from glassrail.core import (
     NodeResult,
     NodeStatus,
     NodeType,
     TaskId,
     TaskStatus,
 )
-from dagagent.events import (
+from glassrail.events import (
     AwaitingConfirmation,
     EventBus,
     NodeFinished,
@@ -31,14 +31,14 @@ from dagagent.events import (
     PlanReady,
     TaskCompleted,
 )
-from dagagent.executor import Orchestrator
-from dagagent.executor.tool_approval import ToolApprovalBroker
-from dagagent.gateways.acp.protocol import Connection, JsonRpcError
-from dagagent.gateways.acp.server import AcpServer
-from dagagent.gateways.acp.session import Session
-from dagagent.harness import ToolHarness
-from dagagent.runtime import Runtime
-from dagagent.state import InMemoryStateStore
+from glassrail.executor import Orchestrator
+from glassrail.executor.tool_approval import ToolApprovalBroker
+from glassrail.gateways.acp.protocol import Connection, JsonRpcError
+from glassrail.gateways.acp.server import AcpServer
+from glassrail.gateways.acp.session import Session
+from glassrail.harness import ToolHarness
+from glassrail.runtime import Runtime
+from glassrail.state import InMemoryStateStore
 
 _PLAN: dict[str, Any] = {
     "nodes": [

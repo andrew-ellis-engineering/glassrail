@@ -1,7 +1,7 @@
-# dagagent-tui redesign spec
+# glassrail-tui redesign spec
 
 This spec targets the Rust `clients/tui` ACP client. It does not replace the
-older Python/Rich `dagagent tui` gateway viewer, though it should port the
+older Python/Rich `glassrail tui` gateway viewer, though it should port the
 Python DAG edge-routing ideas where they are already better than the Rust view.
 
 The goal is a sharp, sleek, snappy terminal client: visually intentional, dense
@@ -37,10 +37,10 @@ wide-terminal breakpoints.
 The current Rust client works like this:
 
 ```text
-dagagent-tui
+glassrail-tui
   spawns child process
   JSON-RPC 2.0 over stdio
-dagagent acp
+glassrail acp
   bridges EventBus events into session/update notifications
 Runtime
   Orchestrator -> Planner -> Executor -> EventBus
@@ -57,9 +57,9 @@ Important current files:
 - `clients/tui/src/graph.rs`: converts `plan_graph` wire nodes into layer
   assignments. It does not draw edges yet.
 - `clients/tui/src/acp/messages.rs`: typed `session/update` payloads.
-- `src/dagagent/gateways/acp/server.py`: emits ACP updates and the custom
+- `src/glassrail/gateways/acp/server.py`: emits ACP updates and the custom
   `plan_graph` extension.
-- `src/dagagent/gateways/tui/dag.py`: older Python/Rich DAG renderer with
+- `src/glassrail/gateways/tui/dag.py`: older Python/Rich DAG renderer with
   actual edge routing. This is the best source to port for graph edges.
 
 What is already good:
@@ -95,7 +95,7 @@ Primary gaps:
 Use a persistent split layout:
 
 ```text
- dagagent  ● ready                         Tab focus  / search  ? help
+ glassrail  ● ready                         Tab focus  / search  ? help
 ┌─ graph ───────────────────────┐┌─ transcript ───────────────────────────┐
 │     ┌──────────────┐          ││ ❯ user prompt                           │
 │     │● 1 search    │          ││                                          │
@@ -126,7 +126,7 @@ for a DAG agent, not a hidden alternate screen.
 Use stacked panels:
 
 ```text
- dagagent  working 12s                         g graph  t thoughts  ? help
+ glassrail  working 12s                         g graph  t thoughts  ? help
 ┌─ plan / graph summary ────────────────────────────────────────────────────┐
 │ ● 1 search ──▶ ▶ 2 synth ──▶ · 3 result                                   │
 └────────────────────────────────────────────────────────────────────────────┘
@@ -169,7 +169,7 @@ Use semantic style methods:
 Default palette direction:
 
 - Base: terminal default background, not a hard-coded dark slab.
-- Primary accent: cyan/teal for dagagent identity and focus.
+- Primary accent: cyan/teal for glassrail identity and focus.
 - Secondary accent: amber for in-progress/attention.
 - Success/error: terminal green/red, with glyph labels so color is not the only
   carrier.
@@ -268,7 +268,7 @@ position invariant is fragile and makes future graph payload enrichment risky.
 
 ### Layout algorithm
 
-Port the proven Python/Rich renderer from `src/dagagent/gateways/tui/dag.py`.
+Port the proven Python/Rich renderer from `src/glassrail/gateways/tui/dag.py`.
 
 Algorithm:
 
@@ -457,7 +457,7 @@ are enough.
 
 Files:
 
-- `src/dagagent/gateways/acp/server.py`
+- `src/glassrail/gateways/acp/server.py`
 - `clients/tui/src/acp/messages.rs`
 - `clients/tui/src/graph.rs`
 - `clients/tui/src/ui.rs`
@@ -603,7 +603,7 @@ UI tests:
 Manual smoke tests:
 
 - Fake agent, no model server.
-- Real `uv run dagagent acp` with local model when available.
+- Real `uv run glassrail acp` with local model when available.
 - Resize at 80x24, 120x40, 200x60.
 - tmux with mouse on and off.
 - Terminal selection with Shift-drag and copy/select mode.

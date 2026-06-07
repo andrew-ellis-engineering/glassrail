@@ -1,13 +1,13 @@
 # Spec: node-level harness evals
 
-Status: **proposed** · Audience: dagagent + eval-framework maintainers · Companion
-to `suites/dagagent/EVAL_PLAN.md` (end-to-end) and `docs/evals.md` (how to run).
+Status: **proposed** · Audience: glassrail + eval-framework maintainers · Companion
+to `suites/glassrail/EVAL_PLAN.md` (end-to-end) and `docs/evals.md` (how to run).
 
 ---
 
 ## 1. The gap this closes
 
-The `dagagent` suite today evaluates **request → final answer**. That measures
+The `glassrail` suite today evaluates **request → final answer**. That measures
 *model + harness in aggregate*. It cannot localize a harness defect: if
 fresh-context leaks, a branch skips the wrong nodes, the wrong `result` node is
 chosen as the final output, or extracted tool args are dropped, the only symptom
@@ -34,7 +34,7 @@ layers differ only in whether the model under the node is **scripted**
 
 ## 2. What the harness actually does (the contract under test)
 
-Grounded in `src/dagagent/executor/executor.py`. These are the behaviors the
+Grounded in `src/glassrail/executor/executor.py`. These are the behaviors the
 node-level suite must pin. Citations are to the current implementation so the
 assertions track real code, not an idealized model.
 
@@ -114,11 +114,11 @@ assertions track real code, not an idealized model.
 
 ---
 
-## 4. Enabling infrastructure (dagagent changes)
+## 4. Enabling infrastructure (glassrail changes)
 
 Four additions. All small; (a) and (b) are the load-bearing ones.
 
-### 4.1 `dagagent exec-plan` — run a fixed plan, skip planning
+### 4.1 `glassrail exec-plan` — run a fixed plan, skip planning
 
 A new CLI command that reads a plan JSON (file arg or stdin), builds an
 `ExecutionState` with that plan, runs **only** the executor, and emits the *same*
@@ -126,8 +126,8 @@ A new CLI command that reads a plan JSON (file arg or stdin), builds an
 the `resume` path (`executor.execute(state)`), so this is a thin entry point.
 
 ```bash
-dagagent exec-plan plan.json --json            # validate + execute, emit envelope
-dagagent exec-plan plan.json --json --no-validate   # negative tests: feed an invalid plan
+glassrail exec-plan plan.json --json            # validate + execute, emit envelope
+glassrail exec-plan plan.json --json --no-validate   # negative tests: feed an invalid plan
 ```
 
 `--no-validate` lets us assert executor-level error handling for malformed plans
@@ -142,8 +142,8 @@ string the model would have returned for the next LLM call.
 
 ```toml
 # resolved from env for the eval subprocess
-DAGAGENT_TIER0__KIND = "scripted"
-DAGAGENT_TIER0__SCRIPTED_PATH = "/abs/path/responses.jsonl"
+GLASSRAIL_TIER0__KIND = "scripted"
+GLASSRAIL_TIER0__SCRIPTED_PATH = "/abs/path/responses.jsonl"
 ```
 
 ```jsonl
@@ -170,7 +170,7 @@ end-to-end suite (the `tool-args-path` claim becomes real).
 
 ### 4.4 eval-framework wiring
 
-- **Subject**: extend `dagagent-cli` with a `mode = "exec-plan"` backend-config
+- **Subject**: extend `glassrail-cli` with a `mode = "exec-plan"` backend-config
   flag that swaps argv from `run <prompt>` to `exec-plan <plan_fixture>` and
   installs the scripted responses path into the subprocess env. No new subject
   class; reuse capture/timeout/env machinery added in harness 0.2.1.
@@ -212,7 +212,7 @@ expect_tier = 2
 text = "Tool node 1 was called with the path from context"
 grader = "trajectory"
 node_id = 1
-expect_args_contains = "/tmp/dagagent-eval/app.conf"   # checks args_used
+expect_args_contains = "/tmp/glassrail-eval/app.conf"   # checks args_used
 
 # deterministic grader on a single node's output
 [[criteria]]

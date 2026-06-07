@@ -1,20 +1,20 @@
 # Terminal UI
 
-`dagagent tui` submits a task to a running gateway and renders its progress
+`glassrail tui` submits a task to a running gateway and renders its progress
 live in the terminal — the plan, each node as it runs, and the final output.
 
 ## Usage
 
-Start a gateway (`uvicorn dagagent.gateways.rest:app`), then:
+Start a gateway (`uvicorn glassrail.gateways.rest:app`), then:
 
 ```bash
-dagagent tui "what do I have on my calendar today?"
+glassrail tui "what do I have on my calendar today?"
 ```
 
 Point it at a non-default gateway with `--url`:
 
 ```bash
-dagagent tui "summarise my unread mail" --url http://my-host:8000
+glassrail tui "summarise my unread mail" --url http://my-host:8000
 ```
 
 The view updates as events arrive. Once the plan is ready it draws the DAG as

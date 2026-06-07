@@ -1,8 +1,8 @@
-site_name: dagagent
+site_name: Glassrail
 site_description: A DAG-planning agent with deterministic tier routing and fresh context per node.
-site_url: https://github.com/andrewellis/dagagent
-repo_url: https://github.com/andrewellis/dagagent
-repo_name: andrewellis/dagagent
+site_url: https://github.com/andrewellis/glassrail
+repo_url: https://github.com/andrewellis/glassrail
+repo_name: andrewellis/glassrail
 
 theme:
   name: material
@@ -57,6 +57,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Naming: naming.md
   - Architecture: architecture.md
   - Evals: evals.md
   - Observability: observability.md

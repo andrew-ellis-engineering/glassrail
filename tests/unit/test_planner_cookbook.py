@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dagagent.planner.cookbook import PlannerCookbook
+from glassrail.planner.cookbook import PlannerCookbook
 
 
 def test_default_cookbook_loads_bundled_recipes() -> None:

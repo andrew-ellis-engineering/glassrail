@@ -12,16 +12,16 @@ from typing import Any
 
 from evalkit.subjects.base import RunResult, Subject
 from evalkit.subjects.claude_cli import ClaudeCliSubject
-from evalkit.subjects.dagagent_cli import DagAgentCliSubject
-from evalkit.subjects.dagagent_exec_plan import DagAgentExecPlanSubject
-from evalkit.subjects.dagagent_gateway import DagAgentGatewaySubject
+from evalkit.subjects.glassrail_cli import GlassrailCliSubject
+from evalkit.subjects.glassrail_exec_plan import GlassrailExecPlanSubject
+from evalkit.subjects.glassrail_gateway import GlassrailGatewaySubject
 from evalkit.subjects.openai_compat import OpenAICompatSubject
 
 _REGISTRY: dict[str, type] = {
     "claude-cli": ClaudeCliSubject,
-    "dagagent-cli": DagAgentCliSubject,
-    "dagagent-exec-plan": DagAgentExecPlanSubject,
-    "dagagent-gateway": DagAgentGatewaySubject,
+    "glassrail-cli": GlassrailCliSubject,
+    "glassrail-exec-plan": GlassrailExecPlanSubject,
+    "glassrail-gateway": GlassrailGatewaySubject,
     "openai-compat": OpenAICompatSubject,
 }
 
@@ -43,9 +43,9 @@ def build_subject(backend: str, config: dict[str, Any] | None = None) -> Subject
 
 __all__ = [
     "ClaudeCliSubject",
-    "DagAgentCliSubject",
-    "DagAgentExecPlanSubject",
-    "DagAgentGatewaySubject",
+    "GlassrailCliSubject",
+    "GlassrailExecPlanSubject",
+    "GlassrailGatewaySubject",
     "OpenAICompatSubject",
     "RunResult",
     "Subject",

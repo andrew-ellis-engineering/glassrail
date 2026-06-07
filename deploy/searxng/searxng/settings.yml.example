@@ -1,4 +1,4 @@
-# SearXNG settings for dag-agent local deployment — TEMPLATE.
+# SearXNG settings for glassrail local deployment — TEMPLATE.
 #
 # First-time setup:
 #   cp settings.yml.example settings.yml

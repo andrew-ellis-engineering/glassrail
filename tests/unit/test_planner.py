@@ -8,12 +8,12 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from dagagent.config import NodeBudgets, NodePrompts, Settings, TierConfig
-from dagagent.core import NodeType, PlanRejectedError, PlanValidationError
-from dagagent.harness import ToolHarness, register_builtins
-from dagagent.planner import Planner
-from dagagent.providers import Chunk, Message, TierRouter
-from dagagent.validator import PlanValidator
+from glassrail.config import NodeBudgets, NodePrompts, Settings, TierConfig
+from glassrail.core import NodeType, PlanRejectedError, PlanValidationError
+from glassrail.harness import ToolHarness, register_builtins
+from glassrail.planner import Planner
+from glassrail.providers import Chunk, Message, TierRouter
+from glassrail.validator import PlanValidator
 
 
 class _FixedProvider:
@@ -319,7 +319,7 @@ async def test_rejection_is_logged_with_reason_and_class(
     payload = json.dumps({"rejection": "I cannot predict future prices"})
     planner = _planner_from(_FixedProvider(payload=payload), harness, settings)
 
-    with caplog.at_level(logging.WARNING, logger="dagagent.planner.planner"):
+    with caplog.at_level(logging.WARNING, logger="glassrail.planner.planner"):
         attempt = await planner.plan_attempt("predict tomorrow's Bitcoin price", attempt=0)
 
     assert attempt.error_type == "rejection"

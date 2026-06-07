@@ -2,7 +2,7 @@
 //!
 //! Speaks just enough of the protocol over stdio to exercise the client end to
 //! end: handshake, a plan that streams node-by-node, a plan-approval gate (with
-//! guided replan on reject-with-feedback), and a final result. No dagagent, no
+//! guided replan on reject-with-feedback), and a final result. No glassrail, no
 //! MLX — purely scripted, with small delays so the streaming is visible.
 //!
 //! Run the TUI against it (the client spawns this as its agent):

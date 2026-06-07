@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manual smoke test for the `dagagent acp` adapter.
+"""Manual smoke test for the `glassrail acp` adapter.
 
 Spawns the adapter as a subprocess and drives a real session over stdio JSON-RPC:
 initialize → session/new → session/prompt. Prints each session/update as it
@@ -27,7 +27,7 @@ async def main(prompt: str) -> int:
     proc = await asyncio.create_subprocess_exec(
         "uv",
         "run",
-        "dagagent",
+        "glassrail",
         "acp",
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,

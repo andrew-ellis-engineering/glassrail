@@ -1,9 +1,9 @@
-# dagagent-tui
+# glassrail-tui
 
-A fast terminal client for [dagagent](../../README.md), built on
+A fast terminal client for [glassrail](../../README.md), built on
 [ratatui](https://ratatui.rs) over the **Agent Client Protocol (ACP)**.
 
-It spawns `dagagent acp` as a subprocess, performs the ACP handshake, and runs
+It spawns `glassrail acp` as a subprocess, performs the ACP handshake, and runs
 an interactive loop: submit a task, watch the plan and node execution stream in,
 approve or reject-with-feedback the plan, and read the result — all in the
 terminal, with no gateway to run.
@@ -15,20 +15,20 @@ the agent command must be resolvable.
 
 ```bash
 cd clients/tui
-cargo run                          # spawns `dagagent acp` (must be on PATH)
-cargo run -- uv run dagagent acp   # or run the agent via uv from the repo
+cargo run                          # spawns `glassrail acp` (must be on PATH)
+cargo run -- uv run glassrail acp   # or run the agent via uv from the repo
 ```
 
 The agent command resolves in this order: positional args → the
-`DAGAGENT_AGENT_CMD` environment variable (space-separated) → the default
-`dagagent acp`.
+`GLASSRAIL_AGENT_CMD` environment variable (space-separated) → the default
+`glassrail acp`.
 
 ### Try it without a model server
 
 A scripted fake agent (`examples/fake_agent.rs`) speaks the protocol with canned
 responses — a streaming plan, the approval gate, guided replan on
 reject-with-feedback, and a result — so you can drive the full TUI with no
-dagagent or MLX:
+glassrail or MLX:
 
 ```bash
 cargo run -- cargo run --quiet --example fake_agent

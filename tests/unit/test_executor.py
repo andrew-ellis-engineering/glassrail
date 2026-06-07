@@ -9,7 +9,7 @@ from collections.abc import Sequence as _Sequence
 
 import pytest
 
-from dagagent.config import (
+from glassrail.config import (
     NodeBudgets,
     NodePrompts,
     Settings,
@@ -17,7 +17,7 @@ from dagagent.config import (
     ToolApprovalPolicy,
     ToolApprovalSettings,
 )
-from dagagent.core import (
+from glassrail.core import (
     ExecutionState,
     Node,
     NodeStatus,
@@ -27,12 +27,12 @@ from dagagent.core import (
     TaskStatus,
     new_task_id,
 )
-from dagagent.events import EventBus, NodeOutputChunk, TaskCompleted
-from dagagent.executor import Executor
-from dagagent.executor.executor import JsonFieldStreamer
-from dagagent.executor.tool_approval import ToolApprovalBroker
-from dagagent.harness import ToolHarness, register_builtins
-from dagagent.providers import Chunk, Message, TierRouter
+from glassrail.events import EventBus, NodeOutputChunk, TaskCompleted
+from glassrail.executor import Executor
+from glassrail.executor.executor import JsonFieldStreamer
+from glassrail.executor.tool_approval import ToolApprovalBroker
+from glassrail.harness import ToolHarness, register_builtins
+from glassrail.providers import Chunk, Message, TierRouter
 
 
 class _ScriptedProvider:

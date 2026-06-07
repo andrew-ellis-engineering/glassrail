@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dagagent.harness import ToolHarness, register_builtins
-from dagagent.planner.tool_digest import render_tool_capability_digest
+from glassrail.harness import ToolHarness, register_builtins
+from glassrail.planner.tool_digest import render_tool_capability_digest
 
 
 def test_tool_digest_groups_builtin_capabilities() -> None:

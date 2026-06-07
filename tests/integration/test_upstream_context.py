@@ -10,12 +10,12 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator, Sequence
 
-from dagagent.config import Settings
-from dagagent.core import ExecutionState, Plan, new_task_id
-from dagagent.executor import Executor
-from dagagent.harness import ToolHarness, register_builtins
-from dagagent.providers import Chunk, Message, TierRouter
-from dagagent.validator import PlanValidator
+from glassrail.config import Settings
+from glassrail.core import ExecutionState, Plan, new_task_id
+from glassrail.executor import Executor
+from glassrail.harness import ToolHarness, register_builtins
+from glassrail.providers import Chunk, Message, TierRouter
+from glassrail.validator import PlanValidator
 
 
 class _CapturingScripted:

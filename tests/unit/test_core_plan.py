@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from dagagent.core import Node, NodeType, Plan, SummaryFormat
+from glassrail.core import Node, NodeType, Plan, SummaryFormat
 
 
 def test_node_minimum_fields() -> None:

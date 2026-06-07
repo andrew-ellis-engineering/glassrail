@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dagagent.config import prompts
+from glassrail.config import prompts
 
 
 def test_planner_prompt_requests_right_sized_fresh_context_dags() -> None:
