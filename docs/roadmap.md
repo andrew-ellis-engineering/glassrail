@@ -157,6 +157,16 @@ Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing
   instead of displaying raw Markdown text. This should pair with the planned
   wrap-aware/freeform scrolling work so formatted output does not clip or make
   copy/selection worse.
+- **TUI copy/paste support** — the TUI currently captures raw keyboard input,
+  blocking OS clipboard shortcuts (`Cmd+C`/`Cmd+V`) and making it impossible to
+  copy agent output without terminal-emulator-specific workarounds (e.g.
+  Option-drag in iTerm2). Fix on two axes: (1) selecting text in the output
+  pane should write to the system clipboard automatically, and (2) a dedicated
+  keybind (e.g. `y` or `Cmd+C` when output is focused) should copy the last
+  complete node output or the full final result. Should be implemented alongside
+  the Markdown rendering and wrap-aware scrolling work, since all three affect
+  how output text is laid out and selectable. Applies to both the Rust TUI
+  (`clients/tui`) and the Python Rich TUI (`glassrail tui`).
 
 ## Phase 2.5 — Dreaming
 
