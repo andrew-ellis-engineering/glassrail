@@ -186,9 +186,12 @@ async def test_planner_includes_plan_cookbook(harness: ToolHarness) -> None:
     user_msg = provider.user_seen[0]
     assert "Planning cookbook:" in user_msg
     assert "best-effort heuristic" in user_msg
+    assert "Top candidate recipes:" in user_msg
+    assert "Compare nearby shapes" in user_msg
     assert "Never copy the skeleton verbatim" in user_msg
     assert "right-sized" in user_msg
-    assert "Selected recipe: web_research" in user_msg
+    assert "Candidate 1: web_research" in user_msg
+    assert "Candidate 2:" in user_msg
 
 
 async def test_planner_includes_tool_capability_digest(harness: ToolHarness) -> None:

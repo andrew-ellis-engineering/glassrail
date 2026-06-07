@@ -32,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selection keywords, adaptable skeletons, and adaptation notes. The planner
   injects one selected recipe as a scaffold rather than hardcoded prompt text
   or a verbatim template.
+- Planner cookbook selection now injects the top three ranked candidate
+  recipes into the planning prompt, letting the model compare nearby DAG shapes
+  without an extra planner/classifier call.
 
 ### Changed
 - Planner subplan guidance now explicitly shows the correct nested tool-node

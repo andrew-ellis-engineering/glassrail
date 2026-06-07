@@ -37,7 +37,22 @@ def test_cookbook_selects_single_tool_for_named_tool_capability() -> None:
     assert recipe.id == "single_tool"
 
 
-def test_cookbook_prompt_says_to_adapt_selected_recipe() -> None:
+def test_cookbook_selects_top_k_ranked_recipes() -> None:
+    cookbook = PlannerCookbook.load_default()
+
+    recipes = cookbook.select_many(
+        request="Research and compare Raft and Paxos using web sources",
+        tool_names={"web_search", "file_read"},
+        k=3,
+    )
+
+    assert len(recipes) == 3
+    assert recipes[0].id in {"compare_aggregate", "web_research"}
+    assert "web_research" in {recipe.id for recipe in recipes}
+    assert "compare_aggregate" in {recipe.id for recipe in recipes}
+
+
+def test_cookbook_prompt_says_to_adapt_ranked_candidates() -> None:
     cookbook = PlannerCookbook.load_default()
 
     prompt = cookbook.to_prompt(
@@ -46,8 +61,11 @@ def test_cookbook_prompt_says_to_adapt_selected_recipe() -> None:
     )
 
     assert "best-effort heuristic" in prompt
-    assert "scaffold, not a template" in prompt
+    assert "scaffolds, not templates" in prompt
+    assert "Compare nearby shapes" in prompt
     assert "Never copy the skeleton verbatim" in prompt
     assert "right-sized" in prompt
     assert "include every node needed for correctness" in prompt
-    assert "Selected recipe: compare_aggregate" in prompt
+    assert "Top candidate recipes:" in prompt
+    assert "Candidate 1: compare_aggregate" in prompt
+    assert "Candidate 2:" in prompt

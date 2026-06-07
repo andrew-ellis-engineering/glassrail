@@ -38,11 +38,11 @@ class CookbookRecipe:
             adaptation_notes=_string_tuple(raw.get("adaptation_notes", [])),
         )
 
-    def to_prompt(self) -> str:
+    def to_prompt(self, *, heading: str = "Selected recipe") -> str:
         """Render this recipe for the planner prompt."""
         return "\n".join(
             [
-                f"Selected recipe: {self.id} — {self.title}",
+                f"{heading}: {self.id} — {self.title}",
                 f"Description: {self.description}",
                 "When to use:",
                 *[f"- {item}" for item in self.when_to_use],
@@ -79,31 +79,48 @@ class PlannerCookbook:
 
     def select(self, *, request: str, tool_names: set[str]) -> CookbookRecipe:
         """Choose one likely-useful recipe without treating it as mandatory."""
+        return self.select_many(request=request, tool_names=tool_names, k=1)[0]
+
+    def select_many(
+        self,
+        *,
+        request: str,
+        tool_names: set[str],
+        k: int = 3,
+    ) -> tuple[CookbookRecipe, ...]:
+        """Choose the top-k likely-useful recipes for one planner prompt."""
+        if k < 1:
+            raise ValueError("k must be at least 1")
         request_lower = request.lower()
-        best = max(
+        ranked = sorted(
             self._recipes,
             key=lambda recipe: (
                 _recipe_score(recipe, request_lower=request_lower, tool_names=tool_names),
                 recipe.id,
             ),
+            reverse=True,
         )
-        return best
+        return tuple(ranked[: min(k, len(ranked))])
 
-    def to_prompt(self, *, request: str, tool_names: set[str]) -> str:
-        """Render the cookbook guidance and one candidate recipe."""
-        selected = self.select(request=request, tool_names=tool_names)
+    def to_prompt(self, *, request: str, tool_names: set[str], k: int = 3) -> str:
+        """Render cookbook guidance and ranked candidate recipes."""
+        selected = self.select_many(request=request, tool_names=tool_names, k=k)
         available = ", ".join(f"{recipe.id}: {recipe.description}" for recipe in self._recipes)
+        candidates = "\n\n".join(
+            recipe.to_prompt(heading=f"Candidate {index}")
+            for index, recipe in enumerate(selected, start=1)
+        )
         return (
             "Planning cookbook:\n"
-            "- The candidate recipe below is selected by a best-effort heuristic; "
-            "it is a scaffold, not a template. Adapt, combine, or ignore it when "
-            "the user's request, available tools, or validator constraints require "
-            "a different DAG.\n"
+            "- The ranked candidate recipes below are selected by a best-effort "
+            "heuristic; they are scaffolds, not templates. Compare nearby shapes, "
+            "then adapt, combine, or ignore them when the user's request, "
+            "available tools, or validator constraints require a different DAG.\n"
             "- Never copy the skeleton verbatim unless it exactly fits the request. "
             "Make the plan right-sized: include every node needed for correctness, "
             "but avoid redundant or decorative nodes.\n"
             f"- Available recipes: {available}\n\n"
-            f"{selected.to_prompt()}"
+            f"Top candidate recipes:\n{candidates}"
         )
 
 

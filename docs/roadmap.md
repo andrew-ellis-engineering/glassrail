@@ -140,7 +140,7 @@ Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing
   (e.g. Obsidian vault notes). Gives the planner a starting scaffold for
   well-understood task types rather than reasoning from scratch each time.
   *[needs further spec: retrieval mechanism, file format, update workflow]*
-- **Top-k planner cookbook candidates** — evolve the current single-candidate
+- **Top-k planner cookbook candidates** ✓ — evolve the current single-candidate
   recipe injection into a top-k selection (`k=2–3`) so the planner can compare
   nearby plan shapes without paying for a second planning model call. This is
   the incremental step before a dedicated planner preflight/classifier node or
