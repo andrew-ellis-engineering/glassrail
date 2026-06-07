@@ -160,12 +160,59 @@ Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing
 
 ## Phase 2.5 — Dreaming
 
-Memory consolidation cron, audit trail, user-curation workflow.
+Memory consolidation cron, audit trail, user-curation workflow, cloud tier routing.
 
 - **Long / medium / short-term memory model** — define the three tiers (what
   qualifies, lifetime, retrieval) and how they are managed and surfaced to
   nodes. *[needs further spec: tier definitions, eviction/consolidation rules,
   injection points in context assembly]*
+
+- **`glassrail routing recompute` — one-shot tier-ROI model selector** *(prerequisite:
+  cloud tiers 2–3 wired to real OpenRouter endpoints)* — a CLI command that
+  deterministically selects the highest-ROI OpenRouter model for each cloud tier
+  (2–3; local tiers 0–1 are out of scope) and writes `routing_table.json` for
+  the tier router to consume. Not a cron — run manually and inspect outputs for
+  several weeks before trusting automation.
+
+  **Algorithm:** for each candidate `(model_id, provider_id, mode)` in the
+  eligible pool, score `ROI = Q^α / C_eff^β` where `Q` is a quality index from
+  a version-controlled `quality_scores.yaml` (maintained by hand on a
+  weekly–biweekly cadence; not auto-pulled) and `C_eff = (w_in·price_in +
+  w_out·price_out) · (1 + credit_fee)` using workload blend weights from
+  telemetry (default `3:1` input:output). Default `α = β = 1` → cost-leaning:
+  the quality band already enforces the floor, so cheapest-in-band wins unless
+  `α` is raised.
+
+  **Eligibility filters before scoring:** in-band quality index, `status ==
+  "current"` (no deprecated/preview unless opted in), required modalities,
+  minimum context length, effective-cost ceiling per tier, minimum provider
+  count (resilience), provider allow/blocklist (data-residency policy), and the
+  promo-price rule (score on list price unless the promo outlives the next
+  scheduled recompute).
+
+  **Tiebreak + hysteresis:** total-order sort `(-roi, -quality, cost_eff,
+  model_id, provider_id, mode)` guarantees a unique winner. Incumbent stays
+  selected unless the challenger's ROI beats it by ≥ 5% (`hysteresis`
+  threshold) — prevents day-to-day flapping from minor price moves.
+
+  **Safety invariant:** after writing `routing_table.json`, the validator must
+  assert that the selected models maintain the router's monotonicity assumption
+  (T2 quality < T3 quality < T4 quality). ROI optimisation within a band can
+  silently invert capability ordering if the assertion is absent.
+
+  **Outputs:** `routing_table.json` (atomic rename publish) + append-only
+  `selection_log.jsonl` recording winner, runner-up, both ROI scores, decision
+  reason (`selected_challenger` / `unchanged` / `kept_incumbent__within_hysteresis`
+  / `kept_prior__empty_pool`), `snapshot_hash`, and `config_hash` per tier per
+  run — answers "why did Tier 3 change?" months later.
+
+  **Open questions to resolve at build time:** (1) confirm `α=β=1` cost-leaning
+  default or raise `α` to bias toward band-top quality; (2) programmatic
+  Artificial Analysis access for `Q` or manual `quality_scores.yaml`; (3)
+  measured input:output blend weights from telemetry; (4) provider blocklist
+  policy (relevant given Chinese-origin models dominating value tiers); (5)
+  whether to include `preview` models. Full spec: `vault/Spec - Tier ROI Model
+  Selector.md`.
 
 ## Phase 3 — Insomnia
 
@@ -179,4 +226,27 @@ Autonomous research, scheduler, web tools, emergent subplans, mid-graph subplans
 
 ## Phase 4 — Production & Community
 
-Security & sandboxing, MCP client, SKILL.md plugin format, plugin SDK + marketplace, A2A, voice, K8s manifests.
+Security & sandboxing, MCP client, SKILL.md plugin format, plugin SDK + marketplace, A2A, voice, K8s manifests, automated tier-ROI cron.
+
+- **Automated nightly tier-ROI cron** *(builds on the Phase 2.5 `routing recompute`
+  CLI; requires several weeks of manual operation to establish confidence)* —
+  promote the one-shot recompute command to a scheduled nightly cron
+  (`17 3 * * *` UTC, off-peak). Add the production guardrails deferred from the
+  Phase 2.5 CLI: price-spike detection (veto promotion if a selected model's
+  `C_eff` moved > 50% vs the prior snapshot — likely a promo expiry or data
+  error), pool-collapse warnings, single-flight lock (prevent concurrent runs),
+  and structured alert routing (info on tier change, warn on pool collapse or
+  smoke-test veto, error on fetch failure or invalid config). Optional liveness
+  gate: post-selection smoke request per newly-selected model — veto the
+  promotion if it errors or times out; keep the smoke result in the run log so
+  the selection remains explainable. Note the trade-off: enabling the smoke test
+  introduces a liveness dependency and means the promotion is no longer
+  reproducible from data alone.
+
+  **Additional controls:** per-run change budget (cap how many tiers may change
+  in a single run, e.g. `change_budget_per_run: 2`), per-tier cooldown (a tier
+  may not change more than once per N days), `--snapshot <path>` replay flag for
+  audit and debugging against old snapshots without re-fetching. Exit codes
+  wired to the health monitor: `0` success, `2` published with warnings, `3` no
+  publish / kept prior, `4` invalid config. Full spec: `vault/Spec - Tier ROI
+  Model Selector.md`.
