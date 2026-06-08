@@ -354,6 +354,7 @@ class Planner:
                     )
                 )
 
+            _repair_plan_descriptions(parsed)
             try:
                 plan = Plan.model_validate(parsed)
                 self._validator.validate(plan)
@@ -406,3 +407,55 @@ class Planner:
             if any(keyword in text for keyword in suspected_keywords)
             else "legitimate"
         )
+
+
+def _repair_plan_descriptions(plan_payload: dict[str, Any]) -> None:
+    """Fill repairable missing descriptions before strict plan validation."""
+    nodes = plan_payload.get("nodes")
+    if isinstance(nodes, list):
+        _repair_node_descriptions(cast("list[Any]", nodes))
+
+
+def _repair_node_descriptions(nodes: list[Any]) -> None:
+    for raw_node in nodes:
+        if not isinstance(raw_node, dict):
+            continue
+        node = cast("dict[str, Any]", raw_node)
+        description = node.get("description")
+        if not isinstance(description, str) or not description.strip():
+            node["description"] = _fallback_node_description(node)
+
+        raw_subplan = node.get("subplan")
+        if isinstance(raw_subplan, dict):
+            subplan = cast("dict[str, Any]", raw_subplan)
+            nested_nodes = subplan.get("nodes")
+            if isinstance(nested_nodes, list):
+                _repair_node_descriptions(cast("list[Any]", nested_nodes))
+
+
+def _fallback_node_description(node: dict[str, Any]) -> str:
+    node_type = str(node.get("type") or "node")
+    node_id = node.get("id")
+    suffix = f" {node_id}" if isinstance(node_id, int) else ""
+
+    if node_type == "decision":
+        condition = node.get("condition")
+        if isinstance(condition, str) and condition.strip():
+            return f"Decide whether: {condition.strip()}"
+        fallback = "Choose the correct yes/no branch"
+    elif node_type == "tool":
+        tool = node.get("tool")
+        if isinstance(tool, str) and tool.strip():
+            return f"Run the {tool.strip()} tool"
+        fallback = f"Execute node{suffix}"
+    else:
+        fallback_by_type = {
+            "subplan": f"Execute subplan{suffix}",
+            "summary": f"Summarize upstream context{suffix}",
+            "synthesis": f"Synthesize upstream context{suffix}",
+            "think": f"Reason through node{suffix}",
+            "result": f"Produce the final answer{suffix}",
+        }
+        fallback = fallback_by_type.get(node_type, f"Execute node{suffix}")
+
+    return fallback.strip()

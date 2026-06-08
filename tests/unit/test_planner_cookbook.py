@@ -52,6 +52,47 @@ def test_cookbook_selects_top_k_ranked_recipes() -> None:
     assert "compare_aggregate" in {recipe.id for recipe in recipes}
 
 
+def test_cookbook_prefers_conditional_for_obvious_binary_branch() -> None:
+    cookbook = PlannerCookbook.load_default()
+
+    recipe = cookbook.select(
+        request=(
+            "Is Madrid in the northern or southern hemisphere? If northern, "
+            "name a winter month; otherwise name a summer month."
+        ),
+        tool_names=set(),
+    )
+
+    assert recipe.id == "conditional_branch"
+
+
+def test_cookbook_selects_compare_for_recommendation_axes() -> None:
+    cookbook = PlannerCookbook.load_default()
+
+    recipe = cookbook.select(
+        request=(
+            "Compare TCP and UDP on latency, packet loss, and trade-offs, then recommend one."
+        ),
+        tool_names=set(),
+    )
+
+    assert recipe.id == "compare_aggregate"
+
+
+def test_cookbook_selects_direct_answer_for_logic_puzzle() -> None:
+    cookbook = PlannerCookbook.load_default()
+
+    recipe = cookbook.select(
+        request=(
+            "Alice, Bob, and Carol each own exactly one pet. Bob owns the dog. "
+            "Alice does not own the cat. Who owns the fish?"
+        ),
+        tool_names=set(),
+    )
+
+    assert recipe.id == "direct_answer"
+
+
 def test_cookbook_prompt_says_to_adapt_ranked_candidates() -> None:
     cookbook = PlannerCookbook.load_default()
 
@@ -70,3 +111,4 @@ def test_cookbook_prompt_says_to_adapt_ranked_candidates() -> None:
     assert "Candidate 1: compare_aggregate" in prompt
     assert "Candidate 2:" in prompt
     assert "I recommend <option>" in prompt
+    assert "Name the requested candidates and axes" in prompt

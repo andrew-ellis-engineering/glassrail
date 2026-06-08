@@ -304,6 +304,89 @@ async def test_plan_attempt_captures_validation_error(
     assert "unknown tools" in attempt.error
 
 
+async def test_plan_attempt_repairs_missing_decision_description(
+    harness: ToolHarness, settings: Settings
+) -> None:
+    payload = json.dumps(
+        {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "think",
+                    "description": "Determine if 246 is even",
+                    "context_needed": [],
+                },
+                {
+                    "id": 2,
+                    "type": "decision",
+                    "condition": "Is 246 even?",
+                    "branches": {"yes": [3], "no": [4]},
+                    "default_branch": "yes",
+                    "context_needed": [1],
+                },
+                {
+                    "id": 3,
+                    "type": "result",
+                    "description": "Report half of 246",
+                    "context_needed": [1],
+                },
+                {
+                    "id": 4,
+                    "type": "result",
+                    "description": "Report next even number after 246",
+                    "context_needed": [1],
+                },
+            ]
+        }
+    )
+    planner = _planner_from(_FixedProvider(payload=payload), harness, settings)
+
+    attempt = await planner.plan_attempt("if 246 is even, report half", attempt=0)
+
+    assert attempt.valid is True
+    assert attempt.plan is not None
+    assert attempt.plan.nodes[1].description == "Decide whether: Is 246 even?"
+    assert attempt.parsed is not None
+    assert attempt.parsed["nodes"][1]["description"] == "Decide whether: Is 246 even?"
+
+
+async def test_plan_attempt_repairs_nested_missing_description(
+    harness: ToolHarness, settings: Settings
+) -> None:
+    payload = json.dumps(
+        {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "subplan",
+                    "description": "Research option A",
+                    "context_needed": [],
+                    "subplan": {
+                        "nodes": [
+                            {"id": 1, "type": "result", "context_needed": []},
+                        ]
+                    },
+                },
+                {
+                    "id": 2,
+                    "type": "result",
+                    "description": "Return the answer",
+                    "context_needed": [1],
+                },
+            ]
+        }
+    )
+    planner = _planner_from(_FixedProvider(payload=payload), harness, settings)
+
+    attempt = await planner.plan_attempt("delegate a small subtask", attempt=0)
+
+    assert attempt.valid is True
+    assert attempt.plan is not None
+    nested = attempt.plan.nodes[0].subplan
+    assert nested is not None
+    assert nested.nodes[0].description == "Produce the final answer 1"
+
+
 async def test_rejection_returned_as_rejection_error_type(
     harness: ToolHarness, settings: Settings
 ) -> None:

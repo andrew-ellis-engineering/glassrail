@@ -55,6 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   avoiding false "missing context" failures in closed-book evals.
 
 ### Changed
+- Planner validation now repairs missing or blank node descriptions before
+  strict schema validation, including nested subplans, so otherwise-valid plans
+  are not discarded for a recoverable LLM omission.
+- Planner cookbook and prompt guidance now steer obvious binary branches,
+  logic-puzzle deductions, and comparison/recommendation tasks toward explicit
+  decision, reasoning, and per-axis comparison structure.
 - Planner subplan guidance now explicitly shows the correct nested tool-node
   shape (`"type": "tool", "tool": "web_search"`), contrasts it with the invalid
   `"type": "web_search"` schema, and reminds the model to count subplan nodes

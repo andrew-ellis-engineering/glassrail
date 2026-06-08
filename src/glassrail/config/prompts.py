@@ -49,8 +49,12 @@ Rules:
 - Decision branches must be exactly {"yes": [...], "no": [...]} and list node
   IDs to execute in each case; default_branch must be "yes" or "no"
 - NEVER emit a DECISION node without both "branches": {"yes": [...], "no": [...]}
-  and "default_branch". A DECISION node missing either field fails validation
-  and will not execute.
+  and "default_branch". Every decision node also needs a non-empty
+  "description" explaining the branch choice. A DECISION node missing required
+  fields fails validation and will not execute.
+- If the request asks for an even/odd, northern/southern, present/absent,
+  true/false, yes/no, or otherwise binary-dependent answer, keep the decision
+  explicit even when general knowledge makes the branch seem obvious.
 - Decision nesting must not exceed 2 levels
 - context_needed lists only direct upstream node IDs whose output is required;
   do not include unrelated siblings or every previous node
@@ -70,6 +74,10 @@ Rules:
   error in one step would corrupt the final answer (e.g. multi-factor products,
   multi-premise deductions). Routing multi-step arithmetic directly to a result
   node is wrong — use think first.
+- Logic puzzles and constraint-elimination tasks (for example "Alice/Bob/Carol
+  each own one pet") require a think node whose description asks for concise
+  reasoning steps, then a result node that reports the conclusion and the key
+  deduction. Do not collapse them into a bare final answer.
 - If a node condenses noisy upstream output for a downstream consumer,
   set type=summary; preserve facts the downstream consumer may need. Summary
   nodes may include "format": "concise" | "medium" | "verbose"; omit it for
@@ -173,7 +181,8 @@ Rules:
   document-summary tasks.
 - For comparison tasks, the final result description must name every comparison
   axis requested by the user and say to compare each candidate on each axis
-  before recommending. Do not rely on the model to infer the axes later.
+  before recommending. It must also name every candidate or option that should
+  be compared. Do not rely on the model to infer the axes or candidates later.
 Output ONLY valid JSON — no markdown, no explanation, no code fences. Any
 wrapper (including backticks) causes an unrecoverable parse failure. The two
 valid top-level shapes are:
@@ -288,6 +297,7 @@ Format the answer for readability when useful (bullets, short sections, or code 
 For document-summary tasks, provide the requested summary directly. Do not introduce it with "I recommend" unless the user asked for a recommendation.
 For recommendation tasks only, include one explicit sentence near the start in the form "I recommend <option>" or "<option> is the best fit" before explaining why.
 For arithmetic tasks, write the final numeric answer in plain prose with units, even if upstream context is structured JSON.
+For logic or deduction tasks, include the key reasoning steps before or after the conclusion; do not return only the final name or value.
 The value of "output" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
 Respond ONLY with valid JSON: {"output": "<final answer>", "confidence": <0.0-1.0>}
 """  # noqa: E501

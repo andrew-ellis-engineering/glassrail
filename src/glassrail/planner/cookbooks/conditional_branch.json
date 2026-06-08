@@ -2,7 +2,22 @@
   "id": "conditional_branch",
   "title": "Conditional Branch",
   "description": "Evaluate a binary condition, execute the appropriate branch, then produce a final answer.",
-  "keywords": ["if", "whether", "depends", "conditional", "branch", "decide", "check"],
+  "keywords": [
+    "if",
+    "whether",
+    "otherwise",
+    "else",
+    "depends",
+    "conditional",
+    "branch",
+    "decide",
+    "check",
+    "even",
+    "odd",
+    "northern",
+    "southern",
+    "hemisphere"
+  ],
   "when_to_use": [
     "A later action depends on the result of an earlier node.",
     "The condition can be phrased as a binary yes/no question."
@@ -15,6 +30,8 @@
   ],
   "adaptation_notes": [
     "Branches must be exactly yes and no; choose a default_branch that is safe if the decision call fails.",
+    "Every decision node needs a non-empty description as well as condition, branches, and default_branch.",
+    "If the request provides concrete values that make the branch look obvious, still emit the decision node; the executor, not the planner, evaluates the branch.",
     "Do not use a decision node for simple sequencing where no branch is needed."
   ]
 }

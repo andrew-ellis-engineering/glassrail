@@ -2,7 +2,24 @@
   "id": "compare_aggregate",
   "title": "Compare Or Aggregate",
   "description": "Gather independent facts, combine them, then present a comparison or aggregate answer.",
-  "keywords": ["compare", "versus", "vs", "aggregate", "rank", "best", "across", "each"],
+  "keywords": [
+    "compare",
+    "versus",
+    "vs",
+    "aggregate",
+    "rank",
+    "best",
+    "recommend",
+    "trade-off",
+    "trade-offs",
+    "throughput",
+    "durability",
+    "latency",
+    "license",
+    "sql",
+    "across",
+    "each"
+  ],
   "when_to_use": [
     "The request asks to compare multiple items or aggregate several independent facts.",
     "The facts can be gathered independently before synthesis."
@@ -16,6 +33,8 @@
     "Keep fan-out within the plan node budget; consolidate similar lookups when possible.",
     "Use a result node directly if the synthesis node is already the final user answer and no extra shaping is needed.",
     "For recommendations, the final result description should explicitly request prose that says 'I recommend <option>' or '<option> is the best fit' before the explanation.",
-    "For comparison tasks, require explicit comparison on every requested axis for every candidate; do not leave axes implicit."
+    "For comparison tasks, require explicit comparison on every requested axis for every candidate; do not leave axes implicit.",
+    "Name the requested candidates and axes in the final result description so the result node cannot answer with a generic recommendation.",
+    "When the user names trade-offs, ask the final result to discuss the losing options honestly before the recommendation."
   ]
 }

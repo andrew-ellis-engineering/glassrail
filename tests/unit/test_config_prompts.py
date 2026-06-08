@@ -36,6 +36,10 @@ def test_planner_prompt_prevents_vague_rejection_and_unregistered_tools() -> Non
     assert 'recommend", "best fit"' in prompt
     assert "put named-person and planted-fact preservation" in prompt
     assert "final result description must name every comparison" in prompt
+    assert "Every decision node also needs a non-empty" in prompt
+    assert "keep the decision" in prompt
+    assert "Logic puzzles and constraint-elimination tasks" in prompt
+    assert "name every candidate" in prompt
 
 
 def test_summary_prompt_prioritizes_downstream_fidelity() -> None:
@@ -66,6 +70,7 @@ def test_synthesis_and_result_prompts_preserve_caveats_without_inventing() -> No
     assert "stable general knowledge" in result
     assert "I recommend <option>" in result
     assert "plain prose with units" in result
+    assert "logic or deduction tasks" in result
     assert 'Do not introduce it with "I recommend"' in result
     # Result must tell the model it is the sole user-visible output
     assert "ONLY text the user will see" in result
