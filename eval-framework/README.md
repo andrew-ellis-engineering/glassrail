@@ -22,9 +22,9 @@ never change:
 | `claude-cli` | `claude -p` | a Claude Code skill (the original target) |
 
 The **judge** (the `llm` grader) is decoupled from the subject — keep it on a
-cheap Claude model, or point it at MLX with `--grader-backend openai-compat`.
-`claude-cli` backends need the `claude` CLI on `PATH`; `glassrail-*` need the
-agent reachable.
+cheap model, point it at MLX, or point it at OpenRouter with
+`--grader-backend openai-compat`. `claude-cli` backends need the `claude` CLI
+on `PATH`; `glassrail-*` need the agent reachable.
 
 ## Quick start
 
@@ -55,9 +55,9 @@ tasks × trials × (1 generation  +  #llm-judge criteria)
 ```
 
 Where that cost lands depends on the backend. The `glassrail-*` and
-`openai-compat` backends hit your own infrastructure (e.g. a local MLX server —
-no per-token dollars, token counts travel in the envelope). The judge is
-separate and, by default, runs on Claude.
+`openai-compat` backends hit the configured endpoint (local MLX, OpenRouter,
+or another OpenAI-compatible service). The judge is separate and, by default,
+runs on Claude for local suites and OpenRouter for the OpenRouter mirror suites.
 
 For a `claude-cli` subject (or a Claude judge), how it's billed depends on how
 `claude` is authenticated:
@@ -72,8 +72,10 @@ For a `claude-cli` subject (or a Claude judge), how it's billed depends on how
 Keep runs cheap:
 
 - **Model is the big lever** — for a Claude subject/judge, haiku ≪ sonnet < opus
-  (the `example` suite defaults to `haiku`). For the `glassrail` backend the
-  model is whatever your tiers serve; `default_model` overrides tier 0.
+  (the `example` suite defaults to `haiku`). The OpenRouter mirror suites grade
+  with `anthropic/claude-haiku-4.5` by default, using `OPENROUTER_API_KEY`.
+  For the `glassrail` backend the model is whatever your tiers serve;
+  `default_model` overrides tier 0.
 - **Trials scale linearly** — `--trials 1` while iterating, `3` for a result.
 - **Grading is mostly free** — deterministic and trajectory checks make **no**
   model calls. Only `grader = "llm"` criteria cost (one call each, on

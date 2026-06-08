@@ -19,11 +19,23 @@ def test_planner_prompt_requests_right_sized_fresh_context_dags() -> None:
 def test_planner_prompt_shows_correct_subplan_tool_shape() -> None:
     prompt = prompts.DEFAULT_PLANNER_SYSTEM
 
-    assert '"type": "tool", "tool": "web_search"' in prompt
-    assert '"type": "web_search"' in prompt
-    assert '"web_search" is a tool name, not a node type' in prompt
+    assert '"type": "tool", "tool": "file_read"' in prompt
+    assert '"type": "file_read"' in prompt
+    assert '"file_read" is a tool name, not a node type' in prompt
     assert 'If the limit says "At most 2' in prompt
     assert "three sibling subplan nodes is invalid" in prompt
+
+
+def test_planner_prompt_prevents_vague_rejection_and_unregistered_tools() -> None:
+    prompt = prompts.DEFAULT_PLANNER_SYSTEM
+
+    assert "Use ONLY tool names that appear in the Available tools list" in prompt
+    assert "Optional web" in prompt
+    assert 'BAD: {"rejection":"The request is too vague"}' in prompt
+    assert "Every node description must be a non-empty string" in prompt
+    assert 'recommend", "best fit"' in prompt
+    assert "put named-person and planted-fact preservation" in prompt
+    assert "final result description must name every comparison" in prompt
 
 
 def test_summary_prompt_prioritizes_downstream_fidelity() -> None:
@@ -33,6 +45,7 @@ def test_summary_prompt_prioritizes_downstream_fidelity() -> None:
     assert "Compress language, not information" in prompt
     assert "Your output will be consumed by" in prompt
     assert "source pointer" in prompt
+    assert "include that full name even under tight bullet limits" in prompt
 
 
 def test_summary_variant_prompts_have_distinct_roles() -> None:
@@ -50,6 +63,10 @@ def test_synthesis_and_result_prompts_preserve_caveats_without_inventing() -> No
     assert "final user-facing answer" in synthesis
     assert "Preserve important caveats and uncertainty" in result
     assert "do not invent facts" in result
+    assert "stable general knowledge" in result
+    assert "I recommend <option>" in result
+    assert "plain prose with units" in result
+    assert 'Do not introduce it with "I recommend"' in result
     # Result must tell the model it is the sole user-visible output
     assert "ONLY text the user will see" in result
     assert "Original user request" in result or "original request" in result
@@ -93,5 +110,6 @@ def test_decision_think_and_shape_check_prompts_have_tight_roles() -> None:
     assert "allowed branch labels" in prompts.DEFAULT_DECISION_SYSTEM
     assert "externally useful reasoning" in prompts.DEFAULT_THINK_SYSTEM
     assert "private scratchpad filler" in prompts.DEFAULT_THINK_SYSTEM
+    assert "stable general knowledge" in prompts.DEFAULT_THINK_SYSTEM
     assert "usable for the node that requested it" in prompts.DEFAULT_SHAPE_CHECK_SYSTEM
     assert "empty-but-valid results" in prompts.DEFAULT_SHAPE_CHECK_SYSTEM

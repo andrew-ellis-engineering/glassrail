@@ -42,8 +42,10 @@ python3 run.py suite suites/glassrail --trials 5      # the real thing (needs ML
 A real run needs the agent reachable: `glassrail` on `PATH` (activate the venv,
 or set the suite's `[backend] command = ["uv", "run", "glassrail", "run"]`) and
 your tier-0 MLX server serving the model. The judge is independent of the
-subject — it defaults to a cheap Claude model so semantic criteria grade
-consistently; point it at MLX instead with `--grader-backend openai-compat`.
+subject. Local suites default to a cheap Claude CLI judge; OpenRouter mirror
+suites default to `anthropic/claude-haiku-4.5` through OpenRouter so grading
+does not draw down Claude Code subscription usage. You can override either with
+`--grader-backend` and `--grader-model`.
 
 ## The `glassrail run --json` contract
 
@@ -111,20 +113,14 @@ Qwen models served from the cloud:
 
 | Suite | Mirror of | Typical wall time |
 |---|---|---|
-| `suites/glassrail-openrouter` | `suites/glassrail` | ~5 min for 7 tasks |
+| `suites/glassrail-openrouter` | `suites/glassrail` | a few minutes for 20+ tasks |
 | `suites/node-capability-openrouter` | `suites/node-capability` | ~2 min for 7 tasks |
 
 **One-time setup — API key:**
 
 ```bash
-# Add to ~/.zshenv so it's available to subprocesses and launchd services
+# Add to ~/.zshenv so it's available to subject and judge subprocesses
 echo 'export OPENROUTER_API_KEY="sk-or-..."' >> ~/.zshenv
-source ~/.zshenv
-
-# Derive the per-tier keys glassrail expects
-for i in 0 1 2 3; do
-  echo "export GLASSRAIL_TIER${i}__API_KEY=\"\$OPENROUTER_API_KEY\""
-done >> ~/.zshenv
 source ~/.zshenv
 ```
 
@@ -141,7 +137,10 @@ python3 run.py suite suites/node-capability-openrouter --workers 5
 ```
 
 **How it works:** each suite's `[backend.env]` sets all four `GLASSRAIL_TIER*`
-vars to OpenRouter endpoints, overriding the local config. It also sets
+vars to OpenRouter endpoints, overriding the local config. The `glassrail-cli`
+subject maps `OPENROUTER_API_KEY` into the per-tier API-key variables, and the
+LLM judge reads the same key directly from suite `[judge]` config. The suite
+also sets
 `GLASSRAIL_MAX_GENERATION_TOKENS=32768` (the local config caps this at 8192 for
 Metal OOM safety; cloud has no such constraint) and passes
 `reasoning.effort=none` with `provider.require_parameters=true` via
@@ -150,8 +149,8 @@ default to extended thinking mode, which streams all tokens into
 `delta.reasoning` and leaves `delta.content` empty.
 
 **Cost:** OpenRouter charges per token. A full `glassrail-openrouter` run at
-default `--trials 3` costs roughly $0.05–0.15 depending on task complexity.
-Keep `--workers` at 5 or below to avoid rate-limit 429s.
+default `--trials 3` now includes both the Qwen subject calls and Haiku 4.5
+judge calls. Keep `--workers` at 5 or below to avoid rate-limit 429s.
 
 **When to use each:**
 

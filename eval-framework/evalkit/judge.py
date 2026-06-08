@@ -9,6 +9,7 @@ fails closed).
 
 from __future__ import annotations
 
+import os
 from typing import Any, Protocol
 
 from evalkit.subjects import claude_cli, openai_compat
@@ -38,12 +39,22 @@ def build_judge(
     if backend in ("openai-compat", "mlx"):
         base_url = str(config.get("base_url", "http://localhost:8080/v1"))
         api_key = str(config.get("api_key", ""))
+        api_key_env = config.get("api_key_env")
+        if not api_key and isinstance(api_key_env, str):
+            api_key = os.environ.get(api_key_env, "")
+        if (
+            not api_key
+            and base_url.rstrip("/") == "https://openrouter.ai/api/v1"
+        ):
+            api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        raw_extra = config.get("extra_body")
+        extra_body = raw_extra if isinstance(raw_extra, dict) else None
 
         def openai_judge(prompt: str, *, timeout_s: int = 120) -> str | None:
             try:
                 text, _usage, _env = openai_compat.chat_once(
                     base_url=base_url, model=model, prompt=prompt,
-                    api_key=api_key, timeout_s=timeout_s,
+                    api_key=api_key, extra_body=extra_body, timeout_s=timeout_s,
                 )
             except Exception:  # noqa: BLE001 - any judge failure → fail closed
                 return None

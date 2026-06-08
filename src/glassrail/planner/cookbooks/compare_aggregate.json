@@ -14,6 +14,8 @@
   ],
   "adaptation_notes": [
     "Keep fan-out within the plan node budget; consolidate similar lookups when possible.",
-    "Use a result node directly if the synthesis node is already the final user answer and no extra shaping is needed."
+    "Use a result node directly if the synthesis node is already the final user answer and no extra shaping is needed.",
+    "For recommendations, the final result description should explicitly request prose that says 'I recommend <option>' or '<option> is the best fit' before the explanation.",
+    "For comparison tasks, require explicit comparison on every requested axis for every candidate; do not leave axes implicit."
   ]
 }

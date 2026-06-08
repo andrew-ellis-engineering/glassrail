@@ -56,10 +56,7 @@ same tasks, same models served via OpenRouter:
 
 ```bash
 # One-time: export your key (add to ~/.zshenv so subprocesses see it)
-export GLASSRAIL_TIER0__API_KEY=$OPENROUTER_API_KEY
-export GLASSRAIL_TIER1__API_KEY=$OPENROUTER_API_KEY
-export GLASSRAIL_TIER2__API_KEY=$OPENROUTER_API_KEY
-export GLASSRAIL_TIER3__API_KEY=$OPENROUTER_API_KEY
+export OPENROUTER_API_KEY=sk-or-...
 
 python3 run.py suite suites/glassrail-openrouter --workers 5
 python3 run.py suite suites/node-capability-openrouter --workers 5
@@ -69,7 +66,9 @@ The suites live in `suites/glassrail-openrouter/` and
 `suites/node-capability-openrouter/`. Their `[backend.env]` blocks handle
 everything: tier URLs, model slugs, `GLASSRAIL_MAX_GENERATION_TOKENS`,
 and the Qwen3-on-OpenRouter reasoning fix (`reasoning.effort=none` +
-`provider.require_parameters=true` via `EXTRA_BODY`). Do not add
+`provider.require_parameters=true` via `EXTRA_BODY`). The subject wrapper maps
+`OPENROUTER_API_KEY` into the per-tier `GLASSRAIL_TIER*__API_KEY` variables,
+and the LLM judge reads the same key directly. Do not add
 `:no-thinking` model suffixes — they are routing hints only and do not
 guarantee reasoning is disabled on all providers; the `EXTRA_BODY` parameter
 is the authoritative control.
@@ -95,13 +94,15 @@ is the authoritative control.
 
 Each trial is one subject invocation plus one call per `llm` criterion; usage ≈
 `tasks × trials × (1 + #llm criteria)`. Where it lands depends on the backend:
-`glassrail-*` / `openai-compat` hit your own infra (local MLX = no per-token
-dollars; tokens travel in the envelope); the judge defaults to Claude — on a
-**subscription** it draws down usage limits (printed `total_cost_usd` is an
-estimate, not a charge), on an **API key** it's real dollars. Keep it cheap:
-prefer deterministic criteria (only `llm` calls a model), keep the judge on a
-cheap model (or point it at MLX with `--grader-backend openai-compat`), use
-`run.py score` to re-grade archived trials for free, and `--dry-run` to validate.
+`glassrail-*` / `openai-compat` hit your configured infra (local MLX = no
+per-token dollars; OpenRouter = paid API). The judge defaults to Claude for
+local suites and `anthropic/claude-haiku-4.5` through OpenRouter for the
+OpenRouter mirror suites. A Claude CLI judge on a **subscription** draws down
+usage limits (printed `total_cost_usd` is an estimate, not a charge); an API
+judge is real dollars. Keep it cheap: prefer deterministic criteria (only
+`llm` calls a model), keep the judge on a cheap model, use `run.py score` to
+re-grade archived trials without re-running the subject, and `--dry-run` to
+validate wiring.
 
 ## Layout
 

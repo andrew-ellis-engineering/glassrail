@@ -4,7 +4,8 @@ description = """
 node-capability tasks routed through OpenRouter instead of local MLX.
 
 Set OPENROUTER_API_KEY once before running; the glassrail-cli subject maps it
-into the GLASSRAIL_TIER*__API_KEY variables for OpenRouter-pinned tiers.
+into the GLASSRAIL_TIER*__API_KEY variables for OpenRouter-pinned tiers, and
+the LLM judge reads it directly.
 """
 default_backend = "glassrail-cli"
 default_model = "qwen/qwen3-8b"
@@ -12,11 +13,19 @@ default_type = "capability"
 default_timeout_s = 120
 promotion_threshold = 5
 
-default_grader_model = "haiku"
-default_grader_backend = "claude-cli"
+default_grader_model = "anthropic/claude-haiku-4.5"
+default_grader_backend = "openai-compat"
 
 [backend]
 command = ["uv", "run", "glassrail", "run"]
+
+[judge]
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+
+[judge.extra_body]
+temperature = 0
+max_tokens = 256
 
 [backend.env]
 # Raise the generation ceiling — local config.toml sets 8192 for Metal OOM

@@ -38,5 +38,5 @@ tool_sequence = ["decision"]
 expect_branch_taken = "no"
 
 [[criteria]]
-text = "Correctly took the odd branch and reported the next even number as 248"
+text = "Final answer reports the next even number as 248 for the odd input 247"
 grader = "llm"

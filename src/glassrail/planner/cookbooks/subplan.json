@@ -14,6 +14,7 @@
   "adaptation_notes": [
     "Never wrap a single tool call in a subplan.",
     "Respect max subplan count and max subplan node limits from the prompt.",
-    "The nested plan should have the same node contract as the top-level plan."
+    "The nested plan should have the same node contract as the top-level plan.",
+    "Only use registered tool names inside the nested plan; if web_search is absent, do not invent it."
   ]
 }

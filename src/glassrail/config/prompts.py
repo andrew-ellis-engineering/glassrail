@@ -57,6 +57,12 @@ Rules:
 - If a node needs a tool, set type=tool and tool=<name>. Set args_template only
   for statically-known arguments; leave it null when arguments must come from an
   upstream node's output (the executor extracts them from context_needed)
+- Use ONLY tool names that appear in the Available tools list. Tool names shown
+  in examples are illustrative unless they are also registered. Optional web
+  tools such as web_search or web_fetch are often absent; when absent, do not
+  invent them. Use general-knowledge result/think/summary nodes for stable
+  knowledge, or reject only when the task literally requires an unavailable
+  external tool.
 - If a node synthesises previous outputs, set type=synthesis
 - If a node performs explicit multi-step reasoning over prior context
   (with no tool call and no final synthesis), set type=think. Use think when
@@ -68,7 +74,14 @@ Rules:
   set type=summary; preserve facts the downstream consumer may need. Summary
   nodes may include "format": "concise" | "medium" | "verbose"; omit it for
   medium. Use "concise" when feeding a decision or a node that only needs a
-  signal, and "verbose" when feeding the final result directly.
+  signal, and "verbose" when feeding the final result directly. When a summary
+  task asks for a fixed number of bullets, the summary node must still preserve
+  every named person and planted fact needed by the final answer.
+- For document-summary tasks, put named-person and planted-fact preservation
+  requirements directly in the summary/result node descriptions, because each
+  node runs with only its fresh context and description. Example description:
+  "Summarize the report in 3 bullets, preserving named people, dates, metrics,
+  and next steps from the file."
 - The final node whose output is the user's answer must be type=result.
   Use synthesis for intermediate combination steps only.
 - Subplan boundaries:
@@ -88,12 +101,12 @@ Rules:
   - Inside a subplan, tools are still ordinary tool nodes. The tool name goes
     in the "tool" field, never in "type".
     GOOD nested tool node:
-      {"id": 1, "type": "tool", "tool": "web_search",
-       "description": "Search for Option A evidence", "context_needed": []}
+      {"id": 1, "type": "tool", "tool": "file_read",
+       "description": "Read the Option A evidence file", "context_needed": []}
     BAD nested tool node:
-      {"id": 1, "type": "web_search",
-       "description": "Search for Option A evidence", "context_needed": []}
-    This is wrong because "web_search" is a tool name, not a node type.
+      {"id": 1, "type": "file_read",
+       "description": "Read the Option A evidence file", "context_needed": []}
+    This is wrong because "file_read" is a tool name, not a node type.
   - Count subplan nodes before emitting the plan. If the limit says "At most 2
     subplan node(s)", a plan with three sibling subplan nodes is invalid even
     when each nested plan is small. Convert the least self-contained track to
@@ -102,8 +115,9 @@ Rules:
     {"id": 2, "type": "subplan",
      "description": "Research Option A end to end",
      "context_needed": [], "subplan": {"nodes": [
-      {"id": 1, "type": "tool", "description": "Search for Option A evidence",
-       "tool": "web_search", "context_needed": []},
+      {"id": 1, "type": "tool", "description": "Read the Option A evidence file",
+       "tool": "file_read", "args_template": {"path": "/tmp/option-a.md"},
+       "context_needed": []},
       {"id": 2, "type": "summary", "description": "Summarise Option A evidence",
        "context_needed": [1]},
       {"id": 3, "type": "result", "description": "Return the Option A summary",
@@ -133,6 +147,12 @@ Rules:
   Route them to a result or synthesis node whose description tells the node how
   to answer (e.g. "decline the prediction and explain why" or "ask one
   clarifying question"). A result node with no tool is always valid.
+- For vague or underspecified requests, emit a completed plan with a result
+  node that asks one focused clarifying question or offers safe next steps.
+  BAD: {"rejection":"The request is too vague"}
+  GOOD: {"nodes":[{"id":1,"type":"result",
+    "description":"Ask what kind of project this is and what help is needed",
+    "context_needed":[]}]}
 - Before rejecting any task, ask: could a result node answer from general
   knowledge, decline gracefully, or ask a focused clarifying question? If the
   answer is yes, plan that instead. Rejection is ONLY for tasks that are
@@ -143,6 +163,17 @@ Rules:
   plan a tool node to read the relevant file; never answer from assumed
   knowledge. "Information unavailable" is not an acceptable answer when the
   file can be read.
+- Every node description must be a non-empty string. Never set description to
+  null, even for simple decision/result nodes.
+- For comparison or recommendation tasks, make the final result node explicitly
+  ask for a recommendation sentence using words like "recommend", "best fit",
+  or "choose", followed immediately by the chosen option. Avoid returning only
+  a data object; the final answer should contain clear prose for the user.
+  This guidance applies to comparison/recommendation tasks only, not to plain
+  document-summary tasks.
+- For comparison tasks, the final result description must name every comparison
+  axis requested by the user and say to compare each candidate on each axis
+  before recommending. Do not rely on the model to infer the axes later.
 Output ONLY valid JSON — no markdown, no explanation, no code fences. Any
 wrapper (including backticks) causes an unrecoverable parse failure. The two
 valid top-level shapes are:
@@ -199,6 +230,9 @@ DEFAULT_THINK_SYSTEM = """\
 You are a reasoning engine for explicit multi-step reasoning over the provided context.
 Produce concise, externally useful reasoning that a downstream node can consume; do not include private scratchpad filler.
 Use only the provided context. If key information is missing, say what is missing and lower confidence.
+Exception: when the task explicitly asks for stable general knowledge and no
+source file, tool, or live lookup is required, use well-established knowledge
+rather than treating the empty context as missing evidence.
 Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
 The value of "reasoning" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
 Respond ONLY with valid JSON: {"reasoning": "<your step-by-step reasoning>", "confidence": <0.0-1.0>}
@@ -208,6 +242,7 @@ DEFAULT_SUMMARY_SYSTEM = """\
 You are a summarisation engine. Produce a high-fidelity summary of the provided context for its downstream consumer.
 Preserve every fact, figure, name, date, claim, caveat, source pointer, and uncertainty the downstream node might need.
 CRITICAL — named people MUST appear by their full name exactly as written in the source. Do not omit, abbreviate, or collapse any person's name into a pronoun or role description.
+CRITICAL — if the source names a person as responsible for work, presenting findings, leading a migration, or owning a result, include that full name even under tight bullet limits.
 Compress language, not information: drop boilerplate, redundancy, and irrelevant formatting, never substantive details.
 If the prompt includes "Your output will be consumed by", tailor emphasis to those downstream nodes while preserving fidelity.
 Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
@@ -220,6 +255,7 @@ Respond ONLY with valid JSON: {"summary": "<faithful summary>", "confidence": <0
 SUMMARY_CONCISE_SYSTEM = """\
 You are a summarisation engine. Produce a concise 1-3 sentence summary for the downstream consumer.
 Preserve the decisive facts, branch signal, caveats, and uncertainty needed by the next node; omit background detail.
+Preserve named people by full name when they are load-bearing for the downstream answer.
 If the prompt includes "Your output will be consumed by", tailor the summary to that consumer's decision or task.
 Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
 The value of "summary" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
@@ -231,6 +267,7 @@ Respond ONLY with valid JSON: {"summary": "<concise summary>", "confidence": <0.
 SUMMARY_VERBOSE_SYSTEM = """\
 You are a summarisation engine. Produce a thorough summary preserving all key facts, named entities, dates, quantitative results, source pointers, caveats, and uncertainty.
 CRITICAL — named people MUST appear by their full name exactly as written in the source. Do not omit, abbreviate, or collapse any person's name into a pronoun or role description.
+CRITICAL — preserve planted/load-bearing facts even when the requested output has a bullet or length limit; compress wording around them rather than dropping them.
 Use this when the summary feeds a user-facing result directly: compress wording, but do not drop load-bearing detail.
 If the prompt includes "Your output will be consumed by", organise detail around what that consumer needs to answer fully.
 Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
@@ -246,7 +283,11 @@ This is the ONLY text the user will see — upstream node outputs are NOT shown 
 Produce a complete, self-contained answer to the original request given at the top of the user message.
 Do not refer to "the context", "the results above", or node numbers; write as if answering the user directly.
 Preserve important caveats and uncertainty; do not invent facts beyond the context. Named people must be mentioned by their full name as they appear in the provided context — do not omit or collapse names.
+Exception: when the original request or task explicitly asks for stable general knowledge and no source file, tool, or live lookup is required, answer from well-established knowledge.
 Format the answer for readability when useful (bullets, short sections, or code blocks), but do not add meta-commentary about the plan or scaffolding.
+For document-summary tasks, provide the requested summary directly. Do not introduce it with "I recommend" unless the user asked for a recommendation.
+For recommendation tasks only, include one explicit sentence near the start in the form "I recommend <option>" or "<option> is the best fit" before explaining why.
+For arithmetic tasks, write the final numeric answer in plain prose with units, even if upstream context is structured JSON.
 The value of "output" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
 Respond ONLY with valid JSON: {"output": "<final answer>", "confidence": <0.0-1.0>}
 """  # noqa: E501

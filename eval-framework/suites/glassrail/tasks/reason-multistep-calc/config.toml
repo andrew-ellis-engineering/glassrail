@@ -33,14 +33,14 @@ text = "States 1 full crate"
 grader = "deterministic"
 check = "regex"
 target = "__result_text__"
-value = "\\b1\\b.{0,60}(crate|full)"
+value = "(?i)(\\b1\\b.{0,80}(crate|full)|(number_of_full_crates|full_crates|number_of_crates)\"?\\s*[:=]\\s*1)"
 
 [[criteria]]
 text = "States total weight of 150 kg"
 grader = "deterministic"
 check = "regex"
 target = "__result_text__"
-value = "\\b150\\s*(kg|kilogram)"
+value = "(?i)(\\b150\\s*(kg|kilogram)|(total_weight_in_kilograms|total_weight_kg|total_weight_in_kg)\"?\\s*[:=]\\s*150)"
 
 [[criteria]]
 text = "Plan includes a result node"

@@ -38,5 +38,5 @@ tool_sequence = ["decision"]
 expect_branch_taken = "yes"
 
 [[criteria]]
-text = "Correctly took the even branch and reported half as 123"
+text = "Final answer reports half as 123 for the even input 246"
 grader = "llm"

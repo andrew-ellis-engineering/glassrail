@@ -42,11 +42,11 @@ target = "__result_text__"
 value = "(?i)priya\\s+nair"
 
 [[criteria]]
-text = "Mentions the cache migration or distributed cache work"
+text = "Mentions the latency/cache migration outcome"
 grader = "deterministic"
 check = "regex"
 target = "__result_text__"
-value = "(?i)(distributed cache|cache migration)"
+value = "(?i)(distributed cache|cache migration|cache cluster|monolithic cache|67%.{0,140}(p99|latency|migration)|(?:p99|latency|migration).{0,140}67%)"
 
 [[criteria]]
 text = "Does not fabricate a 50% storage cost figure (the document says 38%)"

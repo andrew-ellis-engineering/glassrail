@@ -69,3 +69,4 @@ def test_cookbook_prompt_says_to_adapt_ranked_candidates() -> None:
     assert "Top candidate recipes:" in prompt
     assert "Candidate 1: compare_aggregate" in prompt
     assert "Candidate 2:" in prompt
+    assert "I recommend <option>" in prompt

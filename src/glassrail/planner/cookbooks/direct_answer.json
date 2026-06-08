@@ -12,6 +12,8 @@
   ],
   "adaptation_notes": [
     "Use a tool recipe instead if the request asks for current data, files, web search, memory, or calendar state.",
-    "Do not add think nodes for ordinary explanations; use result unless genuine multi-step reasoning is required."
+    "Do not add think nodes for ordinary explanations; use result unless genuine multi-step reasoning is required.",
+    "For vague requests, use a result node to ask one focused clarifying question or offer safe next steps; do not reject merely for vagueness.",
+    "For summary requests, answer as a summary, not as a recommendation about how to summarize."
   ]
 }

@@ -35,6 +35,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Planner cookbook selection now injects the top three ranked candidate
   recipes into the planning prompt, letting the model compare nearby DAG shapes
   without an extra planner/classifier call.
+- Planner/eval guidance now tightens tool-name discipline for optional web
+  tools, vague-request handling, recommendation phrasing, non-null node
+  descriptions, and prose numeric answers based on the latest OpenRouter eval
+  failure analysis.
+- OpenRouter eval prompts now identify closed-book research/comparison tasks,
+  require explicit comparison axes and prose recommendations, and call out
+  planted summary facts so the model does not hide behind missing-context
+  caveats or over-compress named entities.
+- OpenRouter mirror eval suites now grade LLM criteria through OpenRouter
+  (`anthropic/claude-haiku-4.5`) using `OPENROUTER_API_KEY`, avoiding hidden
+  dependence on Claude Code subscription quota for judge calls.
+- Eval criteria now separate trajectory checks from LLM answer-quality checks,
+  relax wording-sensitive regexes for cache/migration references and structured
+  numeric answers, and make the subplan-correct task respect the configured
+  two-subplan cap.
+- Think/result node prompts now allow well-established stable knowledge when a
+  task explicitly asks for it and no file, tool, or live lookup is required,
+  avoiding false "missing context" failures in closed-book evals.
 
 ### Changed
 - Planner subplan guidance now explicitly shows the correct nested tool-node

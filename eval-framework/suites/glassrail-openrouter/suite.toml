@@ -6,13 +6,14 @@ instead of the local MLX servers. Use this to rule out local-infra issues and
 iterate quickly — OpenRouter responses are seconds, not minutes.
 
 Model is set via --model (default below). Any OpenRouter model slug works:
-  anthropic/claude-haiku-4-5     # fast, cheap
-  anthropic/claude-sonnet-4-5    # stronger
+  anthropic/claude-haiku-4.5     # fast, cheap
+  anthropic/claude-sonnet-4.5    # stronger
   qwen/qwen3-235b-a22b           # same family as local, cloud-hosted
   qwen/qwen3-8b                  # mirrors local tier-0
 
 API key — set once in your shell before running. The glassrail-cli subject maps
-this into the GLASSRAIL_TIER*__API_KEY variables for OpenRouter-pinned tiers:
+this into the GLASSRAIL_TIER*__API_KEY variables for OpenRouter-pinned tiers,
+and the LLM judge reads it directly:
   export OPENROUTER_API_KEY=sk-or-...
 
 Then run:
@@ -22,8 +23,8 @@ default_backend = "glassrail-cli"
 # Mirrors local tier-0. Override with --model to swap.
 default_model = "qwen/qwen3-8b"
 
-default_grader_model = "haiku"
-default_grader_backend = "claude-cli"
+default_grader_model = "anthropic/claude-haiku-4.5"
+default_grader_backend = "openai-compat"
 
 # Cloud responses are fast — 120s is generous even for complex plans.
 default_timeout_s = 120
@@ -32,6 +33,14 @@ promotion_threshold = 5
 
 [backend]
 command = ["uv", "run", "glassrail", "run"]
+
+[judge]
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+
+[judge.extra_body]
+temperature = 0
+max_tokens = 256
 
 [backend.env]
 # Raise the generation ceiling — local config.toml sets 8192 for Metal OOM
