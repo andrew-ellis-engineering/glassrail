@@ -29,8 +29,8 @@ observability, then the operational surfaces.
   grading cascade, control pairs, and a promotion ratchet. The `glassrail-cli`
   backend drives the real planner + executor over the agent's own tier routing
   (your MLX model) via `glassrail run --json`. See [Evals](evals.md). The release
-  gate below — promoting capability tasks to regression at an agreed pass^k bar —
-  is still open.
+  gate below is met; remaining eval work is an ongoing ratchet, not a Phase 1
+  blocker.
 - **OpenTelemetry GenAI spans** ✓ — the planner, router, and executor emit a
   span tree (task → plan / node → LLM call) with GenAI semantic-convention
   attributes (model, tier, tokens) plus `glassrail.*` ones. Tracing is a no-op
@@ -81,14 +81,25 @@ Baseline established 2026-06-07 against Qwen3-8b (tier 0) + Qwen3.6-35b (tier
 | node-capability-openrouter (7 tasks, 3 trials) | **7/7 full-pass (100%)** | 100% |
 | harness-mechanics (32 tasks, 3 trials) | **32/32 full-pass (100%)** | 100% |
 
-Known gap at baseline: **subplan generation is the weakest surface.** All 4
-partial-pass tasks fail with planner schema errors — the 35B model occasionally
-uses tool names as node types inside subplans (`"type": "web_search"` instead
-of `"type": "tool", "tool": "web_search"`) and exceeds the subplan count limit.
-These are intermittent (each task passes 2/3 trials) and are the first tracked
-prompt-improvement target in Phase 2.
+Latest confirmation run, 2026-06-08 on current `main`:
 
-Items deferred to Phase 2 (were not shipped, do not block the gate):
+| Suite | Run | Result | Bar |
+|---|---|---|---|
+| harness-mechanics | `run-20260608T185309Z` | **32/32 full-pass (100%), 0 all-fail** | 100% |
+| node-capability-openrouter | `run-20260608T185315Z` | **7/7 full-pass (100%), 0 all-fail** | 100% |
+| glassrail-openrouter | `run-20260608T185414Z` | **20/23 full-pass (87%), 0 all-fail** | ≥ 80% full-pass, 0 all-fail |
+
+Known remaining eval ratchet after the confirmation run: **final-answer
+preservation.** The three partial-pass tasks all pass at least one trial and
+fail only one of three trials. Their misses are not infra, schema, tool, or
+branch execution failures; they are final-answer compression issues where the
+result node drops a comparison category (`recommend-datastore-oltp`) or loses
+the depth of trade-off analysis present in upstream reasoning
+(`research-compare-3`, `research-constrained`). The next quality target is to
+make result nodes preserve named candidates, comparison axes, and caveats from
+their upstream context.
+
+Items originally deferred to Phase 2 (do not block the gate):
 
 - **Upstream context awareness** — when assembling a node's context, include the
   descriptions of its direct dependents so upstream nodes (synthesis, summary)
@@ -109,15 +120,30 @@ Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing
   1 baseline)* — add a concrete example to the planner subplan guidance showing
   the correct inside-subplan node shape: `"type": "tool", "tool": "web_search"`
   not `"type": "web_search"`. Also reinforce the `max_subplans_per_plan` limit
-  with a counter-example. Pure prompt change; expected to clear the iot/oltp
-  partial-pass tasks and improve `subplan-correct` reliability. Measure by
-  re-running `suites/glassrail-openrouter` and comparing against the Phase 1
-  baseline.
+  with a counter-example. Pure prompt change; confirmed by
+  `run-20260608T185414Z`, where `subplan-correct` is 3/3 full-pass.
 
 - **Upstream context awareness** ✓ — when assembling a node's context, include the
   descriptions of its direct dependents so upstream nodes (synthesis, summary)
   know what aspect the downstream node needs. One change in the executor's
   context-assembly logic. *(deferred from Phase 1)*
+
+- **Branch and final-output eval stabilization** ✓ — decision branch references
+  now participate in plan ordering, result selection ignores completed result
+  nodes that only depend on skipped content, summary output can be used as the
+  final answer when a branch-specific result is skipped, and the conditional
+  structural retry no longer treats optional "if present" language as a
+  required decision branch. This restored `node-capability-openrouter` to 7/7
+  full-pass and kept `harness-mechanics` at 32/32.
+
+- **Result-node preservation of comparisons and trade-offs** *(next eval
+  ratchet)* — improve result-node prompting so final answers preserve named
+  candidates, required comparison axes, and meaningful caveats from upstream
+  reasoning. Current misses are concentrated here: `recommend-datastore-oltp`
+  dropped the time-series comparison category from the final answer, while
+  `research-compare-3` and `research-constrained` lost comparison depth or
+  trade-off nuance. Measure against `suites/glassrail-openrouter`, targeting at
+  least 22/23 full-pass without weakening deterministic checks.
 
 - **Per-tool HITL configuration** — extend HITL beyond plan approval to
   individual tool calls. Each registered tool gets a configurable approval
