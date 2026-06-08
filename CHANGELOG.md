@@ -50,6 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   relax wording-sensitive regexes for cache/migration references and structured
   numeric answers, and make the subplan-correct task respect the configured
   two-subplan cap.
+- Summary evals now capture the installed source documents for the LLM judge,
+  so faithfulness checks can compare the answer against the actual fixture
+  instead of returning UNKNOWN for lack of evidence.
 - Think/result node prompts now allow well-established stable knowledge when a
   task explicitly asks for it and no file, tool, or live lookup is required,
   avoiding false "missing context" failures in closed-book evals.
@@ -58,6 +61,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Planner validation now repairs missing or blank node descriptions before
   strict schema validation, including nested subplans, so otherwise-valid plans
   are not discarded for a recoverable LLM omission.
+- Planner output normalization now wraps a terminal synthesis-only plan in a
+  result node, and the orchestrator retries conditional-looking requests when
+  the planner collapses them into a plan with no decision node.
 - Planner cookbook and prompt guidance now steer obvious binary branches,
   logic-puzzle deductions, and comparison/recommendation tasks toward explicit
   decision, reasoning, and per-axis comparison structure.

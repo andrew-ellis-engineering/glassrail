@@ -12,7 +12,7 @@ in the document (e.g. 99.9% uptime — the doc says 99.7%).
 """
 
 [fixtures]
-capture = []
+capture = ["/tmp/glassrail-eval/brief.md"]
 
 [fixtures.install]
 "/tmp/glassrail-eval/brief.md" = "brief.md"

@@ -16,7 +16,9 @@ from opentelemetry.trace import Status, StatusCode
 from glassrail.config import Settings
 from glassrail.core import (
     ExecutionState,
+    NodeType,
     Plan,
+    PlanningAttempt,
     PlanValidationError,
     TaskId,
     TaskStatus,
@@ -266,6 +268,15 @@ class Orchestrator:
         state.touch()
         await self._emit(TaskCancelled(task_id=state.task_id))
 
+    async def _save_planning_attempt(
+        self,
+        state: ExecutionState,
+        plan_attempt: PlanningAttempt,
+    ) -> None:
+        state.planning_attempts.append(plan_attempt)
+        state.touch()
+        await self._store.save_task(state)
+
     async def _present_or_execute(self, state: ExecutionState) -> None:
         """Announce the validated plan, then gate on confirmation or execute.
 
@@ -328,12 +339,38 @@ class Orchestrator:
                     thinking=attempt > 0 and last_error_type != "timeout",
                 )
                 state.replan_count = attempt
-                state.planning_attempts.append(plan_attempt)
                 state.touch()
-                await self._store.save_task(state)
 
                 if plan_attempt.plan is not None:
+                    structural_feedback = _structural_retry_feedback(
+                        state.user_request,
+                        plan_attempt.plan,
+                    )
+                    if structural_feedback is not None and attempt < attempts - 1:
+                        plan_attempt = plan_attempt.model_copy(
+                            update={
+                                "plan": None,
+                                "error": structural_feedback,
+                                "error_type": "validation",
+                            }
+                        )
+                        await self._save_planning_attempt(state, plan_attempt)
+                        validation_feedback = structural_feedback
+                        prior_reasoning = None
+                        last_error = structural_feedback
+                        last_error_type = "validation"
+                        log.warning(
+                            "[%s] Plan structurally suspicious (attempt %d): %s",
+                            state.task_id,
+                            attempt,
+                            structural_feedback,
+                        )
+                        continue
+
+                    await self._save_planning_attempt(state, plan_attempt)
                     return plan_attempt.plan
+
+                await self._save_planning_attempt(state, plan_attempt)
 
                 if plan_attempt.error_type == "rejection":
                     # Deliberate planner decision — don't retry.
@@ -383,3 +420,32 @@ class Orchestrator:
 
 def _summary(plan: Plan) -> str:
     return "\n".join(f"  {n.id}. [{n.type}] {n.description}" for n in plan.nodes)
+
+
+def _structural_retry_feedback(request: str, plan: Plan) -> str | None:
+    if _looks_like_conditional_request(request) and not any(
+        node.type is NodeType.DECISION for node in plan.nodes
+    ):
+        return (
+            "The request contains conditional if/otherwise or binary branch "
+            "logic, but the plan has no decision node. Re-plan with an explicit "
+            "decision node whose yes/no branches perform the conditional work."
+        )
+    return None
+
+
+def _looks_like_conditional_request(request: str) -> bool:
+    text = f" {request.lower()} "
+    conditional_markers = (
+        " if ",
+        " otherwise ",
+        " else ",
+        " whether ",
+        " even or odd ",
+        " odd or even ",
+        " northern or southern ",
+        " southern or northern ",
+        " true or false ",
+        " yes or no ",
+    )
+    return any(marker in text for marker in conditional_markers)

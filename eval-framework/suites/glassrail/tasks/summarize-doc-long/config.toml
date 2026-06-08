@@ -15,7 +15,7 @@ resistance to distractor figures.
 """
 
 [fixtures]
-capture = []
+capture = ["/tmp/glassrail-eval/report.md"]
 
 [fixtures.install]
 "/tmp/glassrail-eval/report.md" = "report.md"

@@ -354,7 +354,7 @@ class Planner:
                     )
                 )
 
-            _repair_plan_descriptions(parsed)
+            _repair_plan_payload(parsed)
             try:
                 plan = Plan.model_validate(parsed)
                 self._validator.validate(plan)
@@ -409,6 +409,12 @@ class Planner:
         )
 
 
+def _repair_plan_payload(plan_payload: dict[str, Any]) -> None:
+    """Repair small, deterministic planner omissions before strict validation."""
+    _repair_plan_descriptions(plan_payload)
+    _ensure_terminal_result(plan_payload)
+
+
 def _repair_plan_descriptions(plan_payload: dict[str, Any]) -> None:
     """Fill repairable missing descriptions before strict plan validation."""
     nodes = plan_payload.get("nodes")
@@ -428,9 +434,7 @@ def _repair_node_descriptions(nodes: list[Any]) -> None:
         raw_subplan = node.get("subplan")
         if isinstance(raw_subplan, dict):
             subplan = cast("dict[str, Any]", raw_subplan)
-            nested_nodes = subplan.get("nodes")
-            if isinstance(nested_nodes, list):
-                _repair_node_descriptions(cast("list[Any]", nested_nodes))
+            _repair_plan_descriptions(subplan)
 
 
 def _fallback_node_description(node: dict[str, Any]) -> str:
@@ -459,3 +463,66 @@ def _fallback_node_description(node: dict[str, Any]) -> str:
         fallback = fallback_by_type.get(node_type, f"Execute node{suffix}")
 
     return fallback.strip()
+
+
+def _ensure_terminal_result(plan_payload: dict[str, Any]) -> None:
+    nodes = plan_payload.get("nodes")
+    if not isinstance(nodes, list):
+        return
+    node_list = cast("list[Any]", nodes)
+
+    for raw_node in node_list:
+        if not isinstance(raw_node, dict):
+            continue
+        node = cast("dict[str, Any]", raw_node)
+        subplan = node.get("subplan")
+        if isinstance(subplan, dict):
+            _ensure_terminal_result(cast("dict[str, Any]", subplan))
+
+    typed_nodes = [cast("dict[str, Any]", node) for node in node_list if isinstance(node, dict)]
+    if any(node.get("type") == "result" for node in typed_nodes):
+        return
+
+    synthesis_sink = _single_terminal_synthesis(typed_nodes)
+    if synthesis_sink is None:
+        return
+
+    existing_ids: list[int] = []
+    for node in typed_nodes:
+        node_id = node.get("id")
+        if isinstance(node_id, int):
+            existing_ids.append(node_id)
+    next_id = (max(existing_ids) + 1) if existing_ids else 1
+    node_list.append(
+        {
+            "id": next_id,
+            "type": "result",
+            "description": "Return the synthesized answer as the final user-facing response",
+            "context_needed": [synthesis_sink],
+        }
+    )
+
+
+def _single_terminal_synthesis(nodes: list[dict[str, Any]]) -> int | None:
+    referenced: set[int] = set()
+    for node in nodes:
+        for dep in node.get("context_needed") or []:
+            if isinstance(dep, int):
+                referenced.add(dep)
+        branches = node.get("branches")
+        if isinstance(branches, dict):
+            for branch_nodes in branches.values():
+                if not isinstance(branch_nodes, list):
+                    continue
+                referenced.update(nid for nid in branch_nodes if isinstance(nid, int))
+
+    sinks = [
+        node["id"]
+        for node in nodes
+        if node.get("type") == "synthesis"
+        and isinstance(node.get("id"), int)
+        and node["id"] not in referenced
+    ]
+    if len(sinks) == 1:
+        return cast("int", sinks[0])
+    return None

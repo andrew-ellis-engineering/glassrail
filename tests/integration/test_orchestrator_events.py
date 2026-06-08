@@ -90,11 +90,18 @@ _PLAN_PAYLOAD = json.dumps(
                 "description": "summarise",
                 "context_needed": [1],
             },
+            {
+                "id": 3,
+                "type": "result",
+                "description": "final answer",
+                "context_needed": [2],
+            },
         ]
     }
 )
 _SHAPE_OK = json.dumps({"matches_expectation": True, "issue": None})
 _SYNTH_OUT = json.dumps({"output": "nothing scheduled.", "confidence": 0.9})
+_RESULT_OUT = json.dumps({"output": "nothing scheduled.", "confidence": 0.9})
 
 
 async def _seed_task(store: InMemoryStateStore) -> ExecutionState:
@@ -118,7 +125,7 @@ async def _drain(sub: Subscription) -> list[Event]:
 
 
 async def test_full_run_emits_lifecycle_sequence() -> None:
-    orch, store, bus = _build([_PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT])
+    orch, store, bus = _build([_PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT, _RESULT_OUT])
     state = await _seed_task(store)
 
     async with bus.subscribe() as sub:
@@ -130,6 +137,8 @@ async def test_full_run_emits_lifecycle_sequence() -> None:
     assert types == [
         "planning_started",
         "plan_ready",
+        "node_started",
+        "node_finished",
         "node_started",
         "node_finished",
         "node_started",
@@ -160,7 +169,7 @@ async def test_failed_planning_emits_plan_failed_and_no_completion() -> None:
 
 async def test_confirm_gate_emits_awaiting_then_completes_on_resume() -> None:
     orch, store, bus = _build(
-        [_PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT],
+        [_PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT, _RESULT_OUT],
         settings=Settings(confirm_plans=True),
     )
     state = await _seed_task(store)
@@ -178,6 +187,8 @@ async def test_confirm_gate_emits_awaiting_then_completes_on_resume() -> None:
         await orch.resume(state.task_id)
         resumed = await _drain(sub)
     assert [e.type for e in resumed if e.type != "node_output_chunk"] == [
+        "node_started",
+        "node_finished",
         "node_started",
         "node_finished",
         "node_started",

@@ -387,6 +387,33 @@ async def test_plan_attempt_repairs_nested_missing_description(
     assert nested.nodes[0].description == "Produce the final answer 1"
 
 
+async def test_plan_attempt_wraps_terminal_synthesis_in_result(
+    harness: ToolHarness, settings: Settings
+) -> None:
+    payload = json.dumps(
+        {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "synthesis",
+                    "description": "Compare PostgreSQL, Redis, and Kafka",
+                    "context_needed": [],
+                }
+            ]
+        }
+    )
+    planner = _planner_from(_FixedProvider(payload=payload), harness, settings)
+
+    attempt = await planner.plan_attempt("compare three systems", attempt=0)
+
+    assert attempt.valid is True
+    assert attempt.plan is not None
+    assert [node.type for node in attempt.plan.nodes] == [NodeType.SYNTHESIS, NodeType.RESULT]
+    assert attempt.plan.nodes[1].context_needed == [1]
+    assert attempt.parsed is not None
+    assert attempt.parsed["nodes"][1]["type"] == "result"
+
+
 async def test_rejection_returned_as_rejection_error_type(
     harness: ToolHarness, settings: Settings
 ) -> None:

@@ -136,11 +136,18 @@ _PLAN_PAYLOAD = json.dumps(
                 "description": "summarise",
                 "context_needed": [1],
             },
+            {
+                "id": 3,
+                "type": "result",
+                "description": "final answer",
+                "context_needed": [2],
+            },
         ]
     }
 )
 _SHAPE_OK = json.dumps({"matches_expectation": True, "issue": None})
 _SYNTH_OUT = json.dumps({"output": "nothing scheduled.", "confidence": 0.9})
+_RESULT_OUT = json.dumps({"output": "nothing scheduled.", "confidence": 0.9})
 
 
 async def _seed_task(
@@ -153,7 +160,7 @@ async def _seed_task(
 
 
 async def test_full_flow_plan_validate_execute() -> None:
-    orch, store = _build([_PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT])
+    orch, store = _build([_PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT, _RESULT_OUT])
     state = await _seed_task(store)
 
     await orch.run(state.task_id)
@@ -162,13 +169,13 @@ async def test_full_flow_plan_validate_execute() -> None:
     assert stored is not None
     assert stored.status is TaskStatus.COMPLETED
     assert stored.plan is not None
-    assert len(stored.plan.nodes) == 2
+    assert len(stored.plan.nodes) == 3
     assert stored.final_output == "nothing scheduled."
 
 
 async def test_confirm_gate_pauses_and_resume_finishes() -> None:
     orch, store = _build(
-        [_PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT],
+        [_PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT, _RESULT_OUT],
         settings=Settings(confirm_plans=True),
     )
     state = await _seed_task(store)
@@ -203,6 +210,12 @@ _PLAN_REVISED = json.dumps(
                 "description": "revised summary in bullet points",
                 "context_needed": [1],
             },
+            {
+                "id": 3,
+                "type": "result",
+                "description": "final answer in bullet points",
+                "context_needed": [2],
+            },
         ]
     }
 )
@@ -210,7 +223,7 @@ _PLAN_REVISED = json.dumps(
 
 async def test_revise_replans_and_re_enters_the_gate() -> None:
     orch, store = _build(
-        [_PLAN_PAYLOAD, _PLAN_REVISED, _SHAPE_OK, _SYNTH_OUT],
+        [_PLAN_PAYLOAD, _PLAN_REVISED, _SHAPE_OK, _SYNTH_OUT, _RESULT_OUT],
         settings=Settings(confirm_plans=True),
     )
     state = await _seed_task(store)
@@ -366,7 +379,7 @@ async def test_stall_passes_prior_reasoning_to_next_attempt() -> None:
     # The capturing provider lets us confirm the stall content was forwarded.
     stall_output = "Let me think about this... " + ("x" * 600)
     orch, store, provider = _build_capturing(
-        [stall_output, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT],
+        [stall_output, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT, _RESULT_OUT],
         settings=Settings(
             max_replan_attempts=1,
             budgets=NodeBudgets(planner=100),
@@ -393,7 +406,7 @@ async def test_short_invalid_json_does_not_carry_prior_reasoning() -> None:
     # A short invalid-JSON response must NOT be treated as a stall.
     short_bad = "nope"  # well under 500 chars
     orch, store, provider = _build_capturing(
-        [short_bad, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT],
+        [short_bad, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT, _RESULT_OUT],
         settings=Settings(max_replan_attempts=1),
     )
     state = await _seed_task(store)
@@ -423,7 +436,7 @@ async def test_validation_error_passes_feedback_to_next_attempt() -> None:
         }
     )
     orch, store, provider = _build_capturing(
-        [invalid_plan, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT],
+        [invalid_plan, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT, _RESULT_OUT],
         settings=Settings(max_replan_attempts=1),
     )
     state = await _seed_task(store)
@@ -440,11 +453,79 @@ async def test_validation_error_passes_feedback_to_next_attempt() -> None:
     assert "<previous_attempt>" not in provider.user_messages[1]
 
 
+async def test_conditional_plan_without_decision_retries_with_feedback() -> None:
+    collapsed_plan = json.dumps(
+        {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "result",
+                    "description": "Report 123 because 246 is even",
+                    "context_needed": [],
+                }
+            ]
+        }
+    )
+    corrected_plan = json.dumps(
+        {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "decision",
+                    "description": "Decide whether 246 is even",
+                    "condition": "Is 246 even?",
+                    "branches": {"yes": [2], "no": [3]},
+                    "default_branch": "yes",
+                    "context_needed": [],
+                },
+                {
+                    "id": 2,
+                    "type": "result",
+                    "description": "Report half of 246 as 123",
+                    "context_needed": [1],
+                },
+                {
+                    "id": 3,
+                    "type": "result",
+                    "description": "Report the next even number after 246",
+                    "context_needed": [1],
+                },
+            ]
+        }
+    )
+    orch, store, provider = _build_capturing(
+        [
+            collapsed_plan,
+            corrected_plan,
+            json.dumps({"branch": "yes", "confidence": 1.0}),
+            json.dumps({"output": "123", "confidence": 1.0}),
+        ],
+        settings=Settings(max_replan_attempts=1),
+    )
+    state = await _seed_task(
+        store,
+        "Is 246 even or odd? If it is even, report half of it. "
+        "If it is odd, report the next even number after it.",
+    )
+
+    await orch.run(state.task_id)
+    result = await store.load_task(state.task_id)
+
+    assert result is not None
+    assert result.status is TaskStatus.COMPLETED
+    assert result.final_output == "123"
+    assert len(result.planning_attempts) == 2
+    assert result.planning_attempts[0].error_type == "validation"
+    assert "no decision node" in (result.planning_attempts[0].error or "")
+    assert "<validation_feedback>" in provider.user_messages[1]
+    assert "explicit decision node" in provider.user_messages[1]
+
+
 async def test_exactly_stall_threshold_does_not_trigger_passthrough() -> None:
     # Exactly budget * multiplier must NOT trigger passthrough.
     at_threshold = "x" * 400
     orch, store, provider = _build_capturing(
-        [at_threshold, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT],
+        [at_threshold, _PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT, _RESULT_OUT],
         settings=Settings(
             max_replan_attempts=1,
             budgets=NodeBudgets(planner=100),
@@ -577,7 +658,7 @@ _PLAN_THREE_NODES = json.dumps(
         ]
     }
 )
-_RESULT_OUT = json.dumps({"output": "done.", "confidence": 1.0})
+_DONE_RESULT_OUT = json.dumps({"output": "done.", "confidence": 1.0})
 
 
 async def test_dependent_nodes_section_in_synthesis_prompt() -> None:
@@ -588,7 +669,7 @@ async def test_dependent_nodes_section_in_synthesis_prompt() -> None:
     # 2: synthesis → output
     # 3: result → output
     orch, store, provider = _build_capturing(
-        [_PLAN_THREE_NODES, _SHAPE_OK, _SYNTH_OUT, _RESULT_OUT],
+        [_PLAN_THREE_NODES, _SHAPE_OK, _SYNTH_OUT, _DONE_RESULT_OUT],
     )
     state = await _seed_task(store)
     await orch.run(state.task_id)
