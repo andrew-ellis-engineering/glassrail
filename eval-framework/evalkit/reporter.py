@@ -63,10 +63,13 @@ def save_task_artifacts(run_dir: Path, result: TaskResult) -> None:
             "mean_pass_rate": result.mean_pass_rate,
         },
     )
-    for trial, score in zip(result.trials, result.scores, strict=False):
+    scores_by_run = {score.trial_num: score for score in result.scores}
+    for trial in result.trials:
         td = task_dir / f"trial-{trial.run_number:02d}"
         _write_json(td / "trial.json", trial)
-        _write_json(td / "score.json", score)
+        score = scores_by_run.get(trial.run_number)
+        if score is not None:
+            _write_json(td / "score.json", score)
         _write_json(td / "stdout.json", trial.output_envelope)
         (td / "stderr.txt").write_text(trial.raw_stderr, encoding="utf-8")
 

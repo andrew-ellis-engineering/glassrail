@@ -22,6 +22,7 @@ from typing import Any
 from evalkit.subjects.base import RunResult
 
 _DEFAULT_COMMAND = ["glassrail", "run"]
+_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 def _as_text(stream: str | bytes | None) -> str:
@@ -56,7 +57,10 @@ class GlassrailCliSubject:
         if timeout_s:
             cmd += ["--timeout", str(timeout_s)]
         cmd += self._extra_args
-        env = {**os.environ, **self._env_overrides} if self._env_overrides else None
+        env = self._build_env()
+        missing_key_error = _missing_openrouter_api_key_error(env)
+        if missing_key_error is not None:
+            return RunResult(result_text="", success=False, error=missing_key_error)
         try:
             proc = subprocess.run(  # noqa: S603 - argv from config, no shell
                 cmd, capture_output=True, text=True, timeout=timeout_s, check=False, env=env
@@ -79,6 +83,38 @@ class GlassrailCliSubject:
                 error=f"glassrail CLI not found: {self._command[0]!r}",
             )
         return _result_from_proc(proc.returncode, proc.stdout, proc.stderr)
+
+    def _build_env(self) -> dict[str, str] | None:
+        if not self._env_overrides:
+            return None
+
+        env = {**os.environ, **self._env_overrides}
+        openrouter_key = env.get("OPENROUTER_API_KEY")
+        if not openrouter_key:
+            return env
+
+        for tier in range(4):
+            base_url_key = f"GLASSRAIL_TIER{tier}__BASE_URL"
+            api_key_key = f"GLASSRAIL_TIER{tier}__API_KEY"
+            if env.get(base_url_key) == _OPENROUTER_BASE_URL and not env.get(api_key_key):
+                env[api_key_key] = openrouter_key
+        return env
+
+
+def _missing_openrouter_api_key_error(env: dict[str, str] | None) -> str | None:
+    if env is None:
+        return None
+
+    missing: list[str] = []
+    for tier in range(4):
+        base_url_key = f"GLASSRAIL_TIER{tier}__BASE_URL"
+        api_key_key = f"GLASSRAIL_TIER{tier}__API_KEY"
+        if env.get(base_url_key) == _OPENROUTER_BASE_URL and not env.get(api_key_key):
+            missing.append(api_key_key)
+    if not missing:
+        return None
+    keys = ", ".join(missing)
+    return f"missing OpenRouter credentials for {keys}; set OPENROUTER_API_KEY"
 
 
 def _result_from_proc(returncode: int, stdout: str, stderr: str) -> RunResult:

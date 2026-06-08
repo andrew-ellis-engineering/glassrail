@@ -11,14 +11,9 @@ Model is set via --model (default below). Any OpenRouter model slug works:
   qwen/qwen3-235b-a22b           # same family as local, cloud-hosted
   qwen/qwen3-8b                  # mirrors local tier-0
 
-API key — set once in your shell before running:
-  export GLASSRAIL_TIER0__API_KEY=$OPENROUTER_API_KEY
-  export GLASSRAIL_TIER1__API_KEY=$OPENROUTER_API_KEY
-  export GLASSRAIL_TIER2__API_KEY=$OPENROUTER_API_KEY
-  export GLASSRAIL_TIER3__API_KEY=$OPENROUTER_API_KEY
-
-Or one-liner:
-  eval $(python3 -c "k='$OPENROUTER_API_KEY'; [print(f'export GLASSRAIL_TIER{i}__API_KEY={k}') for i in range(4)]")
+API key — set once in your shell before running. The glassrail-cli subject maps
+this into the GLASSRAIL_TIER*__API_KEY variables for OpenRouter-pinned tiers:
+  export OPENROUTER_API_KEY=sk-or-...
 
 Then run:
   python3 run.py suite suites/glassrail-openrouter --workers 5

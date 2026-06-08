@@ -153,7 +153,9 @@ def load_suite(suite_dir: Path) -> tuple[dict[str, Any], list[Task]]:
 
 def load_task_with_suite(task_dir: Path) -> tuple[dict[str, Any], Task]:
     """Load a standalone task path, locating its ``suite.toml`` two levels up."""
-    task_dir = task_dir.resolve()
+    # Keep the lexical parent suite before resolving symlinks. OpenRouter suites
+    # intentionally symlink their ``tasks`` directory to the base suite; resolving
+    # first would silently load the base suite metadata for single-task runs.
     suite_dir = task_dir.parent.parent  # tasks/<task>/ -> suite root
     meta = load_suite_meta(suite_dir)
     return meta, load_task(task_dir, meta, str(meta["name"]))

@@ -1,6 +1,11 @@
 [suite]
 name = "node-capability-openrouter"
-description = "node-capability tasks routed through OpenRouter instead of local MLX."
+description = """
+node-capability tasks routed through OpenRouter instead of local MLX.
+
+Set OPENROUTER_API_KEY once before running; the glassrail-cli subject maps it
+into the GLASSRAIL_TIER*__API_KEY variables for OpenRouter-pinned tiers.
+"""
 default_backend = "glassrail-cli"
 default_model = "qwen/qwen3-8b"
 default_type = "capability"
