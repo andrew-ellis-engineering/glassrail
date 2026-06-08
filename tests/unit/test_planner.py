@@ -414,6 +414,47 @@ async def test_plan_attempt_wraps_terminal_synthesis_in_result(
     assert attempt.parsed["nodes"][1]["type"] == "result"
 
 
+async def test_plan_attempt_preserves_non_null_duplicate_condition(
+    harness: ToolHarness, settings: Settings
+) -> None:
+    payload = """\
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "decision",
+      "description": "Choose the hemisphere branch",
+      "condition": "Is Madrid in the northern hemisphere?",
+      "branches": {"yes": [2], "no": [3]},
+      "default_branch": "yes",
+      "condition": null
+    },
+    {
+      "id": 2,
+      "type": "result",
+      "description": "Report a northern winter month",
+      "context_needed": [1]
+    },
+    {
+      "id": 3,
+      "type": "result",
+      "description": "Report a southern summer month",
+      "context_needed": [1]
+    }
+  ]
+}
+"""
+    planner = _planner_from(_FixedProvider(payload=payload), harness, settings)
+
+    attempt = await planner.plan_attempt("if Madrid is northern, name a winter month", attempt=0)
+
+    assert attempt.valid is True
+    assert attempt.plan is not None
+    assert attempt.plan.nodes[0].condition == "Is Madrid in the northern hemisphere?"
+    assert attempt.parsed is not None
+    assert attempt.parsed["nodes"][0]["condition"] == "Is Madrid in the northern hemisphere?"
+
+
 async def test_rejection_returned_as_rejection_error_type(
     harness: ToolHarness, settings: Settings
 ) -> None:

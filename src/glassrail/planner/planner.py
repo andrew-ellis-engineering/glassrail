@@ -305,7 +305,10 @@ class Planner:
 
             cleaned = strip_model_output(raw)
             try:
-                data = json.loads(cleaned)
+                data = json.loads(
+                    cleaned,
+                    object_pairs_hook=_prefer_non_null_duplicate_object,
+                )
             except json.JSONDecodeError as exc:
                 is_stall = len(raw) > self._planner_stall_char_limit()
                 return self._failed(
@@ -413,6 +416,21 @@ def _repair_plan_payload(plan_payload: dict[str, Any]) -> None:
     """Repair small, deterministic planner omissions before strict validation."""
     _repair_plan_descriptions(plan_payload)
     _ensure_terminal_result(plan_payload)
+
+
+def _prefer_non_null_duplicate_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Decode JSON objects while ignoring later duplicate nulls.
+
+    Local models sometimes emit a real field and then repeat the same key with
+    ``null`` while filling optional schema slots. Standard ``json.loads`` keeps
+    the later null, turning an otherwise valid plan into a validation failure.
+    """
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result and value is None and result[key] is not None:
+            continue
+        result[key] = value
+    return result
 
 
 def _repair_plan_descriptions(plan_payload: dict[str, Any]) -> None:

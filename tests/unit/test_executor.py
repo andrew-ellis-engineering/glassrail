@@ -435,6 +435,42 @@ async def test_subplan_bubbles_nested_final_output() -> None:
     assert out.results[1].output == "nested answer"
 
 
+async def test_subplan_request_preserves_parent_task_instructions() -> None:
+    nested_payload = json.dumps({"output": "DuckDB summary", "confidence": 0.95})
+    provider = _CapturingProvider([nested_payload])
+    executor = Executor(
+        router=TierRouter([provider]),
+        harness=ToolHarness(),
+        settings=Settings(),
+    )
+    nested = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="Summarize DuckDB")])
+    nested.sorted_node_ids = [1]
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.SUBPLAN,
+                description="Research DuckDB for local analytics",
+                subplan=nested,
+            )
+        ],
+    )
+    state = _state(plan)
+    state.user_request = (
+        "Compare SQLite, DuckDB, and Parquet. Use stable local-analytics "
+        "knowledge; do not require web research."
+    )
+
+    await executor.execute(state)
+
+    assert provider.user_seen
+    nested_result_prompt = provider.user_seen[0]
+    assert "Original user request:" in nested_result_prompt
+    assert "Subplan task: Research DuckDB for local analytics" in nested_result_prompt
+    assert "Parent task:" in nested_result_prompt
+    assert "Use stable local-analytics knowledge" in nested_result_prompt
+
+
 async def test_subplan_without_attached_plan_fails() -> None:
     executor, _ = _executor([])
     plan = Plan(nodes=[Node(id=1, type=NodeType.SUBPLAN, description="missing")])

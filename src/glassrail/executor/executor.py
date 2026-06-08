@@ -633,9 +633,9 @@ class Executor:
             state.results,
             dependent_nodes=self._direct_dependents(node, state) or None,
         )
-        sub_request = (
-            f"{node.description}\n\nContext from parent plan:\n{ctx}" if ctx else node.description
-        )
+        sub_request = f"Subplan task: {node.description}\n\nParent task:\n{state.user_request}"
+        if ctx:
+            sub_request += f"\n\nContext from parent plan:\n{ctx}"
         sub_state = ExecutionState(
             task_id=state.task_id,
             user_request=sub_request,

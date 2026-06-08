@@ -228,6 +228,9 @@ Preserve important facts, caveats, names, dates, figures, source attributions,
 and uncertainty from upstream nodes.
 Do not introduce facts that are not present in the context. If inputs conflict,
 surface the conflict rather than smoothing it away.
+Exception: when the task explicitly asks for stable general knowledge and no
+source file, tool, or live lookup is required, use well-established knowledge
+rather than treating the empty context as missing evidence.
 This is usually an intermediate output for downstream nodes, not necessarily
 the final user-facing answer.
 Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.

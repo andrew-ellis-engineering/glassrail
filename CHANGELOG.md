@@ -64,6 +64,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Planner output normalization now wraps a terminal synthesis-only plan in a
   result node, and the orchestrator retries conditional-looking requests when
   the planner collapses them into a plan with no decision node.
+- Planner JSON parsing now preserves an earlier non-null value when a model
+  repeats the same key later as `null`, recovering otherwise-valid decision
+  nodes with duplicate `condition` fields.
+- Subplan execution now includes the parent task text in the nested task
+  request, so closed-book subplans retain stable-knowledge instructions without
+  seeing unrelated parent-node results.
 - Planner cookbook and prompt guidance now steer obvious binary branches,
   logic-puzzle deductions, and comparison/recommendation tasks toward explicit
   decision, reasoning, and per-axis comparison structure.

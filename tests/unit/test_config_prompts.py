@@ -65,6 +65,7 @@ def test_synthesis_and_result_prompts_preserve_caveats_without_inventing() -> No
     assert "Do not introduce facts" in synthesis
     assert "surface the conflict" in synthesis
     assert "final user-facing answer" in synthesis
+    assert "stable general knowledge" in synthesis
     assert "Preserve important caveats and uncertainty" in result
     assert "do not invent facts" in result
     assert "stable general knowledge" in result
