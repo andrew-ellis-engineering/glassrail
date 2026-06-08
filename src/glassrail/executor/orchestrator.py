@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 
 from opentelemetry.trace import Status, StatusCode
 
@@ -437,7 +438,6 @@ def _structural_retry_feedback(request: str, plan: Plan) -> str | None:
 def _looks_like_conditional_request(request: str) -> bool:
     text = f" {request.lower()} "
     conditional_markers = (
-        " if ",
         " otherwise ",
         " else ",
         " whether ",
@@ -448,4 +448,45 @@ def _looks_like_conditional_request(request: str) -> bool:
         " true or false ",
         " yes or no ",
     )
-    return any(marker in text for marker in conditional_markers)
+    if any(marker in text for marker in conditional_markers):
+        return True
+
+    meaningful_if_count = 0
+    optional_if_prefixes = (
+        "if present",
+        "if available",
+        "if any",
+        "if applicable",
+        "if found",
+        "if included",
+        "if known",
+        "if mentioned",
+        "if possible",
+        "if provided",
+        "if stated",
+    )
+    branch_verbs = (
+        "calculate",
+        "choose",
+        "compute",
+        "give",
+        "read",
+        "recommend",
+        "report",
+        "return",
+        "say",
+        "tell",
+        "use",
+        "write",
+    )
+    for match in re.finditer(r"\bif\b", text):
+        suffix = text[match.start() : match.start() + 120]
+        if suffix.startswith(optional_if_prefixes):
+            continue
+        meaningful_if_count += 1
+        if re.search(r"\bthen\b", suffix) or re.search(
+            rf",\s*(?:{'|'.join(branch_verbs)})\b", suffix
+        ):
+            return True
+
+    return meaningful_if_count >= 2

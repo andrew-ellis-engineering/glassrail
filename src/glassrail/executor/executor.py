@@ -847,13 +847,39 @@ class Executor:
     def _extract_final_output(self, state: ExecutionState, plan: Plan) -> str | None:
         """The last completed RESULT node's output is the final answer; if
         the plan declared no RESULT node, fall back to the last completed
-        SYNTHESIS node so older plans keep working unchanged."""
-        for target in (NodeType.RESULT, NodeType.SYNTHESIS):
+        synthesis/summary node so older or imperfect plans keep producing the
+        best completed answer they have."""
+        for target in (NodeType.RESULT, NodeType.SYNTHESIS, NodeType.SUMMARY):
             for node_id in reversed(plan.sorted_node_ids):
                 node = next((n for n in plan.nodes if n.id == node_id), None)
                 if node is None or node.type is not target:
+                    continue
+                if self._only_uses_skipped_content(node, state, plan):
                     continue
                 result = state.results.get(node_id)
                 if result and result.status is NodeStatus.COMPLETED:
                     return str(result.output)
         return None
+
+    @staticmethod
+    def _only_uses_skipped_content(node: Node, state: ExecutionState, plan: Plan) -> bool:
+        """True when all non-decision inputs to a final candidate were skipped.
+
+        This keeps an untaken branch's downstream result node from winning the
+        final answer while still allowing shared join nodes that consume one
+        completed branch and one skipped branch.
+        """
+        if not node.context_needed:
+            return False
+        node_map = {n.id: n for n in plan.nodes}
+        content_deps = [
+            dep
+            for dep in node.context_needed
+            if node_map.get(dep, node).type is not NodeType.DECISION
+        ]
+        if not content_deps:
+            return False
+        return all(
+            (result := state.results.get(dep)) is None or result.status is NodeStatus.SKIPPED
+            for dep in content_deps
+        )

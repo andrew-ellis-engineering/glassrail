@@ -266,6 +266,71 @@ async def test_decision_skips_non_taken_branch() -> None:
     assert 3 in result.skipped_nodes
 
 
+async def test_final_output_ignores_result_with_only_skipped_content() -> None:
+    decision_payload = json.dumps({"branch": "yes", "confidence": 0.9})
+    yes_payload = json.dumps({"reasoning": "half is 123", "confidence": 1.0})
+    result_payload = json.dumps({"output": "123", "confidence": 1.0})
+    stale_result_payload = json.dumps({"output": "248", "confidence": 1.0})
+    executor, _ = _executor(
+        [decision_payload, yes_payload, result_payload, stale_result_payload],
+        tier=2,
+    )
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.DECISION,
+                description="branch on parity",
+                condition="Is 246 even?",
+                branches={"yes": [2], "no": [3]},
+                default_branch="yes",
+            ),
+            Node(id=2, type=NodeType.THINK, description="calculate half"),
+            Node(id=3, type=NodeType.THINK, description="calculate next even"),
+            Node(id=4, type=NodeType.RESULT, description="report half", context_needed=[2]),
+            Node(id=5, type=NodeType.RESULT, description="report next even", context_needed=[3]),
+        ]
+    )
+    state = _state(plan)
+
+    result = await executor.execute(state)
+
+    assert result.results[2].status is NodeStatus.COMPLETED
+    assert result.results[3].status is NodeStatus.SKIPPED
+    assert result.results[4].status is NodeStatus.COMPLETED
+    assert result.results[5].status is NodeStatus.COMPLETED
+    assert result.final_output == "123"
+
+
+async def test_decision_preserves_shared_join_after_branch_skip() -> None:
+    decision_payload = json.dumps({"branch": "yes", "confidence": 0.9})
+    yes_payload = json.dumps({"output": "yes-path", "confidence": 1.0})
+    join_payload = json.dumps({"output": "final from yes-path", "confidence": 1.0})
+    executor, _ = _executor([decision_payload, yes_payload, join_payload])
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.DECISION,
+                description="branch",
+                condition="is it yes?",
+                branches={"yes": [2], "no": [3]},
+                default_branch="yes",
+            ),
+            Node(id=2, type=NodeType.SYNTHESIS, description="yes path"),
+            Node(id=3, type=NodeType.SYNTHESIS, description="no path"),
+            Node(id=4, type=NodeType.RESULT, description="join", context_needed=[2, 3]),
+        ]
+    )
+    state = _state(plan)
+
+    result = await executor.execute(state)
+
+    assert result.results[3].status is NodeStatus.SKIPPED
+    assert result.results[4].status is NodeStatus.COMPLETED
+    assert result.final_output == "final from yes-path"
+
+
 async def test_decision_default_branch_used_on_llm_failure() -> None:
     """If the decision call returns garbage, the default_branch is taken."""
     no_synth = json.dumps({"output": "no-path", "confidence": 1.0})
@@ -408,6 +473,44 @@ async def test_result_preferred_over_synthesis_for_final_output() -> None:
 
     out = await executor.execute(state)
     assert out.final_output == "the answer"
+
+
+async def test_summary_falls_back_when_result_is_skipped() -> None:
+    decision_payload = json.dumps({"branch": "yes", "confidence": 0.9})
+    summary_payload = json.dumps({"summary": "good summary", "confidence": 0.95})
+    executor, _ = _executor([decision_payload, summary_payload])
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.DECISION,
+                description="branch",
+                condition="has content?",
+                branches={"yes": [2], "no": [3]},
+                default_branch="yes",
+            ),
+            Node(id=2, type=NodeType.SUMMARY, description="summarize"),
+            Node(id=3, type=NodeType.RESULT, description="empty file"),
+        ]
+    )
+    state = _state(plan)
+
+    out = await executor.execute(state)
+
+    assert out.results[3].status is NodeStatus.SKIPPED
+    assert out.final_output == "good summary"
+
+
+async def test_terminal_think_does_not_supply_final_output() -> None:
+    think_payload = json.dumps({"reasoning": "Alice owns the fish", "confidence": 0.95})
+    executor, _ = _executor([think_payload], tier=2)
+    plan = Plan(nodes=[Node(id=1, type=NodeType.THINK, description="solve logic puzzle")])
+    state = _state(plan)
+
+    out = await executor.execute(state)
+
+    assert out.results[1].status is NodeStatus.COMPLETED
+    assert out.final_output is None
 
 
 async def test_result_failure_marks_node_failed() -> None:

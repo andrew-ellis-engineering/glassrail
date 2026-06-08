@@ -234,6 +234,26 @@ def test_branch_reference_missing(validator: PlanValidator) -> None:
         validator.validate(plan)
 
 
+def test_branch_references_order_after_decision(validator: PlanValidator) -> None:
+    plan = Plan(
+        nodes=[
+            _tool_node(1),
+            _decision_node(2, {"yes": [3], "no": [4]}, ctx=[1]),
+            _tool_node(3),
+            _tool_node(4),
+            _tool_node(5, ctx=[3]),
+            _tool_node(6, ctx=[4]),
+        ]
+    )
+
+    sorted_ids = validator.validate(plan)
+
+    assert sorted_ids.index(2) < sorted_ids.index(3)
+    assert sorted_ids.index(2) < sorted_ids.index(4)
+    assert sorted_ids.index(3) < sorted_ids.index(5)
+    assert sorted_ids.index(4) < sorted_ids.index(6)
+
+
 def test_decision_nesting_within_limit(validator: PlanValidator) -> None:
     # depth 2 (decision → decision → leaves), limit is 2.
     plan = Plan(

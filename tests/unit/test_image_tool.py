@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -64,6 +66,19 @@ def _make_proc(returncode: int = 0, stderr: bytes = b"") -> MagicMock:
     return proc
 
 
+async def _await_wait_for(awaitable: Awaitable[Any], **kwargs: Any) -> Any:
+    del kwargs
+    return await awaitable
+
+
+async def _timeout_wait_for(awaitable: Awaitable[Any], **kwargs: Any) -> Any:
+    del kwargs
+    close = getattr(awaitable, "close", None)
+    if callable(close):
+        close()
+    raise TimeoutError
+
+
 async def test_image_generate_happy_path(tmp_path: Path) -> None:
     """image_generate returns path + metadata when mflux exits 0."""
     out = tmp_path / "out.png"
@@ -71,7 +86,7 @@ async def test_image_generate_happy_path(tmp_path: Path) -> None:
 
     with (
         patch("asyncio.create_subprocess_exec", return_value=proc),
-        patch("asyncio.wait_for", new=AsyncMock(return_value=(b"", b""))),
+        patch("asyncio.wait_for", new=_await_wait_for),
         patch("asyncio.to_thread", new=AsyncMock(side_effect=[out, None, True])),
     ):
         result = await image_generate(
@@ -103,7 +118,7 @@ async def test_image_generate_nonzero_exit_raises(tmp_path: Path) -> None:
 
     with (
         patch("asyncio.create_subprocess_exec", return_value=proc),
-        patch("asyncio.wait_for", new=AsyncMock(return_value=(b"", b"OOM error"))),
+        patch("asyncio.wait_for", new=_await_wait_for),
         patch("asyncio.to_thread", new=AsyncMock(side_effect=[out, None])),
     ):
         with pytest.raises(ToolExecutionError, match="exited 1"):
@@ -131,7 +146,7 @@ async def test_image_generate_timeout_raises(tmp_path: Path) -> None:
 
     with (
         patch("asyncio.create_subprocess_exec", return_value=proc),
-        patch("asyncio.wait_for", new=AsyncMock(side_effect=TimeoutError)),
+        patch("asyncio.wait_for", new=_timeout_wait_for),
         patch("asyncio.to_thread", new=AsyncMock(side_effect=[out, None])),
     ):
         with pytest.raises(ToolExecutionError, match="timed out"):
@@ -159,7 +174,7 @@ async def test_image_generate_img2img_passes_args(tmp_path: Path) -> None:
 
     with (
         patch("asyncio.create_subprocess_exec", return_value=proc) as mock_exec,
-        patch("asyncio.wait_for", new=AsyncMock(return_value=(b"", b""))),
+        patch("asyncio.wait_for", new=_await_wait_for),
         patch("asyncio.to_thread", new=AsyncMock(side_effect=[out, None, True])),
     ):
         await image_generate(

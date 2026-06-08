@@ -26,14 +26,28 @@ def topo_sort(plan: Plan) -> list[int]:
     in_degree: dict[int, int] = {n.id: 0 for n in plan.nodes}
     graph: dict[int, list[int]] = defaultdict(list)
 
+    edges: set[tuple[int, int]] = set()
+
     for node in plan.nodes:
         for dep in node.context_needed:
             if dep not in all_ids:
                 raise PlanValidationError(
                     f"Node {node.id} declares context_needed={dep} which doesn't exist"
                 )
-            graph[dep].append(node.id)
-            in_degree[node.id] += 1
+            edges.add((dep, node.id))
+        if node.type is NodeType.DECISION and node.branches:
+            for branch_name, branch_nodes in node.branches.items():
+                for branch_node in branch_nodes:
+                    if branch_node not in all_ids:
+                        raise PlanValidationError(
+                            f"Decision node {node.id} branch '{branch_name}' "
+                            f"references non-existent node {branch_node}"
+                        )
+                    edges.add((node.id, branch_node))
+
+    for source, target in edges:
+        graph[source].append(target)
+        in_degree[target] += 1
 
     queue = sorted(sid for sid in all_ids if in_degree[sid] == 0)
     sorted_ids: list[int] = []

@@ -16,6 +16,7 @@ from glassrail.config import NodeBudgets, Settings
 from glassrail.core import ExecutionState, TaskStatus, new_task_id
 from glassrail.events import EventBus
 from glassrail.executor import Executor, Orchestrator
+from glassrail.executor import orchestrator as orchestrator_module
 from glassrail.harness import ToolHarness, register_builtins
 from glassrail.planner import Planner
 from glassrail.providers import Chunk, Message, TierRouter
@@ -519,6 +520,27 @@ async def test_conditional_plan_without_decision_retries_with_feedback() -> None
     assert "no decision node" in (result.planning_attempts[0].error or "")
     assert "<validation_feedback>" in provider.user_messages[1]
     assert "explicit decision node" in provider.user_messages[1]
+
+
+def test_conditional_retry_ignores_optional_if_present_language() -> None:
+    request = (
+        "Read /tmp/glassrail-eval/brief.md and give me a 3-bullet summary. "
+        "Preserve these source facts if present: 42% latency reduction, "
+        "Dr. Elena Voss, and the 2024-03-15 date."
+    )
+
+    conditional_check = getattr(orchestrator_module, "_looks_like_conditional_request")
+    assert conditional_check(request) is False
+
+
+def test_conditional_retry_detects_real_if_branching() -> None:
+    request = (
+        "Is 246 even or odd? If it is even, report half of it. "
+        "If it is odd, report the next even number after it."
+    )
+
+    conditional_check = getattr(orchestrator_module, "_looks_like_conditional_request")
+    assert conditional_check(request) is True
 
 
 async def test_exactly_stall_threshold_does_not_trigger_passthrough() -> None:
