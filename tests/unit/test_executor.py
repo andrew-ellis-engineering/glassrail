@@ -178,6 +178,126 @@ async def test_tool_approval_ask_uses_broker() -> None:
     assert result.results[1].status is NodeStatus.COMPLETED
 
 
+async def test_write_risk_tool_asks_by_default_in_interactive_mode() -> None:
+    bus = EventBus()
+    broker = ToolApprovalBroker(bus)
+    harness = ToolHarness()
+
+    @harness.tool(name="writer", description="write", parameters={"type": "object"}, risk="write")
+    async def _writer() -> dict[str, str]:
+        return {"written": "yes"}
+
+    executor = Executor(
+        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        harness=harness,
+        settings=Settings(),
+        event_bus=bus,
+        tool_approval=broker,
+    )
+    state = _state(Plan(nodes=[Node(id=1, type=NodeType.TOOL, description="write", tool="writer")]))
+
+    async with bus.subscribe() as sub:
+        task = asyncio.create_task(executor.execute(state))
+        event = await sub.__anext__()
+        while event.type != "tool_approval_requested":
+            event = await sub.__anext__()
+        assert event.tool_name == "writer"
+        assert event.risk == "write"
+        broker.resolve(event.approval_id, True)
+        result = await task
+
+    assert result.results[1].status is NodeStatus.COMPLETED
+
+
+async def test_write_risk_tool_runs_without_prompt_in_auto_mode() -> None:
+    calls = 0
+    harness = ToolHarness()
+
+    @harness.tool(name="writer", description="write", parameters={"type": "object"}, risk="write")
+    async def _writer() -> dict[str, str]:
+        nonlocal calls
+        calls += 1
+        return {"written": "yes"}
+
+    executor = Executor(
+        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        harness=harness,
+        settings=Settings(
+            tool_approval=ToolApprovalSettings(
+                mode=ToolApprovalMode.AUTO,
+            )
+        ),
+    )
+    state = _state(Plan(nodes=[Node(id=1, type=NodeType.TOOL, description="write", tool="writer")]))
+
+    result = await executor.execute(state)
+
+    assert calls == 1
+    assert result.results[1].status is NodeStatus.COMPLETED
+
+
+async def test_explicit_allow_override_bypasses_write_risk_prompt() -> None:
+    calls = 0
+    harness = ToolHarness()
+
+    @harness.tool(name="writer", description="write", parameters={"type": "object"}, risk="write")
+    async def _writer() -> dict[str, str]:
+        nonlocal calls
+        calls += 1
+        return {"written": "yes"}
+
+    executor = Executor(
+        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        harness=harness,
+        settings=Settings(
+            tool_approval=ToolApprovalSettings(
+                overrides={"writer": ToolApprovalPolicy.ALLOW},
+            )
+        ),
+    )
+    state = _state(Plan(nodes=[Node(id=1, type=NodeType.TOOL, description="write", tool="writer")]))
+
+    result = await executor.execute(state)
+
+    assert calls == 1
+    assert result.results[1].status is NodeStatus.COMPLETED
+
+
+async def test_read_risk_tool_follows_default_policy() -> None:
+    bus = EventBus()
+    broker = ToolApprovalBroker(bus)
+    harness = ToolHarness()
+
+    @harness.tool(name="reader", description="read", parameters={"type": "object"}, risk="read")
+    async def _reader() -> dict[str, str]:
+        return {"read": "yes"}
+
+    executor = Executor(
+        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        harness=harness,
+        settings=Settings(
+            tool_approval=ToolApprovalSettings(
+                default=ToolApprovalPolicy.ASK,
+            )
+        ),
+        event_bus=bus,
+        tool_approval=broker,
+    )
+    state = _state(Plan(nodes=[Node(id=1, type=NodeType.TOOL, description="read", tool="reader")]))
+
+    async with bus.subscribe() as sub:
+        task = asyncio.create_task(executor.execute(state))
+        event = await sub.__anext__()
+        while event.type != "tool_approval_requested":
+            event = await sub.__anext__()
+        assert event.tool_name == "reader"
+        assert event.risk == "read"
+        broker.resolve(event.approval_id, True)
+        result = await task
+
+    assert result.results[1].status is NodeStatus.COMPLETED
+
+
 async def test_tool_approval_auto_mode_allows_ask_but_not_deny() -> None:
     calls = 0
     harness = ToolHarness()

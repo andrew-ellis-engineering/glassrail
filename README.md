@@ -223,6 +223,9 @@ and log a warning the first time they resolve a path.
 
 Per-tool approval is configured under `[tool_approval]`. Policies are:
 `allow` (run), `ask` (prompt an interactive client), and `deny` (never run).
+Explicit per-tool overrides win. Without an override, tools declared as
+`write` or `execute` risk default to `ask`; `read` and `network` tools use the
+configured `default`.
 `mode = "auto"` treats `ask` as `allow` for unattended/headless execution, but
 keeps `deny` as `deny`.
 
@@ -234,6 +237,7 @@ mode = "interactive"                     # or "auto"
 [tool_approval.overrides]
 file_write = "ask"
 shell_exec = "deny"
+image_generate = "allow"                 # explicit override for a write-risk tool
 ```
 
 **Third-party plugins** advertised through the `glassrail.tools` entry-point
@@ -254,10 +258,10 @@ Current posture (hardening is tracked in
   process can access and log a one-time warning.
 - The web tools fetch model-chosen URLs — enabling them means the agent has
   outbound network access it chooses how to use.
-- A tool's `risk` level (`read`/`network`/`write`/`execute`) is currently
-  informational only; execution gating comes from the `[tool_approval]`
-  policies above, so configure those for anything you would not run
-  unattended.
+- Tool `risk` levels participate in approval: without an explicit override,
+  `write` and `execute` tools ask in interactive mode. `mode = "auto"` still
+  treats `ask` as `allow`, so use explicit `deny` overrides for tools that
+  must never run unattended.
 
 ## Evals
 

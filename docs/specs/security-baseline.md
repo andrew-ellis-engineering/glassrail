@@ -19,11 +19,9 @@ Current posture, as audited June 2026:
 - `image_generate` (`src/glassrail/harness/integrations/image.py`) writes to
   any user-resolvable `output_path`.
 - The REST gateway has **no authentication** and no CORS config.
-- The tool `risk` field (`read`/`network`/`write`/`execute`) is **decorative**:
-  `Executor._approve_tool_call` passes it through for display but never
-  consults it; the registry docstring claims write/execute tools "require
-  explicit user approval", which is currently false (acknowledged in the
-  roadmap's file-editing entry).
+- The tool `risk` field (`read`/`network`/`write`/`execute`) now participates
+  in approval defaults: `write` and `execute` resolve to `ask` unless an
+  explicit override wins, while auto mode still treats `ask` as allowed.
 
 The Phase 2 file-editing spec (vault) depends on items 1 and 2 anyway; this
 pulls the substrate forward.
@@ -59,7 +57,7 @@ pulls the substrate forward.
   the default; note that a future minor release will flip the default to
   confined.
 
-## Item 2 — Honor `risk` in tool approval (P0)
+## Item 2 — Honor `risk` in tool approval (P0) — implemented 2026-06-10
 
 **File:** `Executor._approve_tool_call` in `src/glassrail/executor/executor.py`.
 

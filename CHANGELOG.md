@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   confinement. `file_read` and `image_generate` resolve paths through the shared
   guard, deny symlink/traversal escapes when roots are configured, and preserve
   the current unconfined default with a one-time warning.
+- Tool approval now honors declared tool risk by default: explicit per-tool
+  overrides still win, while `write` and `execute` tools resolve to `ask`
+  unless overridden. Auto mode continues to treat `ask` as allowed for
+  unattended runs.
 - Engineering specs under `docs/specs/` from the June 2026 architecture audit
   — eval integrity (de-overfitting, held-out suite, CI eval gate), parallel
   node execution, node resilience, configurable routing table, security

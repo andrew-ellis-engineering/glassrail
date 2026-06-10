@@ -671,7 +671,7 @@ class Executor:
     ) -> bool:
         """Apply configured per-tool approval policy before execution."""
         assert node.tool is not None
-        policy = self._settings.tool_approval.policy_for(node.tool)
+        policy = self._effective_tool_policy(node.tool)
         if policy is ToolApprovalPolicy.DENY:
             log.warning("Node %d: tool '%s' denied by policy", node.id, node.tool)
             return False
@@ -696,6 +696,15 @@ class Executor:
             args=args,
             description=node.description,
         )
+
+    def _effective_tool_policy(self, tool_name: str) -> ToolApprovalPolicy:
+        """Resolve explicit approval config plus risk-derived defaults."""
+        override = self._settings.tool_approval.overrides.get(tool_name)
+        if override is not None:
+            return override
+        if self._harness.risk_for(tool_name) in {"write", "execute"}:
+            return ToolApprovalPolicy.ASK
+        return self._settings.tool_approval.default
 
     @staticmethod
     def _direct_dependents(node: Node, state: ExecutionState) -> list[Node]:
