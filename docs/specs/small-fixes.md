@@ -100,7 +100,7 @@ expose the chosen node's result rather than re-deriving), defaulting to 1.0
 only when that is unavailable. The flag check then applies naturally. Tests:
 inner result confidence 0.4 → subplan node flagged; missing → 1.0.
 
-## 9. CLI tests (pre-tag)
+## 9. CLI tests (pre-tag) — implemented 2026-06-10
 
 `src/glassrail/cli/__init__.py` has **zero** tests, and `glassrail run
 --json` is the contract the entire eval framework consumes — it can drift

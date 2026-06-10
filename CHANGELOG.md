@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   overrides still win, while `write` and `execute` tools resolve to `ask`
   unless overridden. Auto mode continues to treat `ask` as allowed for
   unattended runs.
+- CLI coverage now protects the release-critical command surface: `version`,
+  `run --json` envelope shape, `exec-plan --json` with a harness-mechanics
+  fixture, and `tui` / `acp` help rendering.
 - Engineering specs under `docs/specs/` from the June 2026 architecture audit
   — eval integrity (de-overfitting, held-out suite, CI eval gate), parallel
   node execution, node resilience, configurable routing table, security

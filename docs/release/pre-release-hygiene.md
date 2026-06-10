@@ -191,8 +191,8 @@ verifying them.
 - [ ] The `image_generate` tool (`[tools.image]`, mflux) is fully implemented
   but absent from the README. Document per `docs/specs/small-fixes.md`
   item 11, or exclude it from the release.
-- [ ] The CLI — including the `glassrail run --json` envelope the eval
-  framework depends on — has zero tests. Add per `docs/specs/small-fixes.md`
+- [x] The CLI — including the `glassrail run --json` envelope the eval
+  framework depends on — has direct tests per `docs/specs/small-fixes.md`
   item 9.
 - [ ] Release-blocking specs complete per the roadmap's "Release 0.1.0 —
   blocking workstream" section: `docs/specs/eval-integrity.md` in full;
