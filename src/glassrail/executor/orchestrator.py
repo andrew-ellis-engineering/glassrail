@@ -48,6 +48,21 @@ from glassrail.telemetry import (
 
 log = logging.getLogger(__name__)
 
+_BINARY_QUESTION_RE = re.compile(
+    r"\b(?:is|are|was|were|does|do|did|will|would|should|has|have|can|could)\b"
+    r"[^.?!]{0,80}?\s+or\s+[^.?!]{1,40}?\?",
+    re.IGNORECASE,
+)
+_COMPARISON_REQUEST_MARKERS = (
+    "recommend",
+    "compare",
+    " vs ",
+    " vs.",
+    "versus",
+    "trade-off",
+    "tradeoff",
+)
+
 
 class Orchestrator:
     """Top-level coordinator for the full plan-validate-confirm-execute flow."""
@@ -441,14 +456,12 @@ def _looks_like_conditional_request(request: str) -> bool:
         " otherwise ",
         " else ",
         " whether ",
-        " even or odd ",
-        " odd or even ",
-        " northern or southern ",
-        " southern or northern ",
-        " true or false ",
-        " yes or no ",
     )
     if any(marker in text for marker in conditional_markers):
+        return True
+    if _BINARY_QUESTION_RE.search(request) and not any(
+        marker in text for marker in _COMPARISON_REQUEST_MARKERS
+    ):
         return True
 
     meaningful_if_count = 0

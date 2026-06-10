@@ -543,6 +543,27 @@ def test_conditional_retry_detects_real_if_branching() -> None:
     assert conditional_check(request) is True
 
 
+def test_conditional_retry_detects_binary_question_shape() -> None:
+    conditional_check = getattr(orchestrator_module, "_looks_like_conditional_request")
+
+    assert conditional_check("Is 97 prime or composite? If prime, report the prior prime.") is True
+    assert (
+        conditional_check(
+            "Is Sydney, Australia in the northern or southern hemisphere? "
+            "If southern, name a winter month."
+        )
+        is True
+    )
+
+
+def test_conditional_retry_does_not_force_comparison_requests() -> None:
+    conditional_check = getattr(orchestrator_module, "_looks_like_conditional_request")
+
+    assert conditional_check("Compare TCP vs UDP for this and recommend one.") is False
+    assert conditional_check("Summarise the CAP theorem in three bullets.") is False
+    assert conditional_check("Compare Postgres, Redis, and Kafka, then recommend one.") is False
+
+
 async def test_exactly_stall_threshold_does_not_trigger_passthrough() -> None:
     # Exactly budget * multiplier must NOT trigger passthrough.
     at_threshold = "x" * 400

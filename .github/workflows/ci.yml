@@ -80,22 +80,28 @@ jobs:
     # that it imports, loads its suites, and dry-runs — no model calls.
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
         with:
-          python-version: "3.12"
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install project for exec-plan subject
+        run: uv sync --locked
       - name: Compile
         working-directory: eval-framework
-        run: python -m compileall -q evalkit run.py
+        run: uv run python3 -m compileall -q evalkit run.py
       - name: Load + dry-run suites
         working-directory: eval-framework
         run: |
-          python run.py list suites/example
-          python run.py list suites/glassrail
-          python run.py suite suites/glassrail --dry-run
+          uv run python3 run.py list suites/example
+          uv run python3 run.py list suites/glassrail
+          uv run python3 run.py suite suites/glassrail --dry-run
+      - name: Run harness-mechanics regression suite (scripted, no model calls)
+        run: uv run python3 eval-framework/run.py suite eval-framework/suites/harness-mechanics
       - name: Stats smoke
         working-directory: eval-framework
-        run: python -c "from evalkit.stats import pass_at_k; assert pass_at_k(3,1,3)==1.0"
+        run: uv run python3 -c "from evalkit.stats import pass_at_k; assert pass_at_k(3,1,3)==1.0"
 
   rust-tui:
     name: Rust TUI client

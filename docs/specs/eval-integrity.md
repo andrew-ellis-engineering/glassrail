@@ -52,7 +52,7 @@ node-shape criteria tension (since resolved by criteria separation).
 - Live-web eval tasks (still excluded by the temporal firewall; see
   EVAL_PLAN.md).
 
-## Part 1 — Structural conditional detection
+## Part 1 — Structural conditional detection — implemented 2026-06-10
 
 **File:** `src/glassrail/executor/orchestrator.py`, function
 `_looks_like_conditional_request` (module-level, near `_structural_retry_feedback`).
@@ -106,7 +106,7 @@ inputs still trigger):
 - The existing integration test for the conditional structural retry
   (`tests/integration/test_orchestrator.py`) must pass unmodified.
 
-## Part 2 — Cookbook keyword cleanup
+## Part 2 — Cookbook keyword cleanup — implemented 2026-06-10
 
 **Rule (now locked in `CLAUDE.md`/`AGENTS.md`):** cookbook `keywords` may only
 contain *task-shape* words (compare, rank, decide, branch, fetch, summarize…),
@@ -178,7 +178,7 @@ task; reference-solve each prompt before shipping):
 main-suite and held-out numbers are always published together; a large gap
 between them is the overfitting signal and becomes its own ratchet item.
 
-## Part 4 — Mechanics regression wall in CI
+## Part 4 — Mechanics regression wall in CI — implemented 2026-06-10
 
 **File:** `.github/workflows/ci.yml`, the existing `eval-framework` job.
 

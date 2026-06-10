@@ -57,8 +57,8 @@ def test_cookbook_prefers_conditional_for_obvious_binary_branch() -> None:
 
     recipe = cookbook.select(
         request=(
-            "Is Madrid in the northern or southern hemisphere? If northern, "
-            "name a winter month; otherwise name a summer month."
+            "Decide whether the record is active or archived. If active, "
+            "write the live-message; otherwise write the archive-message."
         ),
         tool_names=set(),
     )
@@ -71,7 +71,8 @@ def test_cookbook_selects_compare_for_recommendation_axes() -> None:
 
     recipe = cookbook.select(
         request=(
-            "Compare TCP and UDP on latency, packet loss, and trade-offs, then recommend one."
+            "Compare option A and option B across reliability, cost, and trade-offs, "
+            "then recommend one."
         ),
         tool_names=set(),
     )
@@ -84,8 +85,8 @@ def test_cookbook_selects_direct_answer_for_logic_puzzle() -> None:
 
     recipe = cookbook.select(
         request=(
-            "Alice, Bob, and Carol each own exactly one pet. Bob owns the dog. "
-            "Alice does not own the cat. Who owns the fish?"
+            "Use logic and deduction to solve a three-person assignment puzzle from "
+            "the provided constraints."
         ),
         tool_names=set(),
     )

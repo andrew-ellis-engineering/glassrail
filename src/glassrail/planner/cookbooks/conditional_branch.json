@@ -12,11 +12,8 @@
     "branch",
     "decide",
     "check",
-    "even",
-    "odd",
-    "northern",
-    "southern",
-    "hemisphere"
+    "classify",
+    "or not"
   ],
   "when_to_use": [
     "A later action depends on the result of an earlier node.",

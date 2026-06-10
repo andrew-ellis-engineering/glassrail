@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pre-release hygiene cleanup refreshed the name-availability checker defaults
   for the current GitHub organization and documented the opt-in mflux-backed
   `image_generate` tool in the README.
+- Eval-integrity cleanup removed suite-specific vocabulary from conditional
+  retry detection and planner cookbook keywords, replaced it with structural
+  signals, and added the scripted harness-mechanics regression wall to CI.
 - Engineering specs under `docs/specs/` from the June 2026 architecture audit
   — eval integrity (de-overfitting, held-out suite, CI eval gate), parallel
   node execution, node resilience, configurable routing table, security
