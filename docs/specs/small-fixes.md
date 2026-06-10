@@ -6,7 +6,7 @@ name; eval-contract coverage). Everything else is independent and any-time.
 One item (or a small coherent batch) per PR. For each: full check sweep,
 CHANGELOG entry, README when a surface changes.
 
-## 1. Rename `DagagentError` → `GlassrailError` (pre-tag)
+## 1. Rename `DagagentError` → `GlassrailError` (pre-tag) — implemented 2026-06-10
 
 `src/glassrail/core/errors.py` roots the exception hierarchy at
 `DagagentError` — the project's pre-rename brand, about to ship as public API.

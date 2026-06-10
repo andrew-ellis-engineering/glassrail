@@ -7,7 +7,7 @@ Nothing in ``glassrail.core`` may import from any other ``glassrail`` subpackage
 from __future__ import annotations
 
 from glassrail.core.errors import (
-    DagagentError,
+    GlassrailError,
     PlanRejectedError,
     PlanValidationError,
     ToolExecutionError,
@@ -26,8 +26,8 @@ from glassrail.core.plan import Node, NodeType, Plan, SummaryFormat
 
 __all__ = [
     "BranchLogEntry",
-    "DagagentError",
     "ExecutionState",
+    "GlassrailError",
     "Node",
     "NodeResult",
     "NodeStatus",

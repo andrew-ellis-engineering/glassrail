@@ -72,6 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   avoiding false "missing context" failures in closed-book evals.
 
 ### Changed
+- Renamed the public root exception from `DagagentError` to `GlassrailError`
+  before the first PyPI release.
 - Documentation corrections from the architecture audit: the README no longer
   describes the DAG viewer's layers as "parallel" (node execution is currently
   sequential; parallel execution is specced), the generation-ceiling default

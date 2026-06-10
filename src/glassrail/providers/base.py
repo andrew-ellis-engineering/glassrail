@@ -14,7 +14,7 @@ from typing import Literal, Protocol, TypedDict, runtime_checkable
 
 from pydantic import BaseModel
 
-from glassrail.core import DagagentError
+from glassrail.core import GlassrailError
 
 
 class Message(TypedDict):
@@ -33,7 +33,7 @@ class Chunk(BaseModel):
     """Cumulative token count for the response, if the provider reports it."""
 
 
-class ProviderError(DagagentError):
+class ProviderError(GlassrailError):
     """Base for provider-related errors."""
 
 

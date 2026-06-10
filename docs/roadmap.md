@@ -159,9 +159,9 @@ audit, these additionally gate the work:
 - [Security baseline](specs/security-baseline.md) items 1, 2, 5 — `fs_roots`
   confinement, risk-honouring approval defaults, truthful README security
   notes.
-- [Small fixes](specs/small-fixes.md) item 1 (`DagagentError` →
-  `GlassrailError` — public API name) and item 9 (CLI tests; `glassrail run
-  --json` is the eval contract and currently untested).
+- [Small fixes](specs/small-fixes.md) item 9 (CLI tests; `glassrail run --json`
+  is the eval contract and currently untested). Item 1 (`DagagentError` →
+  `GlassrailError`) is done.
 - The concrete-findings checklist appended to
   [pre-release hygiene](release/pre-release-hygiene.md).
 

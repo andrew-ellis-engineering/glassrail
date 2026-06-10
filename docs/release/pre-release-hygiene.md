@@ -186,8 +186,8 @@ verifying them.
   definition and integrity caveats" section is the single source of truth).
 - [x] `AGENTS.md` had drifted from `CLAUDE.md` (missing the DAG-acyclicity
   primitive; referenced a nonexistent `eval-framework/AGENTS.md`) — re-synced.
-- [ ] The root exception class is still `DagagentError` — the pre-rename brand
-  about to ship as public API. Rename per `docs/specs/small-fixes.md` item 1.
+- [x] The root exception class was renamed from `DagagentError` to
+  `GlassrailError` before shipping it as public API.
 - [ ] The `image_generate` tool (`[tools.image]`, mflux) is fully implemented
   but absent from the README. Document per `docs/specs/small-fixes.md`
   item 11, or exclude it from the release.
