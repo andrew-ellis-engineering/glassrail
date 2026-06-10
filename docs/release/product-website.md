@@ -129,8 +129,12 @@ registry schemas, and richer TUI workflows.
 
 ## Technical plan
 
-Use the existing MkDocs + Material stack for the first product website. It is
-already in the repository, already part of CI, and keeps docs close to code.
+The visual and interactive design of the site now lives in the standalone
+website repository: `andrew-ellis-engineering/glassrail.github.io`. MkDocs +
+Material remains the *documentation* site; the two link to each other. The
+positioning, IA, content requirements, and acceptance criteria in this file
+still bind the marketing site. If the dedicated site slips, the MkDocs stack
+remains the acceptable fallback for launch:
 
 Required implementation work:
 
@@ -146,7 +150,10 @@ Required implementation work:
 
 ## Design direction
 
-The site should feel like infrastructure, not SaaS theater:
+Superseded in detail by the standalone website repository; the principles below
+still hold and that spec is written to satisfy them (the dazzle is choreography
+on the engine's artifacts, not decoration). The site should feel like
+infrastructure, not SaaS theater:
 
 - Clear typography.
 - Sparse claims.
