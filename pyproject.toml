@@ -49,9 +49,9 @@ web = ["trafilatura>=1.8"]
 glassrail = "glassrail.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/andrewellis/glassrail"
-Repository = "https://github.com/andrewellis/glassrail"
-Documentation = "https://github.com/andrewellis/glassrail"
+Homepage = "https://github.com/andrew-ellis-engineering/glassrail"
+Repository = "https://github.com/andrew-ellis-engineering/glassrail"
+Documentation = "https://github.com/andrew-ellis-engineering/glassrail/tree/main/docs"
 
 [dependency-groups]
 dev = [

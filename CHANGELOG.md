@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Engineering specs under `docs/specs/` from the June 2026 architecture audit
+  — eval integrity (de-overfitting, held-out suite, CI eval gate), parallel
+  node execution, node resilience, configurable routing table, security
+  baseline, serving hardening, small fixes, and comparative baselines — wired
+  into the docs nav and referenced from a restructured roadmap (a release
+  0.1.0 blocking workstream plus Phase 2 sliced into ordered tracks).
 - Per-tool approval policy is now configurable with `allow`, `ask`, and `deny`
   policies plus an `auto` execution mode that treats `ask` as `allow` while
   preserving explicit denies. ACP surfaces `ask` tool calls through
@@ -58,6 +64,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   avoiding false "missing context" failures in closed-book evals.
 
 ### Changed
+- Documentation corrections from the architecture audit: the README no longer
+  describes the DAG viewer's layers as "parallel" (node execution is currently
+  sequential; parallel execution is specced), the generation-ceiling default
+  reads `20000` to match settings, and a Security notes section states the
+  current posture plainly. Stale repository URLs in `docs/evals.md` and
+  `docs/deployment.md` now point at the current repo, `docs/index.md` reflects
+  the Phase 1 gate status, `AGENTS.md` is re-synced with `CLAUDE.md`, and
+  `PHASE1_REMAINING.md` is absorbed into `docs/specs/eval-integrity.md` and
+  removed.
 - Planner validation now repairs missing or blank node descriptions before
   strict schema validation, including nested subplans, so otherwise-valid plans
   are not discarded for a recoverable LLM omission.

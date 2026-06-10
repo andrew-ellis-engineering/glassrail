@@ -136,6 +136,16 @@ jobs:
         run: uv python install 3.12
       - name: Build
         run: uv build
+      - name: Inspect distributions
+        run: |
+          tar -tf dist/glassrail-*.tar.gz | sort > /tmp/glassrail-sdist.txt
+          python -m zipfile -l dist/glassrail-*.whl
+      - name: Smoke test wheel
+        run: |
+          python -m venv /tmp/glassrail-wheel-smoke
+          /tmp/glassrail-wheel-smoke/bin/python -m pip install dist/glassrail-*.whl
+          /tmp/glassrail-wheel-smoke/bin/glassrail --help
+          /tmp/glassrail-wheel-smoke/bin/glassrail run --help
       - name: Upload distributions
         uses: actions/upload-artifact@v4
         with:

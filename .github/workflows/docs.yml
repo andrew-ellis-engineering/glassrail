@@ -6,13 +6,13 @@ on:
     paths:
       - "docs/**"
       - "mkdocs.yml"
-      - "src/dagagent/**"
+      - "src/glassrail/**"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
       - "docs/**"
       - "mkdocs.yml"
-      - "src/dagagent/**"
+      - "src/glassrail/**"
 
 jobs:
   build:

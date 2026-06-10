@@ -50,6 +50,13 @@ once with `uv run pre-commit install`.
   structured logs plus OpenTelemetry tracing (`glassrail.telemetry`) — a no-op
   until configured; SDK + OTLP exporter in the optional `otel` extra. See
   `docs/observability.md`.
+- **No eval-task vocabulary in engine code or prompts.** Orchestrator and
+  planner heuristics, cookbook `keywords`, and default prompts must use
+  structural, task-shape language — never domain nouns or phrasings copied
+  from eval-framework task prompts. (Tests may quote eval phrasings as
+  regression inputs; engine code and prompts may not.) The held-out suite
+  (`eval-framework/suites/glassrail-heldout/`, once landed) is never iterated
+  against. See `docs/specs/eval-integrity.md`.
 
 ## Documentation map — which file owns what
 
@@ -67,8 +74,13 @@ rather than duplicating across files.
 - `docs/architecture.md` — the layered architecture and how the pieces fit
   (currently a stub being ported from the design vault).
 - `docs/roadmap.md` — phases and what's next.
+- `docs/specs/` — implementable engineering specs from the June 2026
+  architecture audit; `docs/specs/index.md` is the index with priorities,
+  sequencing, and instructions for implementing agents. Specs own the *how*,
+  the roadmap owns the *when*. Flip a spec's `Status:` line (and the index
+  table) when you implement one.
 - `docs/evals.md` — the eval framework: pass@k vs pass^k, grading cascade, how
-  to run it. (Framework internals live in `eval-framework/AGENTS.md`.)
+  to run it. (Framework internals live in `eval-framework/CLAUDE.md`.)
 - `docs/streaming.md` — the task event stream (SSE and WebSocket transports).
 - `docs/observability.md` — OpenTelemetry span tree and how to enable tracing.
 - `docs/deployment.md` — the production `Dockerfile` and how to serve the gateway.
@@ -93,6 +105,19 @@ rather than duplicating across files.
   `result`, `subplan`. The four single-LLM-call types (synthesis/think/summary/
   result) share `Executor._execute_llm_node` via `_LLM_NODE_SPECS` — add a new
   one by extending that table, not by copying a method.
+- **Node execution is currently sequential.** `Executor._run` awaits one node
+  at a time in topological order; independent nodes do not run concurrently
+  yet. Don't write docs or code that assume concurrency until
+  `docs/specs/parallel-execution.md` lands — and update this bullet when it
+  does.
+- **DAG acyclicity is a permanent, load-bearing invariant.** Plans are directed
+  *acyclic* graphs; the validator enforces topological sort and cycle detection.
+  Iteration is expressed *within* a node (a future `foreach` node fans out over
+  a list using the subplan mechanism), never as a graph cycle. Cycles would
+  break the validator, the topological executor, the ACP plan mapping, and the
+  OTel span tree simultaneously. Do not add cycles to the plan grammar.
+  Conditional loops ("repeat until X") belong at the orchestrator/session layer,
+  not the plan layer. See `vault/Spec - Foreach Node (Loops).md`.
 
 ## Package map
 
@@ -152,7 +177,7 @@ Grep existing tests for `_Scripted` for the pattern.
 Model-quality **evals** (planner/executor behaviour, multi-trial pass@k vs
 pass^k) are not pytest — they live in the standalone `eval-framework/` and run
 the real agent over its tier routing via `glassrail run --json`. See
-`docs/evals.md` and `eval-framework/AGENTS.md`.
+`docs/evals.md` and `eval-framework/CLAUDE.md`.
 
 ## Commits
 

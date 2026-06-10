@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-_USER_AGENT = "glassrail-web-fetch/0.1 (+https://github.com/andrewellis/glassrail)"
+_USER_AGENT = "glassrail-web-fetch/0.1 (+https://github.com/andrew-ellis-engineering/glassrail)"
 
 
 def _require_trafilatura() -> Any:

@@ -12,9 +12,10 @@ fixed rules rather than by the model's discretion.
 
 Early development — the engine runs end to end (plan → validate → execute over
 tier routing, with persistence, a typed event stream, and a REST gateway), and
-the [eval framework](./eval-framework) measures it. Treat APIs as unstable; no
-PyPI release until the Phase 1 eval gates are met. See [CHANGELOG.md](./CHANGELOG.md)
-for what's landed and [docs/roadmap.md](./docs/roadmap.md) for what's next.
+the [eval framework](./eval-framework) measures it. The Phase 1 eval gate is
+met and the first PyPI release is being prepared. Treat APIs as unstable while
+Glassrail is in 0.x. See [CHANGELOG.md](./CHANGELOG.md) for what's landed and
+[docs/roadmap.md](./docs/roadmap.md) for what's next.
 
 ## Principles
 
@@ -30,6 +31,15 @@ for what's landed and [docs/roadmap.md](./docs/roadmap.md) for what's next.
 - **A model backend** (see below) — the agent does nothing without one.
 
 ## Quickstart
+
+From PyPI, once the first release is published:
+
+```bash
+uvx glassrail --help
+uvx glassrail run "summarise the CAP theorem in three bullets"
+```
+
+From source:
 
 ```bash
 uv sync --all-extras
@@ -81,7 +91,7 @@ uv run glassrail tui "<task>"                   # POSTs the task, renders the li
 ```
 
 The viewer draws the plan as colour-coded node boxes connected by edges
-(grouped into parallel layers, each box showing a short summary, recoloured as
+(grouped into dependency layers, each box showing a short summary, recoloured as
 they run) above a per-node table; `--no-dag` shows the table alone. See
 [docs/tui.md](./docs/tui.md).
 
@@ -137,7 +147,7 @@ treated as the tier being unavailable.
 
 ### Generation ceiling
 
-`max_generation_tokens` (default `16384`) is a hard cap on `max_tokens` sent to
+`max_generation_tokens` (default `20000`) is a hard cap on `max_tokens` sent to
 any tier for any single request, applied by the router before the request leaves
 the process. Per-node budgets (below) are the goal; this is the safety backstop
 that prevents a single generation from consuming unbounded memory on a local
@@ -223,6 +233,23 @@ shell_exec = "deny"
 group are a separate opt-in: set `GLASSRAIL_LOAD_TOOL_PLUGINS=true` (or
 `load_tool_plugins = true`) and the runtime discovers and registers them at
 startup.
+
+### Security notes
+
+Glassrail is early 0.x software run by its operator, not a hardened service.
+Current posture (hardening is tracked in
+[docs/specs/security-baseline.md](./docs/specs/security-baseline.md)):
+
+- The REST gateway has **no authentication** — keep it bound to localhost and
+  do not expose it to untrusted networks.
+- `file_read` can read any path the process can read; path confinement
+  (`tools.fs_roots`) is specced but not yet enforced.
+- The web tools fetch model-chosen URLs — enabling them means the agent has
+  outbound network access it chooses how to use.
+- A tool's `risk` level (`read`/`network`/`write`/`execute`) is currently
+  informational only; execution gating comes from the `[tool_approval]`
+  policies above, so configure those for anything you would not run
+  unattended.
 
 ## Evals
 

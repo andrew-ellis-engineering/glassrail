@@ -70,6 +70,10 @@ def test_synthesis_and_result_prompts_preserve_caveats_without_inventing() -> No
     assert "do not invent facts" in result
     assert "stable general knowledge" in result
     assert "I recommend <option>" in result
+    assert "preserve every named candidate" in result
+    assert "comparison axis" in result
+    assert "trade-off" in result
+    assert "winner-only answer" in result
     assert "plain prose with units" in result
     assert "logic or deduction tasks" in result
     assert 'Do not introduce it with "I recommend"' in result

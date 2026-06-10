@@ -29,8 +29,8 @@ wiring.
 ## Configuration
 
 All configuration is via `GLASSRAIL_`-prefixed environment variables (the same
-[settings](https://github.com/andrewellis/glassrail) the app reads from `.env`
-/ `config.toml` locally). Common ones:
+[settings](https://github.com/andrew-ellis-engineering/glassrail#configuration)
+the app reads from `.env` / `config.toml` locally). Common ones:
 
 ```bash
 docker run --rm -p 8000:8000 \

@@ -1,0 +1,38 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Build and publish to PyPI
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: pypi
+      url: https://pypi.org/project/glassrail/
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Build
+        run: uv build
+      - name: Inspect distributions
+        run: |
+          tar -tf dist/glassrail-*.tar.gz | sort > /tmp/glassrail-sdist.txt
+          python -m zipfile -l dist/glassrail-*.whl
+      - name: Smoke test wheel
+        run: |
+          python -m venv /tmp/glassrail-wheel-smoke
+          /tmp/glassrail-wheel-smoke/bin/python -m pip install dist/glassrail-*.whl
+          /tmp/glassrail-wheel-smoke/bin/glassrail --help
+          /tmp/glassrail-wheel-smoke/bin/glassrail run --help
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@release/v1

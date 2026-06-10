@@ -5,7 +5,7 @@ Evals answer a different question from the unit and integration tests: not
 execute it *well, and reliably*?" They are model-dependent and non-deterministic,
 so they are measured with multiple trials — not asserted once.
 
-Evals live in the vendored [`eval-framework/`](https://github.com/andrewellis/glassrail/tree/main/eval-framework):
+Evals live in the vendored [`eval-framework/`](https://github.com/andrew-ellis-engineering/glassrail/tree/main/eval-framework):
 a standalone, stdlib-only harness that runs each task *k* times, captures the
 output / trajectory / side-effects, grades with a deterministic → trajectory →
 LLM cascade, and reports **pass@k** (capability — can it ever?) vs **pass^k**

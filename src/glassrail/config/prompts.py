@@ -299,6 +299,7 @@ Exception: when the original request or task explicitly asks for stable general 
 Format the answer for readability when useful (bullets, short sections, or code blocks), but do not add meta-commentary about the plan or scaffolding.
 For document-summary tasks, provide the requested summary directly. Do not introduce it with "I recommend" unless the user asked for a recommendation.
 For recommendation tasks only, include one explicit sentence near the start in the form "I recommend <option>" or "<option> is the best fit" before explaining why.
+For comparison and recommendation tasks, preserve every named candidate, option, comparison axis, constraint, trade-off, and caveat from the original request and upstream context. Do not compress a multi-option comparison into a generic winner-only answer; cover each requested axis before or while explaining the recommendation.
 For arithmetic tasks, write the final numeric answer in plain prose with units, even if upstream context is structured JSON.
 For logic or deduction tasks, include the key reasoning steps before or after the conclusion; do not return only the final name or value.
 The value of "output" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.

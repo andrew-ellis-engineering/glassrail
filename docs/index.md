@@ -12,12 +12,14 @@ Most agents loop: think, act, observe, think again. That works, but it's hard to
 
 - **Fresh context per node** — a node sees only the upstream outputs it declared as `context_needed`. No leaked state.
 - **Plan as document** — plans are inspectable, replayable, visualizable.
-- **Deterministic tier routing** — local-first, with timeout fallthrough to cloud tiers.
+- **Deterministic tier routing** — local-first, falling through to cloud tiers when a tier is unavailable (errors or times out before producing output).
 - **Branch by decision node** — control flow is explicit in the graph, not implicit in the model's choices.
 
 ## Status
 
-Phase 0.5 (OSS foundation) is complete — the engine runs end to end with
-SQLite persistence, the full node taxonomy, a streaming provider, and a
-typed event stream. See [Roadmap](./roadmap.md) for what's landed and
-what's next.
+The Phase 1 eval gate is met (see the gate tables and integrity caveats in
+the [Roadmap](./roadmap.md)) and the first PyPI release is being prepared.
+The engine runs end to end — plan → validate → execute over tier routing —
+with SQLite persistence, the full node taxonomy, a typed event stream,
+REST and ACP gateways, and the eval framework measuring it. APIs are
+unstable while Glassrail is 0.x.

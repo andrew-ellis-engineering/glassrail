@@ -2,6 +2,13 @@
 
 *Stub — full roadmap lives in the design vault and is being ported here.*
 
+**Direction (decided 2026-06-10):** Glassrail's wedge is the *local-first,
+eval-gated, auditable agent runtime* — engine reliability, security posture,
+and eval integrity come before assistant-platform features (memory, channels,
+Telegram). Phase 2 below is sliced into ordered tracks to encode that.
+Engineering specs from the June 2026 architecture audit live in
+[docs/specs/](specs/index.md) — the specs own *how*, this file owns *when*.
+
 ## Phase 0 — Prototype (done)
 
 Single-file FastAPI prototype. Validated DAG planning + tier routing + audit logging end to end. Now superseded by the package.
@@ -89,6 +96,29 @@ Latest confirmation run, 2026-06-08 on current `main`:
 | node-capability-openrouter | `run-20260608T185315Z` | **7/7 full-pass (100%), 0 all-fail** | 100% |
 | glassrail-openrouter | `run-20260608T185414Z` | **20/23 full-pass (87%), 0 all-fail** | ≥ 80% full-pass, 0 all-fail |
 
+### Gate definition and integrity caveats (added 2026-06-10)
+
+This table is the **single operative gate definition** — it supersedes the
+original exit-gate sketch in `eval-framework/suites/glassrail/EVAL_PLAN.md`
+(which proposed a promoted-regression set at `pass^5 = 1.0`; that remains the
+*aspirational* shape the ratchet works toward). `PHASE1_REMAINING.md` has been
+absorbed into [specs/eval-integrity.md](specs/eval-integrity.md) and deleted.
+Stated honestly, the gate as met has three caveats, and closing them is
+**release-blocking follow-through** tracked in that spec:
+
+1. **Overfit risk** — some engine heuristics and cookbook keywords encode
+   eval-task vocabulary, so part of the score measures suite memorisation.
+   Fix: structural heuristics + a held-out paraphrase suite
+   (`suites/glassrail-heldout`), whose numbers join the table above.
+2. **Mirror-suite gate** — the gate ran on the OpenRouter mirrors (cloud =
+   fast signal) rather than the local serving stack the docs call the
+   ship-gate. Fix: record one local confirmation run, or explicitly accept the
+   mirror as the gate of record here.
+3. **No mechanical enforcement** — CI only dry-ran the framework, and the
+   promotion ratchet has promoted zero tasks. Fix: harness-mechanics runs for
+   real in CI (zero model calls), and d1–d2 tasks get promoted via the ratchet
+   as clean runs accumulate.
+
 Known remaining eval ratchet after the confirmation run: **final-answer
 preservation.** The three partial-pass tasks all pass at least one trial and
 fail only one of three trials. Their misses are not infra, schema, tool, or
@@ -112,9 +142,44 @@ Items originally deferred to Phase 2 (do not block the gate):
   `session/request_permission` primitive is already in place. *[needs further
   spec: policy schema, default, how auto-mode decides]*
 
+## Release 0.1.0 — blocking workstream
+
+The release process itself is specced in `docs/release/`
+([pre-release hygiene](release/pre-release-hygiene.md) →
+[PyPI release](release/pypi-release.md) →
+[product website](release/product-website.md) →
+[grassroots marketing](release/grassroots-marketing.md)). From the June 2026
+audit, these additionally gate the work:
+
+**Before the `v0.1.0` tag:**
+
+- [Eval integrity](specs/eval-integrity.md) — de-overfit engine heuristics and
+  cookbook keywords, held-out suite, harness-mechanics in CI, gate
+  reconciliation (this section), begin ratchet promotions.
+- [Security baseline](specs/security-baseline.md) items 1, 2, 5 — `fs_roots`
+  confinement, risk-honouring approval defaults, truthful README security
+  notes.
+- [Small fixes](specs/small-fixes.md) item 1 (`DagagentError` →
+  `GlassrailError` — public API name) and item 9 (CLI tests; `glassrail run
+  --json` is the eval contract and currently untested).
+- The concrete-findings checklist appended to
+  [pre-release hygiene](release/pre-release-hygiene.md).
+
+**Before broad marketing (release window):**
+
+- [Security baseline](specs/security-baseline.md) items 3–4 (web_fetch
+  SSRF/size hardening, optional REST bearer auth) — the launch narrative
+  claims "auditable tool use".
+- [Comparative baselines](specs/comparative-baselines.md) — the raw-model vs
+  ReAct-loop vs glassrail evidence table for the deep-dive post.
+- [Serving hardening](specs/serving-hardening.md) items 5–6 (`run` exit codes,
+  `glassrail serve`) — first-contact polish.
+
 ## Phase 2 — Foundation Assistant
 
-Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing, `foreach` node, registry output schemas, file viewer TUI panel.
+Sliced into ordered tracks (2026-06-10): **2a engine reliability core → 2b
+capability layer → 2c assistant surfaces**, with **2d evals & evidence**
+running continuously alongside. Done since the Phase 1 baseline:
 
 - **Subplan node-type prompt fix** ✓ *(first tracked improvement against the Phase
   1 baseline)* — add a concrete example to the planner subplan guidance showing
@@ -122,12 +187,10 @@ Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing
   not `"type": "web_search"`. Also reinforce the `max_subplans_per_plan` limit
   with a counter-example. Pure prompt change; confirmed by
   `run-20260608T185414Z`, where `subplan-correct` is 3/3 full-pass.
-
 - **Upstream context awareness** ✓ — when assembling a node's context, include the
   descriptions of its direct dependents so upstream nodes (synthesis, summary)
   know what aspect the downstream node needs. One change in the executor's
   context-assembly logic. *(deferred from Phase 1)*
-
 - **Branch and final-output eval stabilization** ✓ — decision branch references
   now participate in plan ordering, result selection ignores completed result
   nodes that only depend on skipped content, summary output can be used as the
@@ -135,27 +198,63 @@ Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing
   structural retry no longer treats optional "if present" language as a
   required decision branch. This restored `node-capability-openrouter` to 7/7
   full-pass and kept `harness-mechanics` at 32/32.
+- **Top-k planner cookbook candidates** ✓ — evolve the current single-candidate
+  recipe injection into a top-k selection (`k=2–3`) so the planner can compare
+  nearby plan shapes without paying for a second planning model call. This is
+  the incremental step before a dedicated planner preflight/classifier node or
+  external cookbook retrieval from the vault.
+- **Per-tool approval policies** ✓ — `allow` / `ask` / `deny` per tool plus an
+  `auto` execution mode, surfaced over ACP `session/request_permission` with
+  "always allow" promotion. *(was "Per-tool HITL configuration", deferred from
+  Phase 1; the remaining gap — risk-derived defaults so `write`/`execute`
+  tools ask by default — is [specs/security-baseline.md](specs/security-baseline.md)
+  item 2.)*
 
-- **Result-node preservation of comparisons and trade-offs** *(next eval
-  ratchet)* — improve result-node prompting so final answers preserve named
-  candidates, required comparison axes, and meaningful caveats from upstream
-  reasoning. Current misses are concentrated here: `recommend-datastore-oltp`
-  dropped the time-series comparison category from the final answer, while
-  `research-compare-3` and `research-constrained` lost comparison depth or
-  trade-off nuance. Measure against `suites/glassrail-openrouter`, targeting at
-  least 22/23 full-pass without weakening deterministic checks.
+### Track 2a — Engine reliability core (in order)
 
-- **Per-tool HITL configuration** — extend HITL beyond plan approval to
-  individual tool calls. Each registered tool gets a configurable approval
-  policy; the executor checks it before invoking and pauses for confirmation
-  when required. *(deferred from Phase 1, needs further spec)*
+1. **Parallel node execution** — ready-set scheduler with bounded concurrency
+   (`max_concurrent_nodes`), formalised transitive-skip semantics, and subplan
+   event visibility. Prerequisite for `foreach`. Spec:
+   [specs/parallel-execution.md](specs/parallel-execution.md).
+2. **Node resilience** — LLM-node retry with tier escalation
+   (`[resilience]`), scripted-provider error directives, provider connection
+   reuse + clean shutdown. Spec: [specs/node-resilience.md](specs/node-resilience.md).
+3. **Configurable routing table** — `[routing]` node-type → tier map replacing
+   the hardcoded `_select_tier` policy; prerequisite for the Phase 2.5 tier-ROI
+   selector. Spec: [specs/routing-table.md](specs/routing-table.md).
+4. **Serving hardening** — lifespan runtime build, EventBus drop visibility +
+   per-task subscriptions, SSE keepalive, resume idempotency. Spec:
+   [specs/serving-hardening.md](specs/serving-hardening.md) (items 1–4; 5–6
+   land in the release window).
+5. **Small fixes / API cleanup** — remaining items of
+   [specs/small-fixes.md](specs/small-fixes.md) (stray prompts into
+   `NodePrompts`, dead validator check, `ToolRisk` layer fix, `_Scripted`
+   consolidation, `Planner.plan()` removal, subplan id/confidence,
+   postprocess tests, image-tool docs).
 
-- **File editing tools** *(unblocks TUI coding harness)* — `file_edit(path, old_str, new_str)` with exact-once match semantics (fails closed if old_str matches zero or multiple times), `file_create` (new files only), `file_write` (full overwrite). Requires: path-root confinement (`tools.fs_roots` in Settings — currently missing), git-repo guard (configurable), risk-derived HITL defaults (write tools default to `ask`), diff-in-approval payload so humans approve a *change* not raw args. Also closes a latent gap: `_approve_tool_call` does not currently honour the `risk` field despite it being documented as governing execution. `obsidian_write` is a thin specialisation of this (vault root as `fs_roots`), not a parallel implementation. See `vault/Spec - File Editing Tools.md`.
+### Track 2b — Capability layer
 
+- **File editing tools** *(unblocks TUI coding harness)* — `file_edit(path, old_str, new_str)` with exact-once match semantics (fails closed if old_str matches zero or multiple times), `file_create` (new files only), `file_write` (full overwrite). Requires: path-root confinement (`tools.fs_roots` — provided by [specs/security-baseline.md](specs/security-baseline.md) item 1), git-repo guard (configurable), risk-derived HITL defaults (provided by security-baseline item 2), diff-in-approval payload so humans approve a *change* not raw args. `obsidian_write` is a thin specialisation of this (vault root as `fs_roots`), not a parallel implementation. See `vault/Spec - File Editing Tools.md`.
 - **Tool registry output schemas** *(ships alongside file editing)* — tools declare their output shape at `@harness.tool` registration time. The validator checks `args_template` references against the producing tool's registered schema at plan-validation time, catching tool→tool key mismatches before execution. No burden on the LLM planner — schemas are author-supplied, not LLM-generated. Retroactively add schemas to existing built-in tools. See `vault/Spec - Node Contracts and Context Flow.md`.
-
-- **`foreach` node type** *(after upstream context awareness and registry schemas land)* — fan-out iteration over a list using the existing subplan mechanism. Fields: `foreach_source` (upstream node id or literal list), `foreach_body` (nested Plan), `foreach_aggregation` (`collect` or `synthesis`). Iterations are independent and parallelisable with a bounded concurrency semaphore. Aggregation v1: `collect` (list of outputs) and `synthesis` (hand off to a synthesis node). No `reduce` or conditional loops. Conditional loops ("repeat until X") belong at the orchestrator layer. See `vault/Spec - Foreach Node (Loops).md`.
-
+- **TUI: file viewer panel** *(ships with file editing tools — they are a unit)*
+  — a dedicated tab in the Rust TUI for browsing the local file tree and
+  viewing file contents. Primary role is surfacing diffs when the agent proposes
+  an edit: instead of approving raw tool args through the HITL gate, the user
+  sees an inline diff of the proposed change and approves or rejects it with
+  full context. Secondary role: general file inspection without leaving the TUI.
+  Requires: tab bar + mouse support (Track 2c), file editing tools, and the
+  diff-in-approval payload those tools produce. Sequence constraint — do not
+  ship the file editing tools without this panel; approving blind edits is a
+  worse UX than the current no-edit state.
+- **`foreach` node type** *(after Track 2a item 1 — parallel execution — plus
+  upstream context awareness ✓ and registry schemas)* — fan-out iteration over a
+  list using the existing subplan mechanism. Fields: `foreach_source` (upstream
+  node id or literal list), `foreach_body` (nested Plan), `foreach_aggregation`
+  (`collect` or `synthesis`). Iterations are independent and parallelisable with
+  a bounded concurrency semaphore. Aggregation v1: `collect` (list of outputs)
+  and `synthesis` (hand off to a synthesis node). No `reduce` or conditional
+  loops. Conditional loops ("repeat until X") belong at the orchestrator layer.
+  See `vault/Spec - Foreach Node (Loops).md`.
 - **HITL clarifying-questions node** — a new node type that pauses execution to
   ask the user a targeted question before proceeding, distinct from plan
   approval. The model decides what to ask; the answer is injected into
@@ -166,15 +265,13 @@ Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing
   (e.g. Obsidian vault notes). Gives the planner a starting scaffold for
   well-understood task types rather than reasoning from scratch each time.
   *[needs further spec: retrieval mechanism, file format, update workflow]*
-- **Top-k planner cookbook candidates** ✓ — evolve the current single-candidate
-  recipe injection into a top-k selection (`k=2–3`) so the planner can compare
-  nearby plan shapes without paying for a second planning model call. This is
-  the incremental step before a dedicated planner preflight/classifier node or
-  external cookbook retrieval from the vault.
+
+### Track 2c — Assistant surfaces
+
 - **TUI: chat session mode** — evolve the TUI from a one-shot viewer into a
   persistent chat-style interface with a live input composer, making it the
   primary HITL surface. Subsumes the coding-agent harness idea. Depends on
-  channels work above.
+  channels work below.
 - **Token-level streaming in TUI** — surface token-by-token output in the Rust
   client as the model generates, giving a live sense of progress. Currently
   deferred in the ACP adapter.
@@ -205,16 +302,32 @@ Memory, Obsidian tools, channels (chat/task/job), Telegram gateway, file editing
   the Markdown rendering and wrap-aware scrolling work, since all three affect
   how output text is laid out and selectable. Applies to both the Rust TUI
   (`clients/tui`) and the Python Rich TUI (`glassrail tui`).
-- **TUI: file viewer panel** *(ships with file editing tools — they are a unit)*
-  — a dedicated tab in the Rust TUI for browsing the local file tree and
-  viewing file contents. Primary role is surfacing diffs when the agent proposes
-  an edit: instead of approving raw tool args through the HITL gate, the user
-  sees an inline diff of the proposed change and approves or rejects it with
-  full context. Secondary role: general file inspection without leaving the TUI.
-  Requires: tab bar + mouse support (above), file editing tools, and the
-  diff-in-approval payload those tools produce. Sequence constraint — do not
-  ship the file editing tools without this panel; approving blind edits is a
-  worse UX than the current no-edit state.
+- **Channels (chat / task / job), Telegram gateway, Obsidian tools** — the
+  assistant-platform layer. *[needs specs; deliberately sequenced after 2a/2b —
+  `channels/` is currently a design-only docstring and must not be marketed as
+  a layer until real.]*
+
+### Track 2d — Evals & evidence (continuous)
+
+- **Result-node preservation of comparisons and trade-offs** *(next quality
+  ratchet; the prompt change is staged in the working tree)* — improve
+  result-node prompting so final answers preserve named candidates, required
+  comparison axes, and meaningful caveats from upstream reasoning. Current
+  misses are concentrated here: `recommend-datastore-oltp` dropped the
+  time-series comparison category from the final answer, while
+  `research-compare-3` and `research-constrained` lost comparison depth or
+  trade-off nuance. Measure against `suites/glassrail-openrouter`, targeting at
+  least 22/23 full-pass without weakening deterministic checks.
+- **Held-out suite ratchet** — keep `suites/glassrail-heldout` (from
+  [specs/eval-integrity.md](specs/eval-integrity.md)) growing alongside the
+  main suite; publish both numbers; treat a widening main-vs-held-out gap as a
+  P1 overfitting regression.
+- **Promotion ratchet in use** — promote d1–d2 tasks (and controls) to
+  `regression` as 5-clean-run streaks accumulate; promoted tasks block CI via
+  the harness exit code.
+- **Comparative baselines** — raw model vs ReAct loop vs glassrail on answer
+  quality and tokens/task. Spec:
+  [specs/comparative-baselines.md](specs/comparative-baselines.md).
 
 ## Phase 2.5 — Dreaming
 
@@ -235,8 +348,10 @@ Memory consolidation cron, audit trail, user-curation workflow, cloud tier routi
   nodes. *[needs further spec: tier definitions, eviction/consolidation rules,
   injection points in context assembly]*
 
-- **`glassrail routing recompute` — one-shot tier-ROI model selector** *(prerequisite:
-  cloud tiers 2–3 wired to real OpenRouter endpoints)* — a CLI command that
+- **`glassrail routing recompute` — one-shot tier-ROI model selector** *(prerequisites:
+  cloud tiers 2–3 wired to real OpenRouter endpoints, **and** the configurable
+  routing table from [specs/routing-table.md](specs/routing-table.md) — the
+  selector writes into that surface)* — a CLI command that
   deterministically selects the highest-ROI OpenRouter model for each cloud tier
   (2–3; local tiers 0–1 are out of scope) and writes `routing_table.json` for
   the tier router to consume. Not a cron — run manually and inspect outputs for
