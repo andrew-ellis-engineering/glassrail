@@ -1,0 +1,54 @@
+# Held-out suite. Do not tune engine prompts, cookbook keywords, or heuristics
+# against failures here. Move a task into the main suite before studying it.
+
+[suite]
+name = "glassrail-heldout"
+description = """
+Held-out confirmation tasks for Glassrail eval integrity. Same OpenRouter
+backend and judge shape as glassrail-openrouter, but tasks are not used for
+prompt or heuristic iteration.
+"""
+default_backend = "glassrail-cli"
+default_model = "qwen/qwen3-8b"
+default_grader_model = "anthropic/claude-haiku-4.5"
+default_grader_backend = "openai-compat"
+default_timeout_s = 120
+promotion_threshold = 5
+
+[backend]
+command = ["uv", "run", "glassrail", "run"]
+
+[judge]
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+
+[judge.extra_body]
+temperature = 0
+max_tokens = 256
+
+[backend.env]
+GLASSRAIL_MAX_GENERATION_TOKENS = "32768"
+
+GLASSRAIL_TIER0__BASE_URL      = "https://openrouter.ai/api/v1"
+GLASSRAIL_TIER0__MODEL         = "qwen/qwen3-8b"
+GLASSRAIL_TIER0__TIMEOUT_S     = "60"
+GLASSRAIL_TIER0__EXTRA_BODY    = '{"reasoning":{"effort":"none"},"provider":{"require_parameters":true}}'
+
+GLASSRAIL_TIER1__BASE_URL      = "https://openrouter.ai/api/v1"
+GLASSRAIL_TIER1__MODEL         = "qwen/qwen3.6-35b-a3b"
+GLASSRAIL_TIER1__TIMEOUT_S     = "90"
+GLASSRAIL_TIER1__EXTRA_BODY    = '{"reasoning":{"effort":"none"},"provider":{"require_parameters":true}}'
+
+GLASSRAIL_TIER2__BASE_URL      = "https://openrouter.ai/api/v1"
+GLASSRAIL_TIER2__MODEL         = "qwen/qwen3.6-35b-a3b"
+GLASSRAIL_TIER2__TIMEOUT_S     = "90"
+GLASSRAIL_TIER2__EXTRA_BODY    = '{"reasoning":{"effort":"none"},"provider":{"require_parameters":true}}'
+
+GLASSRAIL_TIER3__BASE_URL      = "https://openrouter.ai/api/v1"
+GLASSRAIL_TIER3__MODEL         = "qwen/qwen3.6-35b-a3b"
+GLASSRAIL_TIER3__TIMEOUT_S     = "90"
+GLASSRAIL_TIER3__EXTRA_BODY    = '{"reasoning":{"effort":"none"},"provider":{"require_parameters":true}}'
+
+GLASSRAIL_PLANNER_INITIAL_TIMEOUT_S = "90"
+GLASSRAIL_PLANNER_RETRY_TIMEOUT_S   = "120"
+GLASSRAIL_PLANNER_MIN_TIER          = "1"

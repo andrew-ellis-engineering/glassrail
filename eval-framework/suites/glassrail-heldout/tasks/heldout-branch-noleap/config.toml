@@ -1,0 +1,39 @@
+name = "heldout-branch-noleap"
+tags = ["decision", "heldout", "control-pair"]
+type = "capability"
+difficulty = 4
+control_for = "heldout-branch-leap"
+timeout_s = 120
+
+expected_behavior = """
+The year 1900 was not a Gregorian leap year because century years must be
+divisible by 400, and 1900 is not. Control twin of heldout-branch-leap.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Answers no/not a leap year"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(\\bno\\b|not a leap year)"
+
+[[criteria]]
+text = "Mentions the century or divisible-by-400 exclusion"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(century|400|divisible by four hundred)"
+
+[[criteria]]
+text = "Planner used a decision node"
+grader = "trajectory"
+tool_sequence = ["decision"]
+
+[[criteria]]
+text = "Correctly applies the Gregorian leap-year rule"
+grader = "llm"

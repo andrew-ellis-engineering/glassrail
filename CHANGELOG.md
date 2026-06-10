@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Eval-integrity cleanup removed suite-specific vocabulary from conditional
   retry detection and planner cookbook keywords, replaced it with structural
   signals, and added the scripted harness-mechanics regression wall to CI.
+- Added `eval-framework/suites/glassrail-heldout`, a 12-task OpenRouter-backed
+  held-out suite with an explicit no-iteration rule for release-gate
+  confirmation and overfit-gap reporting.
 - Engineering specs under `docs/specs/` from the June 2026 architecture audit
   — eval integrity (de-overfitting, held-out suite, CI eval gate), parallel
   node execution, node resilience, configurable routing table, security

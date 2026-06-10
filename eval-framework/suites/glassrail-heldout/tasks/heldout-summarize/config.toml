@@ -1,0 +1,62 @@
+name = "heldout-summarize"
+tags = ["summary", "tool-use", "result", "heldout"]
+type = "capability"
+difficulty = 2
+timeout_s = 120
+
+expected_behavior = """
+A correct run reads /tmp/glassrail-eval/incident.md via file_read, preserves
+the planted facts (Mara Iqbal, 18% error rate, 2025-11-04), and does not confuse
+the payment incident with the search-index distractor.
+"""
+
+[fixtures]
+capture = ["/tmp/glassrail-eval/incident.md"]
+
+[fixtures.install]
+"/tmp/glassrail-eval/incident.md" = "incident.md"
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Mentions Mara Iqbal"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)mara\\s+iqbal"
+
+[[criteria]]
+text = "Mentions the 18% error rate"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b18%"
+
+[[criteria]]
+text = "Mentions the incident date"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "2025-11-04"
+
+[[criteria]]
+text = "Does not use the distractor 9% timeout rate as the payment incident impact"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "\\b9%"
+
+[[criteria]]
+text = "Used file_read on the source document"
+grader = "trajectory"
+tool_sequence = ["file_read"]
+target = "/tmp/glassrail-eval/incident.md"
+
+[[criteria]]
+text = "Summary is faithful to the source and preserves the planted facts"
+grader = "llm"

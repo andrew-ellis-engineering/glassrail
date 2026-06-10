@@ -1,0 +1,26 @@
+name = "heldout-reason-chain"
+tags = ["reasoning", "calculation", "heldout"]
+type = "capability"
+difficulty = 3
+timeout_s = 120
+
+expected_behavior = """
+1.2 km is 1200 m and 0.45 km is 450 m. 1200 + 850 + 450 = 2500 meters. A
+correct answer reports 2500 meters.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Reports 2500 meters"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b2,?500\\b"
+
+[[criteria]]
+text = "Answer performs the unit conversion and arithmetic correctly"
+grader = "llm"

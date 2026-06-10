@@ -95,6 +95,7 @@ Latest confirmation run, 2026-06-08 on current `main`:
 | harness-mechanics | `run-20260608T185309Z` | **32/32 full-pass (100%), 0 all-fail** | 100% |
 | node-capability-openrouter | `run-20260608T185315Z` | **7/7 full-pass (100%), 0 all-fail** | 100% |
 | glassrail-openrouter | `run-20260608T185414Z` | **20/23 full-pass (87%), 0 all-fail** | ≥ 80% full-pass, 0 all-fail |
+| glassrail-heldout | pending first confirmation run | not yet recorded | publish beside main-suite numbers |
 
 ### Gate definition and integrity caveats (added 2026-06-10)
 
@@ -106,18 +107,19 @@ absorbed into [specs/eval-integrity.md](specs/eval-integrity.md) and deleted.
 Stated honestly, the gate as met has three caveats, and closing them is
 **release-blocking follow-through** tracked in that spec:
 
-1. **Overfit risk** — some engine heuristics and cookbook keywords encode
-   eval-task vocabulary, so part of the score measures suite memorisation.
-   Fix: structural heuristics + a held-out paraphrase suite
-   (`suites/glassrail-heldout`), whose numbers join the table above.
+1. **Overfit risk** — addressed mechanically by replacing suite-specific
+   conditional/cookbook vocabulary with structural signals and adding
+   `suites/glassrail-heldout`. Remaining release action: run the held-out suite
+   once and publish its numbers beside the main-suite numbers.
 2. **Mirror-suite gate** — the gate ran on the OpenRouter mirrors (cloud =
    fast signal) rather than the local serving stack the docs call the
    ship-gate. Fix: record one local confirmation run, or explicitly accept the
    mirror as the gate of record here.
-3. **No mechanical enforcement** — CI only dry-ran the framework, and the
-   promotion ratchet has promoted zero tasks. Fix: harness-mechanics runs for
-   real in CI (zero model calls), and d1–d2 tasks get promoted via the ratchet
-   as clean runs accumulate.
+3. **Mechanical enforcement partially closed** — harness-mechanics now runs for
+   real in CI (zero model calls), but the promotion ratchet has promoted zero
+   stochastic tasks. Remaining release action: promote d1–d2 tasks as clean
+   runs accumulate, or explicitly defer promotion while keeping the roadmap's
+   operative gate definition as the release gate of record.
 
 Known remaining eval ratchet after the confirmation run: **final-answer
 preservation.** The three partial-pass tasks all pass at least one trial and

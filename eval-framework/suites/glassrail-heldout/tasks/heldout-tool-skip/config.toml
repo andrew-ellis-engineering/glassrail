@@ -1,0 +1,29 @@
+name = "heldout-tool-skip"
+tags = ["tool-use", "result", "heldout", "control-pair"]
+type = "capability"
+difficulty = 2
+control_for = "heldout-tool-read"
+timeout_s = 120
+
+expected_behavior = """
+The default SSH port is 22. The task asks for stable knowledge and provides no
+file path, so the plan should not use file_read.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Reports port 22"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b22\\b"
+
+[[criteria]]
+text = "Does not use file_read"
+grader = "trajectory"
+tool_sequence = ["file_read"]
+value = "absent"

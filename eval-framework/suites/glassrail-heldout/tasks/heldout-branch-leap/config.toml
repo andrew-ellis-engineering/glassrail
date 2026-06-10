@@ -1,0 +1,38 @@
+name = "heldout-branch-leap"
+tags = ["decision", "heldout", "control-pair"]
+type = "capability"
+difficulty = 4
+timeout_s = 120
+
+expected_behavior = """
+The year 2000 was a Gregorian leap year because century years are leap years
+when divisible by 400. The plan should branch on the yes/no condition.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Answers yes/leap year"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(\\byes\\b|leap year)"
+
+[[criteria]]
+text = "Mentions the divisible-by-400 rule"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(400|divisible by four hundred)"
+
+[[criteria]]
+text = "Planner used a decision node"
+grader = "trajectory"
+tool_sequence = ["decision"]
+
+[[criteria]]
+text = "Correctly applies the Gregorian leap-year rule"
+grader = "llm"

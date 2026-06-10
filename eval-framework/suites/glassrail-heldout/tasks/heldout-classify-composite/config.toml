@@ -1,0 +1,39 @@
+name = "heldout-classify-composite"
+tags = ["decision", "heldout", "control-pair"]
+type = "capability"
+difficulty = 2
+control_for = "heldout-classify-prime"
+timeout_s = 120
+
+expected_behavior = """
+91 is composite, and its smallest prime factor is 7. The conditional phrasing
+warrants a decision node. Control twin of heldout-classify-prime.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Identifies 91 as composite"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)\\bcomposite\\b"
+
+[[criteria]]
+text = "Reports 7 as the smallest prime factor"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b7\\b"
+
+[[criteria]]
+text = "Planner used a decision node"
+grader = "trajectory"
+tool_sequence = ["decision"]
+
+[[criteria]]
+text = "Correctly classifies the number and follows only the composite branch"
+grader = "llm"

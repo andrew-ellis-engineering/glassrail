@@ -1,0 +1,29 @@
+name = "heldout-tool-read"
+tags = ["tool-use", "result", "heldout", "control-pair"]
+type = "capability"
+difficulty = 2
+timeout_s = 120
+
+expected_behavior = """
+The agent must read /tmp/glassrail-eval/service.toml via file_read and report
+retry_limit = 7. It must not answer from a default assumption.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+"/tmp/glassrail-eval/service.toml" = "service.toml"
+
+[[criteria]]
+text = "Reports retry limit 7"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b7\\b"
+
+[[criteria]]
+text = "Used file_read on the config file"
+grader = "trajectory"
+tool_sequence = ["file_read"]
+target = "/tmp/glassrail-eval/service.toml"

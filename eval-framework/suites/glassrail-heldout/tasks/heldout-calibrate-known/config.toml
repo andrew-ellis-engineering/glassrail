@@ -1,0 +1,29 @@
+name = "heldout-calibrate-known"
+tags = ["calibration", "heldout", "control-pair"]
+type = "capability"
+difficulty = 1
+timeout_s = 120
+
+expected_behavior = """
+A triangle's interior angles sum to 180 degrees. The answer should be direct
+and should not hedge as if this stable fact were unknowable.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Reports 180 degrees"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b180\\b"
+
+[[criteria]]
+text = "Does not hedge that the stable fact is unknown"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "(?i)(cannot determine|not enough information|unknown)"

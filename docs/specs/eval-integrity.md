@@ -140,7 +140,7 @@ trials). The decision-pair tasks (`classify-*`, `hemisphere-*`,
 are too weak and must be strengthened *structurally* (never by re-adding the
 vocabulary).
 
-## Part 3 — Held-out suite
+## Part 3 — Held-out suite — implemented 2026-06-10
 
 **New directory:** `eval-framework/suites/glassrail-heldout/` — real task
 directories (not symlinks), same OpenRouter backend/judge configuration as

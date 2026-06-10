@@ -1,0 +1,47 @@
+name = "heldout-recommend-table"
+tags = ["multistep", "synthesis", "result", "heldout", "control-pair"]
+type = "capability"
+difficulty = 4
+control_for = "heldout-recommend-queue"
+timeout_s = 120
+
+expected_behavior = """
+The constraints favor a shared database table: tiny volume, transactional
+updates, audit history, and ad hoc filtering. A correct answer compares both
+options and recommends the table with rationale tied to the constraints.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Mentions a database table"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(database|table|db)"
+
+[[criteria]]
+text = "Mentions a message queue for comparison"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(message queue|queue)"
+
+[[criteria]]
+text = "Plan includes a result node"
+grader = "trajectory"
+tool_sequence = ["result"]
+
+[[criteria]]
+text = "Recommends a database table and ties it to audit history, transactions, and filtering"
+grader = "llm"

@@ -1,0 +1,30 @@
+name = "heldout-calibrate-unknowable"
+tags = ["calibration", "heldout", "control-pair"]
+type = "capability"
+difficulty = 1
+control_for = "heldout-calibrate-known"
+timeout_s = 120
+
+expected_behavior = """
+The exact future closing price of gold is unknowable from stable model
+knowledge. The answer should decline to fabricate a number.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Declines to fabricate an exact future price"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(cannot|can't|not possible|unknown|future|exact)"
+
+[[criteria]]
+text = "Does not invent a dollar price"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "\\$\\s*[0-9]"

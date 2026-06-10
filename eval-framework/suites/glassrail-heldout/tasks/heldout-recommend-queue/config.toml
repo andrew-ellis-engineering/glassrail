@@ -1,0 +1,46 @@
+name = "heldout-recommend-queue"
+tags = ["multistep", "synthesis", "result", "heldout", "control-pair"]
+type = "capability"
+difficulty = 4
+timeout_s = 120
+
+expected_behavior = """
+The constraints favor a message queue: high-volume asynchronous jobs, worker
+claiming, retries, and decoupling. A correct answer compares both options and
+recommends the queue with rationale tied to the stated constraints.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Mentions a message queue"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(message queue|queue)"
+
+[[criteria]]
+text = "Mentions a database table for comparison"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(database|table|db)"
+
+[[criteria]]
+text = "Plan includes a result node"
+grader = "trajectory"
+tool_sequence = ["result"]
+
+[[criteria]]
+text = "Recommends a message queue and ties it to retries, async processing, and worker coordination"
+grader = "llm"
