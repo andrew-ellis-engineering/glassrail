@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI coverage now protects the release-critical command surface: `version`,
   `run --json` envelope shape, `exec-plan --json` with a harness-mechanics
   fixture, and `tui` / `acp` help rendering.
+- Pre-release hygiene cleanup refreshed the name-availability checker defaults
+  for the current GitHub organization and documented the opt-in mflux-backed
+  `image_generate` tool in the README.
 - Engineering specs under `docs/specs/` from the June 2026 architecture audit
   — eval integrity (de-overfitting, held-out suite, CI eval gate), parallel
   node execution, node resilience, configurable routing table, security

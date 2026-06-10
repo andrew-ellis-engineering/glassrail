@@ -12,7 +12,7 @@ registry and namespace signals that are useful before committing to a name:
 Examples:
 
     python scripts/name_check.py glassrail checkrail proofmark waymark
-    python scripts/name_check.py --github-owner andrewellis --json glassrail
+    python scripts/name_check.py --github-owner andrew-ellis-engineering --json glassrail
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from urllib.request import Request, urlopen
 
 DEFAULT_DOMAINS = ("com", "dev", "io", "ai")
 DEFAULT_TIMEOUT_S = 12.0
-USER_AGENT = "glassrail-name-check/0.1 (+https://github.com/andrewellis/glassrail)"
+USER_AGENT = "glassrail-name-check/0.1 (+https://github.com/andrew-ellis-engineering/glassrail)"
 PRESETS = {
     "finalists": ("Glassrail", "Checkrail", "Proofmark", "Waymark", "Chartwright"),
     "favorites": (
@@ -549,8 +549,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--github-owner",
-        default="andrewellis",
-        help="GitHub owner to test repo availability under (default: andrewellis)",
+        default="andrew-ellis-engineering",
+        help=("GitHub owner to test repo availability under (default: andrew-ellis-engineering)"),
     )
     parser.add_argument(
         "--github-token",

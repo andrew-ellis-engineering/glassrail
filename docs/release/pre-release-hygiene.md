@@ -172,8 +172,8 @@ verifying them.
 - [x] Stale `andrewellis` repo URLs in `docs/evals.md` and
   `docs/deployment.md` (fixed; the in-flight release change already covered
   `mkdocs.yml`, `pyproject.toml`, and `web.py`).
-- [ ] `scripts/name_check.py` still defaults `--github-owner` to `andrewellis`
-  and carries the old URL in its user-agent string.
+- [x] `scripts/name_check.py` defaults and user-agent URL now point at the
+  current `andrew-ellis-engineering/glassrail` repo.
 - [x] README claimed `max_generation_tokens` defaults to `16384`; the settings
   default is `20000` (fixed).
 - [x] README described the DAG viewer's layers as "parallel" while the
@@ -188,9 +188,8 @@ verifying them.
   primitive; referenced a nonexistent `eval-framework/AGENTS.md`) — re-synced.
 - [x] The root exception class was renamed from `DagagentError` to
   `GlassrailError` before shipping it as public API.
-- [ ] The `image_generate` tool (`[tools.image]`, mflux) is fully implemented
-  but absent from the README. Document per `docs/specs/small-fixes.md`
-  item 11, or exclude it from the release.
+- [x] The `image_generate` tool (`[tools.image]`, mflux) is documented in the
+  README per `docs/specs/small-fixes.md` item 11.
 - [x] The CLI — including the `glassrail run --json` envelope the eval
   framework depends on — has direct tests per `docs/specs/small-fixes.md`
   item 9.

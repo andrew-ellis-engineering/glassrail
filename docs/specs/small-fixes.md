@@ -128,7 +128,7 @@ with "invalid JSON" and no obvious cause. Add `tests/unit/test_providers_postpro
 single ```json fence unwrapped, fenceless passthrough, text containing a
 fence mid-string left alone, empty string.
 
-## 11. Document the image tool
+## 11. Document the image tool — implemented 2026-06-10
 
 `image_generate` (`harness/integrations/image.py` — mflux/Flux text-to-image
 and img2img, `[tools.image]`, risk `write`, macOS + `mflux` binary required)

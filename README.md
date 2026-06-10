@@ -196,12 +196,21 @@ always register. Add a first-party tool by decorating a function with
 `@harness.tool(name=..., description=..., parameters=<JSON Schema>)`.
 
 **First-party integrations** are bundled but opt-in, configured under
-`[tools.*]`. The **web** integration needs the `web` extra and is off by
-default:
+`[tools.*]`. The **web** integration needs the `web` extra and is off by default:
 - `web_fetch(url)` — fetch a page and extract its main text (for reading or
   summarising webpages).
 - `web_search(query)` — search the web behind a pluggable provider:
   `duckduckgo` (no setup) or `searxng` (point at a self-hosted instance).
+
+The **image** integration wraps the `mflux-generate` CLI on macOS and is also
+off by default:
+- `image_generate(prompt, output_path)` — generate a PNG from text using Flux.
+- `image_generate(..., image_path=..., image_strength=...)` — image-to-image
+  generation/editing from an existing source image.
+
+Install `mflux` separately, then either put `mflux-generate` on `PATH` or set
+`mflux_bin`. The tool is declared `write` risk, so it asks for approval in
+interactive mode unless explicitly allowed.
 
 ```bash
 uv sync --extra web                      # installs trafilatura + lxml
@@ -213,6 +222,10 @@ fs_roots = ["~/work", "/tmp/glassrail-eval"] # optional path confinement for fil
 [tools.web]
 fetch = true
 search = "duckduckgo"                    # or "searxng" (+ searxng_url)
+
+[tools.image]
+enabled = true
+mflux_bin = "~/.venvs/mflux/bin/mflux-generate" # optional; empty = auto/PATH
 ```
 
 `tools.fs_roots` confines first-party filesystem paths after `~` expansion and
