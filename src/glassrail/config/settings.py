@@ -182,6 +182,8 @@ class ToolsSettings(BaseModel):
     ``load_tool_plugins``): these ship in-tree and carry their own config.
     """
 
+    fs_roots: list[Path] | None = None
+    """Allowed filesystem roots for first-party file tools. None = unconfined."""
     web: WebToolConfig = WebToolConfig()
     image: ImageToolConfig = ImageToolConfig()
 

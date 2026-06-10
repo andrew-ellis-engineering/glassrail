@@ -31,4 +31,4 @@ def register_integrations(harness: ToolHarness, settings: Settings) -> None:
     if image.enabled:
         from glassrail.harness.integrations.image import register_image  # noqa: PLC0415
 
-        register_image(harness, image)
+        register_image(harness, image, fs_roots=settings.tools.fs_roots)

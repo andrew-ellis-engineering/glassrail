@@ -34,6 +34,7 @@ def test_defaults(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     assert settings.tool_approval.default is ToolApprovalPolicy.ALLOW
     assert settings.tool_approval.mode is ToolApprovalMode.INTERACTIVE
     assert settings.tool_approval.overrides == {}
+    assert settings.tools.fs_roots is None
     assert settings.state_path == Path("./state.sqlite")
     assert len(settings.tiers) == 4
 
@@ -73,6 +74,22 @@ def test_tool_approval_settings_parse(tmp_path: Path, monkeypatch: MonkeyPatch) 
     assert settings.tool_approval.policy_for("file_write") is ToolApprovalPolicy.ASK
     assert settings.tool_approval.policy_for("shell_exec") is ToolApprovalPolicy.DENY
     assert settings.tool_approval.policy_for("file_read") is ToolApprovalPolicy.ALLOW
+
+
+def test_tools_fs_roots_parse_from_toml(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    root = tmp_path / "workspace"
+    (tmp_path / "config.toml").write_text(
+        f"""
+        [tools]
+        fs_roots = ["{root}"]
+        """
+    )
+
+    settings = Settings()
+
+    assert settings.tools.fs_roots == [root]
 
 
 def test_init_kwargs_win_over_env(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:

@@ -139,6 +139,34 @@ async def test_image_generate_nonzero_exit_raises(tmp_path: Path) -> None:
             )
 
 
+async def test_image_generate_respects_fs_roots(tmp_path: Path) -> None:
+    """Configured fs_roots reject writes before mflux starts."""
+    root = tmp_path / "allowed"
+    root.mkdir()
+    outside = tmp_path / "outside.png"
+
+    with patch("asyncio.create_subprocess_exec") as mock_exec:
+        with pytest.raises(ToolExecutionError, match=r"outside the configured tools\.fs_roots"):
+            await image_generate(
+                "prompt",
+                str(outside),
+                width=1024,
+                height=1024,
+                steps=4,
+                image_path=None,
+                image_strength=0.75,
+                mflux_bin="mflux-generate",
+                model="schnell",
+                quantize=4,
+                low_ram=True,
+                mlx_cache_limit_gb=8,
+                timeout_s=60.0,
+                fs_roots=[root],
+            )
+
+    mock_exec.assert_not_called()
+
+
 async def test_image_generate_timeout_raises(tmp_path: Path) -> None:
     """TimeoutError becomes ToolExecutionError with a clear message."""
     out = tmp_path / "out.png"

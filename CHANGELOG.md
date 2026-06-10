@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- First-party file tools now support optional `[tools] fs_roots = [...]` path
+  confinement. `file_read` and `image_generate` resolve paths through the shared
+  guard, deny symlink/traversal escapes when roots are configured, and preserve
+  the current unconfined default with a one-time warning.
 - Engineering specs under `docs/specs/` from the June 2026 architecture audit
   — eval integrity (de-overfitting, held-out suite, CI eval gate), parallel
   node execution, node resilience, configurable routing table, security

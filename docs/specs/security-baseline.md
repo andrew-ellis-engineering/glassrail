@@ -28,7 +28,7 @@ Current posture, as audited June 2026:
 The Phase 2 file-editing spec (vault) depends on items 1 and 2 anyway; this
 pulls the substrate forward.
 
-## Item 1 — `fs_roots` path confinement (P0)
+## Item 1 — `fs_roots` path confinement (P0) — implemented 2026-06-10
 
 - **Setting:** `fs_roots: list[Path] | None = None` on the tools settings
   model in `src/glassrail/config/settings.py` (the parent model that holds

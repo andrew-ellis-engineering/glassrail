@@ -49,7 +49,7 @@ def build_runtime(
 
     bus = EventBus()
     harness = ToolHarness()
-    register_builtins(harness)
+    register_builtins(harness, fs_roots=settings.tools.fs_roots)
     register_integrations(harness, settings)
     if settings.load_tool_plugins:
         loaded = harness.load_entry_points()

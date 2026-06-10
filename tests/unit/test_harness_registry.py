@@ -109,6 +109,24 @@ async def test_file_read_real(harness: ToolHarness, tmp_path: Any) -> None:
     assert out == {"path": str(p), "content": "hello there"}
 
 
+async def test_file_read_respects_fs_roots(harness: ToolHarness, tmp_path: Any) -> None:
+    root = tmp_path / "allowed"
+    root.mkdir()
+    allowed = root / "x.txt"
+    allowed.write_text("hello")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret")
+
+    register_builtins(harness, fs_roots=[root])
+
+    assert await harness.execute("file_read", {"path": str(allowed)}) == {
+        "path": str(allowed),
+        "content": "hello",
+    }
+    with pytest.raises(ToolExecutionError, match=r"outside the configured tools\.fs_roots"):
+        await harness.execute("file_read", {"path": str(outside)})
+
+
 async def test_file_read_missing_returns_error(harness: ToolHarness, tmp_path: Any) -> None:
     register_builtins(harness)
     missing = tmp_path / "nope.txt"

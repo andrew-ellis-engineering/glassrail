@@ -15,6 +15,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+from glassrail.harness.pathguard import ensure_within_roots
 from glassrail.harness.registry import ToolHarness
 
 
@@ -31,10 +32,11 @@ async def memory_search(query: str, limit: int = 5) -> dict[str, Any]:
 async def file_read(path: str) -> dict[str, Any]:
     """Read a UTF-8 text file from the local filesystem."""
     try:
-        content = await asyncio.to_thread(Path(path).read_text, encoding="utf-8")
+        resolved = await asyncio.to_thread(ensure_within_roots, path, None)
+        content = await asyncio.to_thread(Path(resolved).read_text, encoding="utf-8")
     except OSError as exc:
         return {"path": path, "error": str(exc)}
-    return {"path": path, "content": content}
+    return {"path": str(resolved), "content": content}
 
 
 async def eval_noop() -> dict[str, Any]:
@@ -47,7 +49,7 @@ async def eval_noop() -> dict[str, Any]:
     return {}
 
 
-def register_builtins(harness: ToolHarness) -> None:
+def register_builtins(harness: ToolHarness, *, fs_roots: list[Path] | None = None) -> None:
     """Attach every built-in tool to ``harness``."""
     harness.tool(
         name="calendar_get",
@@ -76,6 +78,14 @@ def register_builtins(harness: ToolHarness) -> None:
         risk="read",
     )(memory_search)
 
+    async def _file_read(path: str) -> dict[str, Any]:
+        try:
+            resolved = await asyncio.to_thread(ensure_within_roots, path, fs_roots)
+            content = await asyncio.to_thread(resolved.read_text, encoding="utf-8")
+        except OSError as exc:
+            return {"path": path, "error": str(exc)}
+        return {"path": str(resolved), "content": content}
+
     harness.tool(
         name="file_read",
         description="Read a UTF-8 text file from the local filesystem.",
@@ -87,7 +97,7 @@ def register_builtins(harness: ToolHarness) -> None:
             "required": ["path"],
         },
         risk="read",
-    )(file_read)
+    )(_file_read)
 
 
 def register_eval_tools(harness: ToolHarness) -> None:

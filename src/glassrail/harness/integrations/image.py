@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from glassrail.core import ToolExecutionError, ToolRegistrationError
+from glassrail.harness.pathguard import ensure_within_roots
 
 if TYPE_CHECKING:
     from glassrail.config import ImageToolConfig
@@ -63,11 +64,12 @@ async def image_generate(
     low_ram: bool,
     mlx_cache_limit_gb: int,
     timeout_s: float,
+    fs_roots: list[Path] | None = None,
 ) -> dict[str, Any]:
     """Core implementation — called by the registered tool closure."""
     # Resolve path and create parent directory in a thread so we don't block
     # the event loop with synchronous filesystem calls.
-    out: Path = await asyncio.to_thread(lambda: Path(output_path).expanduser().resolve())
+    out = await asyncio.to_thread(ensure_within_roots, output_path, fs_roots)
     await asyncio.to_thread(out.parent.mkdir, parents=True, exist_ok=True)
 
     cmd = [
@@ -134,7 +136,9 @@ async def image_generate(
 
 
 # fmt: off
-def register_image(harness: ToolHarness, config: ImageToolConfig) -> None:
+def register_image(
+    harness: ToolHarness, config: ImageToolConfig, *, fs_roots: list[Path] | None = None
+) -> None:
     """Register the image_generate tool on ``harness`` per ``config``."""
     mflux_bin = _resolve_bin(config)
     _verify_bin(mflux_bin)
@@ -169,6 +173,7 @@ def register_image(harness: ToolHarness, config: ImageToolConfig) -> None:
             low_ram=low_ram,
             mlx_cache_limit_gb=mlx_cache_limit_gb,
             timeout_s=timeout_s,
+            fs_roots=fs_roots,
         )
 
     harness.tool(

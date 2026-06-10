@@ -207,10 +207,17 @@ default:
 uv sync --extra web                      # installs trafilatura + lxml
 ```
 ```toml
+[tools]
+fs_roots = ["~/work", "/tmp/glassrail-eval"] # optional path confinement for file tools
+
 [tools.web]
 fetch = true
 search = "duckduckgo"                    # or "searxng" (+ searxng_url)
 ```
+
+`tools.fs_roots` confines first-party filesystem paths after `~` expansion and
+symlink resolution. When unset, file tools keep the current unconfined behavior
+and log a warning the first time they resolve a path.
 
 ### Tool Approval
 
@@ -242,8 +249,9 @@ Current posture (hardening is tracked in
 
 - The REST gateway has **no authentication** — keep it bound to localhost and
   do not expose it to untrusted networks.
-- `file_read` can read any path the process can read; path confinement
-  (`tools.fs_roots`) is specced but not yet enforced.
+- `file_read` and `image_generate` output paths are confined when
+  `tools.fs_roots` is set. When it is unset, file tools can access any path the
+  process can access and log a one-time warning.
 - The web tools fetch model-chosen URLs — enabling them means the agent has
   outbound network access it chooses how to use.
 - A tool's `risk` level (`read`/`network`/`write`/`execute`) is currently
