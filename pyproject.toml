@@ -77,6 +77,16 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/glassrail"]
 
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+    "/uv.lock",
+    "/CHANGELOG.md",
+]
+
 # ---------------------------------------------------------------------------
 # Tooling
 # ---------------------------------------------------------------------------

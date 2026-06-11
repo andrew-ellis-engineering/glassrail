@@ -96,6 +96,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   avoiding false "missing context" failures in closed-book evals.
 
 ### Changed
+- Source distributions now use an explicit release allowlist, keeping eval run
+  outputs, tests, docs builds, and local deployment files out of the PyPI
+  artifact while preserving the package source and release metadata.
 - Renamed the public root exception from `DagagentError` to `GlassrailError`
   before the first PyPI release.
 - Documentation corrections from the architecture audit: the README no longer
