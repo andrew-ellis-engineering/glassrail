@@ -642,6 +642,26 @@ async def test_result_failure_marks_node_failed() -> None:
     assert out.results[1].status is NodeStatus.FAILED
 
 
+async def test_result_failure_retries_next_configured_tier() -> None:
+    low = _ScriptedProvider(["not json"], tier=0)
+    high = _ScriptedProvider(
+        [json.dumps({"output": "recovered answer", "confidence": 0.95})], tier=1
+    )
+    executor = Executor(
+        router=TierRouter([low, high]),
+        harness=ToolHarness(),
+        settings=Settings(),
+    )
+    plan = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="x")])
+    state = _state(plan)
+
+    out = await executor.execute(state)
+
+    assert out.results[1].status is NodeStatus.COMPLETED
+    assert out.results[1].tier_used == 1
+    assert out.final_output == "recovered answer"
+
+
 async def test_subplan_bubbles_nested_final_output() -> None:
     """A SUBPLAN node's output is the nested plan's final_output."""
     nested_payload = json.dumps({"output": "nested answer", "confidence": 0.95})

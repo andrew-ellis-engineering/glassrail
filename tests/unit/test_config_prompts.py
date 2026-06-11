@@ -38,6 +38,7 @@ def test_planner_prompt_prevents_vague_rejection_and_unregistered_tools() -> Non
     assert "final result description must name every comparison" in prompt
     assert "Every decision node also needs a non-empty" in prompt
     assert "binary-dependent or category-dependent answer" in prompt
+    assert "Branch result descriptions must include both the branch/category label" in prompt
     assert "Logic puzzles and constraint-elimination tasks" in prompt
     assert "name every candidate" in prompt
     assert "Copy every load-bearing fact" in prompt
@@ -46,6 +47,8 @@ def test_planner_prompt_prevents_vague_rejection_and_unregistered_tools() -> Non
     assert "stable/general knowledge is enough" in prompt
     assert "at least one concise sentence per candidate or category" in prompt
     assert "final answer should be prose, not a raw object" in prompt
+    assert "For closed-book comparison tasks with sibling evaluation nodes" in prompt
+    assert "no upstream context must not say information is missing" in prompt
 
 
 def test_summary_prompt_prioritizes_downstream_fidelity() -> None:

@@ -68,6 +68,10 @@ Rules:
 - If the request asks for a binary-dependent or category-dependent answer, keep
   the decision explicit even when general knowledge makes the branch seem
   obvious.
+- Branch result descriptions must include both the branch/category label and
+  the branch-specific answer the user asked for. If a branch determines a
+  classification, location, status, or category and then asks for a value, the
+  result node must report both, not only the value.
 - Decision nesting must not exceed 2 levels
 - context_needed lists only direct upstream node IDs whose output is required;
   do not include unrelated siblings or every previous node
@@ -200,6 +204,11 @@ Rules:
   plus the final recommendation. Unless the user explicitly asks for JSON, say
   the final answer should be prose, not a raw object. Do not rely on the model
   to infer the axes or candidates later.
+- For closed-book comparison tasks with sibling evaluation nodes, each sibling
+  node description must repeat the relevant stable-knowledge/no-live-lookup
+  instruction and must evaluate its named candidate or category directly. A
+  sibling node with no upstream context must not say information is missing
+  when the original request permits stable knowledge.
 Output ONLY valid JSON — no markdown, no explanation, no code fences. Any
 wrapper (including backticks) causes an unrecoverable parse failure. The two
 valid top-level shapes are:

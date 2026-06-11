@@ -279,7 +279,8 @@ class Executor:
                 t0 = time.monotonic()
                 result = await self._dispatch_node(node, state, tier, skipped, bus=bus)
                 result.execution_time_s = time.monotonic() - t0
-                result.tier_used = tier
+                if result.tier_used is None:
+                    result.tier_used = tier
 
                 if (
                     result.status is NodeStatus.COMPLETED
@@ -504,6 +505,47 @@ class Executor:
         subscribers (e.g. the ACP adapter) can forward it to the client in
         real time.
         """
+        attempt_tiers = [tier]
+        if node.type is NodeType.RESULT:
+            retry_tier = self._next_configured_tier(tier)
+            if retry_tier is not None:
+                attempt_tiers.append(retry_tier)
+
+        result = NodeResult(
+            node_id=node.id,
+            status=NodeStatus.FAILED,
+            error="LLM node did not run",
+        )
+        for attempt_tier in attempt_tiers:
+            result = await self._execute_llm_node_once(
+                node,
+                state,
+                attempt_tier,
+                spec=spec,
+                bus=bus,
+            )
+            result.tier_used = attempt_tier
+            if result.status is NodeStatus.COMPLETED:
+                return result
+            if node.type is NodeType.RESULT and attempt_tier != attempt_tiers[-1]:
+                log.warning(
+                    "Result node %d failed at tier %d (%s); retrying at tier %d",
+                    node.id,
+                    attempt_tier,
+                    result.error or "unknown error",
+                    attempt_tiers[-1],
+                )
+        return result
+
+    async def _execute_llm_node_once(
+        self,
+        node: Node,
+        state: ExecutionState,
+        tier: int,
+        *,
+        spec: _LLMNodeSpec,
+        bus: EventBus | None = None,
+    ) -> NodeResult:
         dependents = self._direct_dependents(node, state)
         ctx = assemble_context(node, state.results, dependent_nodes=dependents or None)
         # For the result node, prepend the original user request so the model
@@ -576,6 +618,12 @@ class Executor:
             confidence=confidence,
             tokens_used=tokens,
         )
+
+    def _next_configured_tier(self, tier: int) -> int | None:
+        higher = sorted(
+            {provider.tier for provider in self._router.providers if provider.tier > tier}
+        )
+        return higher[0] if higher else None
 
     async def _stream_llm_node(
         self,

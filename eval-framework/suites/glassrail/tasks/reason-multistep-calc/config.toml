@@ -40,7 +40,7 @@ text = "States total weight of 150 kg"
 grader = "deterministic"
 check = "regex"
 target = "__result_text__"
-value = "(?i)(\\b150\\s*(kg|kilogram)|(total_weight_in_kilograms|total_weight_kg|total_weight_in_kg)\"?\\s*[:=]\\s*150)"
+value = "(?i)(\\b150(?:\\.0+)?\\s*(kg|kilograms?)|(total_weight_in_kilograms|total_weight_kg|total_weight_in_kg)\"?\\s*[:=]\\s*150(?:\\.0+)?)"
 
 [[criteria]]
 text = "Plan includes a result node"
