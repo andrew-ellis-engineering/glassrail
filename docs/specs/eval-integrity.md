@@ -1,8 +1,18 @@
 # Spec: Eval integrity
 
-Status: Proposed
+Status: Implemented for the 0.1.0 release gate; promotion ratchet ongoing.
 Priority: P0 — blocks the 0.1.0 tag and all marketing claims about eval results.
 Depends on: nothing.
+
+## Current gate result
+
+The 0.1.0 release gate is recorded in [the roadmap](../roadmap.md): the
+2026-06-11 confirmation run passed `harness-mechanics` at 32/32 full-pass,
+`node-capability-openrouter` at 7/7 full-pass, and `glassrail-openrouter` at
+20/23 full-pass with 0 all-fail and 23/23 pass@k. The first held-out run
+(`glassrail-heldout`, `run-20260611T143248Z`) is also recorded at 10/12
+full-pass, 1 all-fail, and 11/12 pass@k; the all-fail appears to be a
+judge/criterion false negative and was not tuned against.
 
 ## Purpose
 
@@ -200,7 +210,7 @@ PATH, set `[backend] command` in the suite to `["glassrail", "exec-plan"]`
 explicitly. The harness exits `1` when any regression task fails, which fails
 the job — that is the point. Wall time is ~10–20 s.
 
-## Part 5 — Use the promotion ratchet
+## Part 5 — Use the promotion ratchet — ongoing after 0.1.0
 
 After Parts 1–3 land and one clean confirmation run exists:
 
@@ -211,7 +221,9 @@ After Parts 1–3 land and one clean confirmation run exists:
    verifies candidacy; do not `--force`).
 3. From then on the promoted regression set is part of the gate: any
    `pass^k < 1.0` on a regression task blocks release (exit code 1 already
-   encodes this).
+   encodes this). No stochastic tasks are promoted for 0.1.0; this is
+   explicitly deferred to the post-release ratchet while `harness-mechanics`
+   remains the mechanical CI wall.
 
 ## Acceptance criteria
 

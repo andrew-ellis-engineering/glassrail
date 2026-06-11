@@ -193,9 +193,10 @@ verifying them.
 - [x] The CLI — including the `glassrail run --json` envelope the eval
   framework depends on — has direct tests per `docs/specs/small-fixes.md`
   item 9.
-- [ ] Release-blocking specs complete per the roadmap's "Release 0.1.0 —
-  blocking workstream" section: `docs/specs/eval-integrity.md` in full;
-  `docs/specs/security-baseline.md` items 1, 2, 5.
+- [x] Release-blocking specs complete per the roadmap's "Release 0.1.0 —
+  blocking workstream" section: `docs/specs/eval-integrity.md` is implemented
+  for the 0.1.0 gate with the promotion ratchet ongoing;
+  `docs/specs/security-baseline.md` items 1, 2, 5 are complete for the tag.
 
 ## Acceptance criteria
 

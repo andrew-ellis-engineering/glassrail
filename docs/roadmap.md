@@ -88,14 +88,21 @@ Baseline established 2026-06-07 against Qwen3-8b (tier 0) + Qwen3.6-35b (tier
 | node-capability-openrouter (7 tasks, 3 trials) | **7/7 full-pass (100%)** | 100% |
 | harness-mechanics (32 tasks, 3 trials) | **32/32 full-pass (100%)** | 100% |
 
-Latest confirmation run, 2026-06-08 on current `main`:
+Latest confirmation run, 2026-06-11 on current `main`:
 
 | Suite | Run | Result | Bar |
 |---|---|---|---|
-| harness-mechanics | `run-20260608T185309Z` | **32/32 full-pass (100%), 0 all-fail** | 100% |
-| node-capability-openrouter | `run-20260608T185315Z` | **7/7 full-pass (100%), 0 all-fail** | 100% |
-| glassrail-openrouter | `run-20260608T185414Z` | **20/23 full-pass (87%), 0 all-fail** | ≥ 80% full-pass, 0 all-fail |
-| glassrail-heldout | pending first confirmation run | not yet recorded | publish beside main-suite numbers |
+| harness-mechanics | `run-20260611T133134Z` | **32/32 full-pass (100%), 0 all-fail** | 100% |
+| node-capability-openrouter | `run-20260611T133139Z` | **7/7 full-pass (100%), 0 all-fail** | 100% |
+| glassrail-openrouter | `run-20260611T133236Z` | **20/23 full-pass (87%), 0 all-fail, 23/23 pass@k** | ≥ 80% full-pass, 0 all-fail |
+| glassrail-heldout | `run-20260611T143248Z` | **10/12 full-pass (83%), 1 all-fail, 11/12 pass@k** | publish beside main-suite numbers |
+
+Held-out caveat: the one all-fail task (`heldout-classify-prime`) appears to be
+a judge/criterion false negative rather than an engine failure. All three
+trials used the decision path, skipped the composite branch, identified 97 as
+prime, and returned 89 as the requested prior prime. Per the held-out
+iteration rule, this has not been tuned against; publish the caveat with the
+number instead of folding the task back into prompt work.
 
 ### Gate definition and integrity caveats (added 2026-06-10)
 
@@ -104,32 +111,33 @@ original exit-gate sketch in `eval-framework/suites/glassrail/EVAL_PLAN.md`
 (which proposed a promoted-regression set at `pass^5 = 1.0`; that remains the
 *aspirational* shape the ratchet works toward). `PHASE1_REMAINING.md` has been
 absorbed into [specs/eval-integrity.md](specs/eval-integrity.md) and deleted.
-Stated honestly, the gate as met has three caveats, and closing them is
-**release-blocking follow-through** tracked in that spec:
+Stated honestly, the gate as met has three caveats, now reconciled for the
+0.1.0 release decision:
 
 1. **Overfit risk** — addressed mechanically by replacing suite-specific
    conditional/cookbook vocabulary with structural signals and adding
-   `suites/glassrail-heldout`. Remaining release action: run the held-out suite
-   once and publish its numbers beside the main-suite numbers.
+   `suites/glassrail-heldout`. The first held-out confirmation run is recorded
+   above and should be published beside the main-suite numbers.
 2. **Mirror-suite gate** — the gate ran on the OpenRouter mirrors (cloud =
-   fast signal) rather than the local serving stack the docs call the
-   ship-gate. Fix: record one local confirmation run, or explicitly accept the
-   mirror as the gate of record here.
+   fast signal) rather than the local serving stack. For 0.1.0, the OpenRouter
+   mirror is the gate of record because it exercises the same CLI subject,
+   planner, executor, tier routing, and graders while avoiding local serving
+   variability.
 3. **Mechanical enforcement partially closed** — harness-mechanics now runs for
    real in CI (zero model calls), but the promotion ratchet has promoted zero
-   stochastic tasks. Remaining release action: promote d1–d2 tasks as clean
-   runs accumulate, or explicitly defer promotion while keeping the roadmap's
-   operative gate definition as the release gate of record.
+   stochastic tasks. Promotion is deferred to the ongoing ratchet, while the
+   roadmap's operative full-pass/pass@k gate remains the release gate of
+   record.
 
-Known remaining eval ratchet after the confirmation run: **final-answer
-preservation.** The three partial-pass tasks all pass at least one trial and
-fail only one of three trials. Their misses are not infra, schema, tool, or
-branch execution failures; they are final-answer compression issues where the
-result node drops a comparison category (`recommend-datastore-oltp`) or loses
-the depth of trade-off analysis present in upstream reasoning
-(`research-compare-3`, `research-constrained`). The next quality target is to
-make result nodes preserve named candidates, comparison axes, and caveats from
-their upstream context.
+Known remaining eval ratchet after the confirmation run: **judge sensitivity
+and research-task robustness.** The main gate has no all-fail tasks and all 23
+tasks pass at least one trial. Remaining partials are one-trial misses:
+`calibrate-known` (LLM judge noise on an otherwise correct "8 bits" answer),
+`research-compare-3` (semantic judge sensitivity on a substantive
+recommendation), and `research-constrained` (a deterministic regex that is too
+line-sensitive plus one semantic miss). The next quality target is to improve
+rubric resilience and keep result nodes preserving named candidates, comparison
+axes, and caveats from upstream context.
 
 Items originally deferred to Phase 2 (do not block the gate):
 
@@ -156,11 +164,12 @@ audit, these additionally gate the work:
 **Before the `v0.1.0` tag:**
 
 - [Eval integrity](specs/eval-integrity.md) — de-overfit engine heuristics and
-  cookbook keywords, held-out suite, harness-mechanics in CI, gate
-  reconciliation (this section), begin ratchet promotions.
+  cookbook keywords, held-out suite, harness-mechanics in CI, and gate
+  reconciliation are complete for 0.1.0. Ratchet promotions continue after the
+  tag.
 - [Security baseline](specs/security-baseline.md) items 1, 2, 5 — `fs_roots`
   confinement, risk-honouring approval defaults, truthful README security
-  notes.
+  notes are complete for the tag.
 - [Small fixes](specs/small-fixes.md) items 1 and 9 are done: the public root
   exception is `GlassrailError`, and `glassrail run --json` / `exec-plan
   --json` have direct CLI coverage.

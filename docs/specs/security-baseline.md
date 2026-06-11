@@ -1,6 +1,7 @@
 # Spec: Security baseline
 
-Status: Proposed
+Status: Items 1, 2, and 5 implemented for the 0.1.0 tag; items 3 and 4 remain
+for the release window.
 Priority: P0/P1 split — items 1, 2, and 5 land before the 0.1.0 tag; items 3
 and 4 land in the release window, before broad marketing
 (`docs/release/grassroots-marketing.md` positions the project as "auditable
