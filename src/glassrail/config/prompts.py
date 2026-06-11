@@ -52,6 +52,11 @@ Rules:
   categories, constraints, labels, requested output shape, and branch-specific
   values. Never rely on an intermediate node remembering a value that is only
   present in the original request.
+- Copy source-of-knowledge instructions into every knowledge-producing node
+  description. If the request says stable/general knowledge is enough, no live
+  lookup is needed, or a tool should not be used, include that instruction on
+  each think/synthesis/result node that might otherwise claim missing evidence
+  or invent an unavailable tool call.
 - Identify points where the next action depends on what a previous node returned
 - At those points, insert a DECISION node with a specific BINARY condition
 - Decision branches must be exactly {"yes": [...], "no": [...]} and list node
@@ -84,8 +89,9 @@ Rules:
   node is wrong — use think first.
 - Logic puzzles and constraint-elimination tasks require a think node whose
   description includes all given entities and constraints and asks for concise
-  reasoning steps, then a result node that reports the conclusion and the key
-  deduction. Do not collapse them into a bare final answer.
+  reasoning steps, then a result node whose description explicitly asks to
+  report both the conclusion and the key deduction steps. Do not collapse them
+  into a bare final answer.
 - If a node condenses noisy upstream output for a downstream consumer,
   set type=summary; preserve facts the downstream consumer may need. Summary
   nodes may include "format": "concise" | "medium" | "verbose"; omit it for
@@ -191,8 +197,9 @@ Rules:
   axis requested by the user and say to compare each candidate on each axis
   before recommending. It must also name every candidate or option that should
   be compared. Ask for at least one concise sentence per candidate or category,
-  plus the final recommendation. Do not rely on the model to infer the axes or
-  candidates later.
+  plus the final recommendation. Unless the user explicitly asks for JSON, say
+  the final answer should be prose, not a raw object. Do not rely on the model
+  to infer the axes or candidates later.
 Output ONLY valid JSON — no markdown, no explanation, no code fences. Any
 wrapper (including backticks) causes an unrecoverable parse failure. The two
 valid top-level shapes are:
@@ -307,6 +314,7 @@ Do not refer to "the context", "the results above", or node numbers; write as if
 Preserve important caveats and uncertainty; do not invent facts beyond the context. Named people must be mentioned by their full name as they appear in the provided context — do not omit or collapse names.
 Exception: when the original request or task explicitly asks for stable general knowledge and no source file, tool, or live lookup is required, answer from well-established knowledge.
 Format the answer for readability when useful (bullets, short sections, or code blocks), but do not add meta-commentary about the plan or scaffolding.
+Unless the user explicitly asks for JSON or a machine-readable object, write the final answer as prose rather than a raw JSON object.
 For document-summary tasks, provide the requested summary directly. Do not introduce it with "I recommend" unless the user asked for a recommendation.
 For recommendation tasks only, include one explicit sentence near the start in the form "I recommend <option>" or "<option> is the best fit" before explaining why.
 For comparison and recommendation tasks, preserve every named candidate, option, comparison axis, constraint, trade-off, and caveat from the original request and upstream context. Do not compress a multi-option comparison into a generic winner-only answer; include at least one concise sentence about each candidate or category before or while explaining the recommendation.

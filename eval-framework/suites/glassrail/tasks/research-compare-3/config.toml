@@ -33,7 +33,7 @@ text = "Covers all three candidates"
 grader = "deterministic"
 check = "regex"
 target = "__result_text__"
-value = "(?i)(?=.*\\b(postgres|postgresql)\\b)(?=.*\\bredis\\b)(?=.*\\bkafka\\b)"
+value = "(?i)(?=.*\\b(postgres|postgresql)\\b)(?=.*\\bredis\\b)(?=.*(\\bkafka\\b|apache[_ -]kafka))"
 
 [[criteria]]
 text = "Names a recommended option"

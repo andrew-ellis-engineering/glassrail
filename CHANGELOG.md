@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   comparison coverage using structural wording only; prompt tests guard against
   visible eval-task vocabulary, and the comparison eval regex accepts the full
   product spelling alongside the shorthand.
+- Planner/result prompts now also preserve source-of-knowledge constraints,
+  require deduction tasks to surface key steps in the final answer, and default
+  final answers to prose unless JSON is requested. Candidate coverage regexes
+  accept separator variants in product names.
 - First-party file tools now support optional `[tools] fs_roots = [...]` path
   confinement. `file_read` and `image_generate` resolve paths through the shared
   guard, deny symlink/traversal escapes when roots are configured, and preserve

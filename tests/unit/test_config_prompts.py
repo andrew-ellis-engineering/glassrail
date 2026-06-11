@@ -42,7 +42,10 @@ def test_planner_prompt_prevents_vague_rejection_and_unregistered_tools() -> Non
     assert "name every candidate" in prompt
     assert "Copy every load-bearing fact" in prompt
     assert "numbers, units, formulas, named candidates" in prompt
+    assert "Copy source-of-knowledge instructions" in prompt
+    assert "stable/general knowledge is enough" in prompt
     assert "at least one concise sentence per candidate or category" in prompt
+    assert "final answer should be prose, not a raw object" in prompt
 
 
 def test_summary_prompt_prioritizes_downstream_fidelity() -> None:
@@ -81,6 +84,7 @@ def test_synthesis_and_result_prompts_preserve_caveats_without_inventing() -> No
     assert "logic or deduction tasks" in result
     assert "classification/branch choice and a branch-specific value" in result
     assert "at least one concise sentence about each candidate or category" in result
+    assert "write the final answer as prose rather than a raw JSON object" in result
     assert 'Do not introduce it with "I recommend"' in result
     # Result must tell the model it is the sole user-visible output
     assert "ONLY text the user will see" in result
