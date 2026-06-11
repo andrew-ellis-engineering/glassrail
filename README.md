@@ -15,11 +15,13 @@ tier routing, with persistence, a typed event stream, and a REST gateway), and
 the
 [eval framework](https://github.com/andrew-ellis-engineering/glassrail/tree/main/eval-framework)
 measures it. The Phase 1 eval gate is met and the first PyPI release is being
-prepared. Treat APIs as unstable while Glassrail is in 0.x. See
+published. Treat APIs as unstable while Glassrail is in 0.x. See
 [CHANGELOG.md](https://github.com/andrew-ellis-engineering/glassrail/blob/main/CHANGELOG.md)
 for what's landed and the
 [roadmap](https://andrew-ellis-engineering.github.io/glassrail/roadmap/) for
-what's next.
+what's next. The temporary product-site URL is
+[andrew-ellis-engineering.github.io/glassrail.github.io](https://andrew-ellis-engineering.github.io/glassrail.github.io/)
+until a custom domain is wired up.
 
 ## Principles
 
@@ -36,11 +38,12 @@ what's next.
 
 ## Quickstart
 
-From PyPI, once the first release is published:
+From PyPI:
 
 ```bash
-uvx glassrail --help
-uvx glassrail run "summarise the CAP theorem in three bullets"
+pip install glassrail
+glassrail --help
+glassrail run "summarise the CAP theorem in three bullets"
 ```
 
 From source:

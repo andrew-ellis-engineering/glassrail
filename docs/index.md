@@ -18,8 +18,11 @@ Most agents loop: think, act, observe, think again. That works, but it's hard to
 ## Status
 
 The Phase 1 eval gate is met (see the gate tables and integrity caveats in
-the [Roadmap](./roadmap.md)) and the first PyPI release is being prepared.
+the [Roadmap](./roadmap.md)) and Glassrail 0.1.0 is published on PyPI.
 The engine runs end to end — plan → validate → execute over tier routing —
 with SQLite persistence, the full node taxonomy, a typed event stream,
 REST and ACP gateways, and the eval framework measuring it. APIs are
 unstable while Glassrail is 0.x.
+
+For the product overview, see the
+[Glassrail website](https://andrew-ellis-engineering.github.io/glassrail.github.io/).
