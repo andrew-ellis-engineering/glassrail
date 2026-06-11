@@ -12,10 +12,14 @@ fixed rules rather than by the model's discretion.
 
 Early development — the engine runs end to end (plan → validate → execute over
 tier routing, with persistence, a typed event stream, and a REST gateway), and
-the [eval framework](./eval-framework) measures it. The Phase 1 eval gate is
-met and the first PyPI release is being prepared. Treat APIs as unstable while
-Glassrail is in 0.x. See [CHANGELOG.md](./CHANGELOG.md) for what's landed and
-[docs/roadmap.md](./docs/roadmap.md) for what's next.
+the
+[eval framework](https://github.com/andrew-ellis-engineering/glassrail/tree/main/eval-framework)
+measures it. The Phase 1 eval gate is met and the first PyPI release is being
+prepared. Treat APIs as unstable while Glassrail is in 0.x. See
+[CHANGELOG.md](https://github.com/andrew-ellis-engineering/glassrail/blob/main/CHANGELOG.md)
+for what's landed and the
+[roadmap](https://andrew-ellis-engineering.github.io/glassrail/roadmap/) for
+what's next.
 
 ## Principles
 
@@ -93,7 +97,7 @@ uv run glassrail tui "<task>"                   # POSTs the task, renders the li
 The viewer draws the plan as colour-coded node boxes connected by edges
 (grouped into dependency layers, each box showing a short summary, recoloured as
 they run) above a per-node table; `--no-dag` shows the table alone. See
-[docs/tui.md](./docs/tui.md).
+[Terminal UI](https://andrew-ellis-engineering.github.io/glassrail/tui/).
 
 **Editor / agent clients (ACP)** — speak the [Agent Client
 Protocol](https://agentclientprotocol.com) as a JSON-RPC 2.0 server over stdio,
@@ -106,7 +110,7 @@ uv run glassrail acp                            # JSON-RPC over stdin/stdout; lo
 
 The in-repo Rust terminal client speaks this protocol — submit a task, watch the
 plan stream, approve or revise it, all in the terminal. See
-[clients/tui](./clients/tui/README.md):
+[clients/tui](https://github.com/andrew-ellis-engineering/glassrail/tree/main/clients/tui):
 
 ```bash
 cd clients/tui && cargo run -- uv run glassrail acp
@@ -122,7 +126,8 @@ server-side.)
 
 **REST API directly** — `POST /task` returns a `task_id`; follow it over
 Server-Sent Events or a WebSocket at `/task/{id}/events`, or poll
-`GET /task/{id}`. See [docs/streaming.md](./docs/streaming.md).
+`GET /task/{id}`. See
+[Streaming events](https://andrew-ellis-engineering.github.io/glassrail/streaming/).
 
 ## Configuration
 
@@ -262,7 +267,7 @@ startup.
 
 Glassrail is early 0.x software run by its operator, not a hardened service.
 Current posture (hardening is tracked in
-[docs/specs/security-baseline.md](./docs/specs/security-baseline.md)):
+[Security baseline](https://andrew-ellis-engineering.github.io/glassrail/specs/security-baseline/)):
 
 - The REST gateway has **no authentication** — keep it bound to localhost and
   do not expose it to untrusted networks.
@@ -279,14 +284,16 @@ Current posture (hardening is tracked in
 ## Evals
 
 Model-quality evals (multi-trial **pass@k** capability vs **pass^k** reliability
-against the real agent) live in the standalone [`eval-framework/`](./eval-framework):
+against the real agent) live in the standalone
+[`eval-framework/`](https://github.com/andrew-ellis-engineering/glassrail/tree/main/eval-framework):
 
 ```bash
 cd eval-framework && python3 run.py suite suites/glassrail
 ```
 
 The `glassrail-cli` backend drives the real planner and executor over the agent's
-own tier routing via `glassrail run --json`. See [docs/evals.md](./docs/evals.md).
+own tier routing via `glassrail run --json`. See
+[Evals](https://andrew-ellis-engineering.github.io/glassrail/evals/).
 
 ## Development
 
@@ -296,11 +303,15 @@ uv run pre-commit install
 uv run pytest
 ```
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full check sweep and PR
-guidelines, [CLAUDE.md](./CLAUDE.md) for the package layout and conventions, and
-[docs/](./docs) for the architecture, streaming, observability, and deployment
-references.
+See
+[CONTRIBUTING.md](https://github.com/andrew-ellis-engineering/glassrail/blob/main/CONTRIBUTING.md)
+for the full check sweep and PR guidelines,
+[CLAUDE.md](https://github.com/andrew-ellis-engineering/glassrail/blob/main/CLAUDE.md)
+for the package layout and conventions, and the
+[docs site](https://andrew-ellis-engineering.github.io/glassrail/) for the
+architecture, streaming, observability, and deployment references.
 
 ## License
 
-Apache-2.0. See [LICENSE](./LICENSE).
+Apache-2.0. See
+[LICENSE](https://github.com/andrew-ellis-engineering/glassrail/blob/main/LICENSE).

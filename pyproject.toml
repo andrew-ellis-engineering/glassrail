@@ -51,7 +51,7 @@ glassrail = "glassrail.cli:app"
 [project.urls]
 Homepage = "https://github.com/andrew-ellis-engineering/glassrail"
 Repository = "https://github.com/andrew-ellis-engineering/glassrail"
-Documentation = "https://github.com/andrew-ellis-engineering/glassrail/tree/main/docs"
+Documentation = "https://andrew-ellis-engineering.github.io/glassrail/"
 
 [dependency-groups]
 dev = [

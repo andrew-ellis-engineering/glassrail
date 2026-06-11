@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [0.1.0] - 2026-06-11
+
 ### Added
 - Planner/result prompts now preserve load-bearing facts, branch labels, and
   comparison coverage using structural wording only; prompt tests guard against
@@ -100,6 +104,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   outputs, tests, docs builds, and local deployment files out of the PyPI
   artifact while preserving the package source and release metadata; CI and the
   publish workflow now fail if forbidden release artifacts reappear.
+- Package metadata now points the Documentation URL at the published MkDocs
+  site.
+- README links now use absolute repository and docs URLs so they work from the
+  PyPI project page as well as GitHub.
 - Renamed the public root exception from `DagagentError` to `GlassrailError`
   before the first PyPI release.
 - Documentation corrections from the architecture audit: the README no longer
@@ -327,7 +335,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   at validation. Raised the default `max_plan_nodes` from 12 to 24 to fit
   real fan-out tasks (an "N things × M aspects" research sweep needs N×M tool
   nodes plus aggregation).
-
-## [0.1.0] - Unreleased
-
-Initial development release.
