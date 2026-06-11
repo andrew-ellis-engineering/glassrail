@@ -29,21 +29,29 @@ Rules:
   single result node. Do NOT resolve the condition yourself or fold it into a
   result description. That is always wrong. Plan as if the condition is unknown:
   only the executor evaluates it at runtime.
-  BAD:  {"nodes":[{"id":1,"type":"result","description":"246 is even, so half is 123"}]}
+  BAD:  {"nodes":[{"id":1,"type":"result","description":"The record is valid, so return OK-1"}]}
   GOOD: {"nodes":[
-    {"id":1,"type":"think","description":"Is 246 even?","context_needed":[]},
-    {"id":2,"type":"decision","condition":"Is 246 even?",
+    {"id":1,"type":"think","description":"Check if R-42 has status=ready.",
+     "context_needed":[]},
+    {"id":2,"type":"decision","condition":"Is record R-42 valid?",
      "branches":{"yes":[3],"no":[4]},"default_branch":"yes","context_needed":[1]},
-    {"id":3,"type":"result","description":"Report half of 246","context_needed":[1]},
-    {"id":4,"type":"result","description":"Report next even after 246","context_needed":[1]}
+    {"id":3,"type":"result","description":"Report R-42 valid; return OK-1",
+     "context_needed":[1]},
+    {"id":4,"type":"result","description":"Report R-42 invalid; list missing fields",
+     "context_needed":[1]}
   ]}
-  The same pattern applies to any "if northern hemisphere / if southern hemisphere",
-  "if the file says X / otherwise", and all other conditional prompts.
+  The same pattern applies to category checks, file-content checks, threshold
+  checks, and all other conditional prompts.
 - CRITICAL — fresh context: every node executes with FRESH CONTEXT. It sees ONLY
   the outputs of the node IDs listed in its context_needed, plus its own
   description. It does NOT see the user's original request or any other node's
   output. Make each description self-sufficient, and list every upstream node
   whose output it needs in context_needed.
+- Copy every load-bearing fact from the original request into the node
+  description that needs it: numbers, units, formulas, named candidates,
+  categories, constraints, labels, requested output shape, and branch-specific
+  values. Never rely on an intermediate node remembering a value that is only
+  present in the original request.
 - Identify points where the next action depends on what a previous node returned
 - At those points, insert a DECISION node with a specific BINARY condition
 - Decision branches must be exactly {"yes": [...], "no": [...]} and list node
@@ -52,9 +60,9 @@ Rules:
   and "default_branch". Every decision node also needs a non-empty
   "description" explaining the branch choice. A DECISION node missing required
   fields fails validation and will not execute.
-- If the request asks for an even/odd, northern/southern, present/absent,
-  true/false, yes/no, or otherwise binary-dependent answer, keep the decision
-  explicit even when general knowledge makes the branch seem obvious.
+- If the request asks for a binary-dependent or category-dependent answer, keep
+  the decision explicit even when general knowledge makes the branch seem
+  obvious.
 - Decision nesting must not exceed 2 levels
 - context_needed lists only direct upstream node IDs whose output is required;
   do not include unrelated siblings or every previous node
@@ -74,8 +82,8 @@ Rules:
   error in one step would corrupt the final answer (e.g. multi-factor products,
   multi-premise deductions). Routing multi-step arithmetic directly to a result
   node is wrong — use think first.
-- Logic puzzles and constraint-elimination tasks (for example "Alice/Bob/Carol
-  each own one pet") require a think node whose description asks for concise
+- Logic puzzles and constraint-elimination tasks require a think node whose
+  description includes all given entities and constraints and asks for concise
   reasoning steps, then a result node that reports the conclusion and the key
   deduction. Do not collapse them into a bare final answer.
 - If a node condenses noisy upstream output for a downstream consumer,
@@ -182,7 +190,9 @@ Rules:
 - For comparison tasks, the final result description must name every comparison
   axis requested by the user and say to compare each candidate on each axis
   before recommending. It must also name every candidate or option that should
-  be compared. Do not rely on the model to infer the axes or candidates later.
+  be compared. Ask for at least one concise sentence per candidate or category,
+  plus the final recommendation. Do not rely on the model to infer the axes or
+  candidates later.
 Output ONLY valid JSON — no markdown, no explanation, no code fences. Any
 wrapper (including backticks) causes an unrecoverable parse failure. The two
 valid top-level shapes are:
@@ -299,9 +309,10 @@ Exception: when the original request or task explicitly asks for stable general 
 Format the answer for readability when useful (bullets, short sections, or code blocks), but do not add meta-commentary about the plan or scaffolding.
 For document-summary tasks, provide the requested summary directly. Do not introduce it with "I recommend" unless the user asked for a recommendation.
 For recommendation tasks only, include one explicit sentence near the start in the form "I recommend <option>" or "<option> is the best fit" before explaining why.
-For comparison and recommendation tasks, preserve every named candidate, option, comparison axis, constraint, trade-off, and caveat from the original request and upstream context. Do not compress a multi-option comparison into a generic winner-only answer; cover each requested axis before or while explaining the recommendation.
+For comparison and recommendation tasks, preserve every named candidate, option, comparison axis, constraint, trade-off, and caveat from the original request and upstream context. Do not compress a multi-option comparison into a generic winner-only answer; include at least one concise sentence about each candidate or category before or while explaining the recommendation.
 For arithmetic tasks, write the final numeric answer in plain prose with units, even if upstream context is structured JSON.
 For logic or deduction tasks, include the key reasoning steps before or after the conclusion; do not return only the final name or value.
+For conditional branch tasks, if the user asked for both a classification/branch choice and a branch-specific value, include both in the final answer.
 The value of "output" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
 Respond ONLY with valid JSON: {"output": "<final answer>", "confidence": <0.0-1.0>}
 """  # noqa: E501

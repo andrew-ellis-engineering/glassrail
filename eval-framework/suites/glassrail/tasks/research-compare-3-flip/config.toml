@@ -39,7 +39,7 @@ text = "Names a recommended option"
 grader = "deterministic"
 check = "regex"
 target = "__result_text__"
-value = "(?i)((recommend|best fit|choose|go with).{0,40}(kafka|redis|postgres)|(kafka|redis|postgres).{0,40}(recommend|best fit|choose|go with))"
+value = "(?i)((recommend|best fit|choose|go with).{0,40}(kafka|redis|postgresql|postgres)|(kafka|redis|postgresql|postgres).{0,40}(recommend|best fit|choose|go with))"
 
 [[criteria]]
 text = "Plan includes a result node"

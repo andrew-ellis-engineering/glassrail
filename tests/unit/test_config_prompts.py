@@ -37,9 +37,12 @@ def test_planner_prompt_prevents_vague_rejection_and_unregistered_tools() -> Non
     assert "put named-person and planted-fact preservation" in prompt
     assert "final result description must name every comparison" in prompt
     assert "Every decision node also needs a non-empty" in prompt
-    assert "keep the decision" in prompt
+    assert "binary-dependent or category-dependent answer" in prompt
     assert "Logic puzzles and constraint-elimination tasks" in prompt
     assert "name every candidate" in prompt
+    assert "Copy every load-bearing fact" in prompt
+    assert "numbers, units, formulas, named candidates" in prompt
+    assert "at least one concise sentence per candidate or category" in prompt
 
 
 def test_summary_prompt_prioritizes_downstream_fidelity() -> None:
@@ -76,6 +79,8 @@ def test_synthesis_and_result_prompts_preserve_caveats_without_inventing() -> No
     assert "winner-only answer" in result
     assert "plain prose with units" in result
     assert "logic or deduction tasks" in result
+    assert "classification/branch choice and a branch-specific value" in result
+    assert "at least one concise sentence about each candidate or category" in result
     assert 'Do not introduce it with "I recommend"' in result
     # Result must tell the model it is the sole user-visible output
     assert "ONLY text the user will see" in result
@@ -123,3 +128,32 @@ def test_decision_think_and_shape_check_prompts_have_tight_roles() -> None:
     assert "stable general knowledge" in prompts.DEFAULT_THINK_SYSTEM
     assert "usable for the node that requested it" in prompts.DEFAULT_SHAPE_CHECK_SYSTEM
     assert "empty-but-valid results" in prompts.DEFAULT_SHAPE_CHECK_SYSTEM
+
+
+def test_runtime_prompts_avoid_visible_eval_task_vocabulary() -> None:
+    combined = "\n".join(
+        (
+            prompts.DEFAULT_PLANNER_SYSTEM,
+            prompts.DEFAULT_DECISION_SYSTEM,
+            prompts.DEFAULT_THINK_SYSTEM,
+            prompts.DEFAULT_SYNTHESIS_SYSTEM,
+            prompts.DEFAULT_SUMMARY_SYSTEM,
+            prompts.SUMMARY_CONCISE_SYSTEM,
+            prompts.SUMMARY_VERBOSE_SYSTEM,
+            prompts.DEFAULT_RESULT_SYSTEM,
+        )
+    ).lower()
+
+    forbidden = (
+        "even/odd",
+        "northern/southern",
+        "hemisphere",
+        "alice/bob/carol",
+        "tcp vs udp",
+        "postgresql",
+        "clickhouse",
+        "duckdb",
+        "druid",
+    )
+    for term in forbidden:
+        assert term not in combined
