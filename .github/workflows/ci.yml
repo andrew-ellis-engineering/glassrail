@@ -147,7 +147,13 @@ jobs:
       - name: Inspect distributions
         run: |
           tar -tf dist/glassrail-*.tar.gz | sort > /tmp/glassrail-sdist.txt
-          python -m zipfile -l dist/glassrail-*.whl
+          python -m zipfile -l dist/glassrail-*.whl > /tmp/glassrail-wheel.txt
+          cat /tmp/glassrail-sdist.txt
+          cat /tmp/glassrail-wheel.txt
+          if grep -E '(^|/)(eval-framework/results|tests|site|dist|failed_plans|SCRATCH\.md|config\.toml|\.env)(/|$)' /tmp/glassrail-sdist.txt /tmp/glassrail-wheel.txt; then
+            echo "distribution contains forbidden release artifacts"
+            exit 1
+          fi
       - name: Smoke test wheel
         run: |
           python -m venv /tmp/glassrail-wheel-smoke
