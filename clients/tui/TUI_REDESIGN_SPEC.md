@@ -551,7 +551,6 @@ Acceptance:
 Files:
 
 - `clients/tui/README.md`
-- `clients/tui/HANDOFF.md` or replacement durable docs
 - unit tests in `clients/tui/src/*`
 - integration/fake-agent coverage as needed
 

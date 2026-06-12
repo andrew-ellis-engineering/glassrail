@@ -46,8 +46,8 @@ Replace the sequential loop with a ready-set scheduler:
    in `state.results` (any status — completed, failed, empty, or skipped all
    resolve a dependency; this preserves today's behaviour where dependents of a
    failed node run and see the failure notice from `assemble_context`).
-3. **Skip propagation (formalised — this resolves the open question flagged in
-   `eval-framework/HARNESS_NODE_EVAL_SPEC.md` §8.2):**
+3. **Skip propagation (formalised — this resolves the open question now pinned
+   by the `harness-mechanics` `skip-transitive` task):**
    - When a decision completes, the targets of every untaken branch are marked
      skipped and get a `SKIPPED` `NodeResult` recorded immediately (existing
      `_record_branch_decision` behaviour).
