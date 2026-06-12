@@ -97,6 +97,9 @@ uv run uvicorn glassrail.gateways.rest:app      # serves on :8000
 uv run glassrail tui "<task>"                   # POSTs the task, renders the live DAG + stream
 ```
 
+Set `GLASSRAIL_API_KEY` to require `Authorization: Bearer <key>` on REST
+routes and event streams; `/health` stays open for liveness checks.
+
 The viewer draws the plan as colour-coded node boxes connected by edges
 (grouped into dependency layers, each box showing a short summary, recoloured as
 they run) above a per-node table; `--no-dag` shows the table alone. See
@@ -276,8 +279,10 @@ Glassrail is early 0.x software run by its operator, not a hardened service.
 Current posture (hardening is tracked in
 [Security baseline](https://andrew-ellis-engineering.github.io/glassrail/specs/security-baseline/)):
 
-- The REST gateway has **no authentication** — keep it bound to localhost and
-  do not expose it to untrusted networks.
+- The REST gateway is unauthenticated by default for local development. Set
+  `GLASSRAIL_API_KEY` before exposing it beyond localhost; when set, every REST
+  route and event stream requires `Authorization: Bearer <key>` except
+  `/health`.
 - `file_read` and `image_generate` output paths are confined when
   `tools.fs_roots` is set. When it is unset, file tools can access any path the
   process can access and log a one-time warning.

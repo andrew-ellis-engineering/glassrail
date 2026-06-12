@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   custom domain is pending.
 
 ### Security
+- The REST gateway now supports optional bearer-token protection via
+  `GLASSRAIL_API_KEY`, covering HTTP routes and WebSocket event streams while
+  leaving `/health` open for liveness checks.
 - `web_fetch` now rejects non-HTTP(S) URLs and private/reserved network targets
   by default, streams responses through a byte cap, and uses a bounded redirect
   policy.

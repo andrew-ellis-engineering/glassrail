@@ -1,7 +1,7 @@
 # Spec: Security baseline
 
-Status: Items 1, 2, and 5 implemented for the 0.1.0 tag; items 3 and 4 remain
-for the release window.
+Status: Implemented (2026-06-11); release-window follow-up items 3 and 4 landed
+after the 0.1.0 tag.
 Priority: P0/P1 split — items 1, 2, and 5 land before the 0.1.0 tag; items 3
 and 4 land in the release window, before broad marketing
 (`docs/release/grassroots-marketing.md` positions the project as "auditable
@@ -14,12 +14,13 @@ Current posture, as audited June 2026:
 
 - `file_read` (`src/glassrail/harness/builtin.py`) reads **any** path the
   process can read — an LLM-planned `file_read("/etc/passwd")` succeeds.
-- `web_fetch` (`src/glassrail/harness/integrations/web.py`) fetches arbitrary
-  URLs with redirects on and no size cap — SSRF against localhost/cloud
-  metadata endpoints is possible.
+- `web_fetch` (`src/glassrail/harness/integrations/web.py`) rejects
+  non-HTTP(S), private, reserved, and oversized model-chosen targets by
+  default.
 - `image_generate` (`src/glassrail/harness/integrations/image.py`) writes to
   any user-resolvable `output_path`.
-- The REST gateway has **no authentication** and no CORS config.
+- The REST gateway has optional bearer authentication via `GLASSRAIL_API_KEY`.
+  It still has no CORS config.
 - The tool `risk` field (`read`/`network`/`write`/`execute`) now participates
   in approval defaults: `write` and `execute` resolve to `ask` unless an
   explicit override wins, while auto mode still treats `ask` as allowed.
@@ -82,7 +83,7 @@ broker logs and denies.
   fix the `ToolRisk` docstring in `src/glassrail/harness/registry.py` so the
   claim matches reality (it now does).
 
-## Item 3 — `web_fetch` hardening (release window)
+## Item 3 — `web_fetch` hardening (release window) — implemented 2026-06-11
 
 **File:** `src/glassrail/harness/integrations/web.py`.
 
@@ -109,7 +110,7 @@ broker logs and denies.
   test cap rejected mid-stream.
 - **Docs:** README web-tools block gains the two new keys.
 
-## Item 4 — REST bearer auth (release window)
+## Item 4 — REST bearer auth (release window) — implemented 2026-06-11
 
 - **Setting:** `api_key: str | None = None` on `Settings`
   (`GLASSRAIL_API_KEY`). `None` (default) = no auth, current behaviour.
@@ -129,13 +130,10 @@ broker logs and denies.
 
 ## Item 5 — Keep the README security notes truthful (P0, ongoing)
 
-The README gained a "Security notes" section in the June 2026 audit change
-stating: gateway is unauthenticated (bind to localhost), `file_read` is
-unconfined until `fs_roots` is set, web tools fetch model-chosen URLs, and
-`risk` is informational. **Each item in this spec, when it lands, must update
-that section in the same PR** so it never overstates or understates the
-posture. When items 1–4 are all done, the section shrinks to: how to set
-`fs_roots`, `api_key`, and approval policies.
+The README's "Security notes" section must move with the implementation so it
+never overstates or understates the posture. With items 1–4 landed, it now
+points operators at `tools.fs_roots`, `GLASSRAIL_API_KEY`, web-fetch guardrails,
+and approval policies.
 
 ## Non-goals
 

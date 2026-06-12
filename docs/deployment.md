@@ -22,6 +22,10 @@ curl -X POST http://localhost:8000/task -H 'content-type: application/json' \
   -d '{"request": "what do I have today?"}'
 ```
 
+Set `GLASSRAIL_API_KEY` in any non-local deployment. When it is set, `/health`
+remains open for liveness checks and every other REST route or event stream
+requires `Authorization: Bearer <key>`.
+
 The container has a built-in `HEALTHCHECK` that polls `/health`, so
 orchestrators (Compose, Kubernetes, ECS) can read liveness without extra
 wiring.
@@ -36,6 +40,7 @@ the app reads from `.env` / `config.toml` locally). Common ones:
 docker run --rm -p 8000:8000 \
   -e GLASSRAIL_LOG_LEVEL=INFO \
   -e GLASSRAIL_LOG_JSON=true \
+  -e GLASSRAIL_API_KEY=replace-me \
   -e GLASSRAIL_TIER0__BASE_URL=http://my-llm:8080/v1 \
   -e GLASSRAIL_TIER0__MODEL=my-model \
   glassrail:latest

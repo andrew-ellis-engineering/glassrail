@@ -178,9 +178,9 @@ audit, these additionally gate the work:
 
 **Before broad marketing (release window):**
 
-- [Security baseline](specs/security-baseline.md) items 3–4 (web_fetch
-  SSRF/size hardening, optional REST bearer auth) — the launch narrative
-  claims "auditable tool use".
+- [Security baseline](specs/security-baseline.md) items 3–4 ✓ — `web_fetch`
+  SSRF/size hardening and optional REST bearer auth are implemented for the
+  launch narrative's "auditable tool use" claim.
 - [Comparative baselines](specs/comparative-baselines.md) — the raw-model vs
   ReAct-loop vs glassrail evidence table for the deep-dive post.
 - [Serving hardening](specs/serving-hardening.md) items 5–6 (`run` exit codes,

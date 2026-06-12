@@ -7,11 +7,12 @@ module-level default for ``uvicorn glassrail.gateways.rest:app``.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import secrets
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from glassrail import __version__
@@ -41,6 +42,24 @@ class TaskRequest(BaseModel):
 def _sse(event: Event) -> str:
     """Render one event as a Server-Sent Events ``data:`` frame."""
     return f"data: {event.model_dump_json()}\n\n"
+
+
+def _authorized_header(value: str | None, api_key: str | None) -> bool:
+    if api_key is None:
+        return True
+    if value is None or not value.startswith("Bearer "):
+        return False
+    token = value.removeprefix("Bearer ").strip()
+    return secrets.compare_digest(token, api_key)
+
+
+def _authorized_ws(websocket: WebSocket, api_key: str | None) -> bool:
+    if api_key is None:
+        return True
+    if _authorized_header(websocket.headers.get("authorization"), api_key):
+        return True
+    query_key = websocket.query_params.get("api_key")
+    return query_key is not None and secrets.compare_digest(query_key, api_key)
 
 
 def _terminal_snapshot(state: ExecutionState) -> Event | None:
@@ -110,9 +129,21 @@ def create_app(
     store: StateStore,
     harness: ToolHarness,
     event_bus: EventBus | None = None,
+    api_key: str | None = None,
 ) -> FastAPI:
     """Build the FastAPI app from explicit collaborators."""
     api = FastAPI(title="Glassrail", version=__version__)
+
+    @api.middleware("http")
+    async def require_bearer(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        if request.url.path != "/health" and not _authorized_header(
+            request.headers.get("authorization"), api_key
+        ):
+            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+        return await call_next(request)
 
     @api.post("/task", status_code=202)
     async def submit_task(
@@ -178,6 +209,9 @@ def create_app(
     async def task_events_ws(websocket: WebSocket, task_id: str) -> None:
         # Reject before accepting so the client sees a close code, not an open
         # socket that immediately drops. 1011 = internal error, 1008 = policy.
+        if not _authorized_ws(websocket, api_key):
+            await websocket.close(code=1008, reason="Unauthorized")
+            return
         if event_bus is None:
             await websocket.close(code=1011, reason="Event stream not configured")
             return
@@ -207,12 +241,14 @@ def create_app(
 
 def create_default_app(settings: Settings | None = None) -> FastAPI:
     """Build the app with the default in-memory wiring from :class:`Settings`."""
-    rt = build_runtime(settings)
+    resolved_settings = settings or Settings()
+    rt = build_runtime(resolved_settings)
     return create_app(
         orchestrator=rt.orchestrator,
         store=rt.store,
         harness=rt.harness,
         event_bus=rt.event_bus,
+        api_key=resolved_settings.api_key,
     )
 
 

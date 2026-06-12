@@ -47,6 +47,10 @@ class _Scripted:
 
 @pytest.fixture
 def wired() -> tuple[TestClient, InMemoryStateStore]:
+    return _wired()
+
+
+def _wired(*, api_key: str | None = None) -> tuple[TestClient, InMemoryStateStore]:
     settings = Settings()
     harness = ToolHarness()
     register_builtins(harness)
@@ -56,7 +60,7 @@ def wired() -> tuple[TestClient, InMemoryStateStore]:
     executor = Executor(router=router, harness=harness, settings=settings)
     store = InMemoryStateStore()
     orch = Orchestrator(planner=planner, executor=executor, state_store=store, settings=settings)
-    app = create_app(orchestrator=orch, store=store, harness=harness)
+    app = create_app(orchestrator=orch, store=store, harness=harness, api_key=api_key)
     return TestClient(app), store
 
 
@@ -73,6 +77,25 @@ def test_tools_lists_builtins(wired: tuple[TestClient, InMemoryStateStore]) -> N
     assert resp.status_code == 200
     names = {t["function"]["name"] for t in resp.json()["tools"]}
     assert names == {"calendar_get", "memory_search", "file_read"}
+
+
+def test_auth_leaves_health_open() -> None:
+    client, _ = _wired(api_key="secret")
+    resp = client.get("/health")
+    assert resp.status_code == 200
+
+
+def test_auth_rejects_missing_bearer() -> None:
+    client, _ = _wired(api_key="secret")
+    resp = client.get("/tools")
+    assert resp.status_code == 401
+    assert resp.json() == {"detail": "Unauthorized"}
+
+
+def test_auth_accepts_correct_bearer() -> None:
+    client, _ = _wired(api_key="secret")
+    resp = client.get("/tools", headers={"Authorization": "Bearer secret"})
+    assert resp.status_code == 200
 
 
 def test_submit_task_returns_id_and_status(

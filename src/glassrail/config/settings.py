@@ -318,6 +318,8 @@ class Settings(BaseSettings):
     # ── Logging ──────────────────────────────────────────────────────────
     log_level: str = "INFO"
     log_json: bool = False
+    api_key: str | None = None
+    """Optional bearer token required by the REST gateway. None = no auth."""
 
     # ── Tiers ────────────────────────────────────────────────────────────
     # Direct (not factory) defaults so pydantic-settings can deep-merge

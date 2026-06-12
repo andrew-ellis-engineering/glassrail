@@ -73,7 +73,9 @@ _SHAPE_OK = json.dumps({"matches_expectation": True, "issue": None})
 _SYNTH_OUT = json.dumps({"output": "nothing scheduled.", "confidence": 0.9})
 
 
-def _wired(responses: list[str], *, with_bus: bool = True) -> TestClient:
+def _wired(
+    responses: list[str], *, with_bus: bool = True, api_key: str | None = None
+) -> TestClient:
     settings = Settings()
     bus = EventBus() if with_bus else None
     harness = ToolHarness()
@@ -90,7 +92,9 @@ def _wired(responses: list[str], *, with_bus: bool = True) -> TestClient:
         settings=settings,
         event_bus=bus,
     )
-    app = create_app(orchestrator=orch, store=store, harness=harness, event_bus=bus)
+    app = create_app(
+        orchestrator=orch, store=store, harness=harness, event_bus=bus, api_key=api_key
+    )
     return TestClient(app)
 
 
@@ -132,3 +136,30 @@ def test_ws_without_bus_is_rejected() -> None:
         with client.websocket_connect(f"/task/{new_task_id()}/events"):
             pass
     assert exc_info.value.code == 1011
+
+
+def test_ws_auth_rejects_missing_key() -> None:
+    client = _wired([_PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT], api_key="secret")
+    task_id = client.post(
+        "/task",
+        json={"request": "what's today?"},
+        headers={"Authorization": "Bearer secret"},
+    ).json()["task_id"]
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(f"/task/{task_id}/events"):
+            pass
+    assert exc_info.value.code == 1008
+
+
+def test_ws_auth_accepts_query_key() -> None:
+    client = _wired([_PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT], api_key="secret")
+    task_id = client.post(
+        "/task",
+        json={"request": "what's today?"},
+        headers={"Authorization": "Bearer secret"},
+    ).json()["task_id"]
+
+    with client.websocket_connect(f"/task/{task_id}/events?api_key=secret") as ws:
+        event = json.loads(ws.receive_text())
+        assert event["type"] == "task_completed"
