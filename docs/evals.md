@@ -141,6 +141,18 @@ python3 run.py suite suites/glassrail-openrouter --workers 5 && \
 python3 run.py suite suites/node-capability-openrouter --workers 5
 ```
 
+To benchmark model choices without editing suite files, use tier-specific
+overrides on Glassrail suites. `--model` still means the subject model and, for
+`glassrail-cli`, the tier-0 shorthand; `--tier-model N=MODEL` overrides the
+model configured for any Glassrail tier:
+
+```bash
+python3 run.py suite suites/glassrail-openrouter \
+  --tier-model 0=deepseek/deepseek-v4-flash \
+  --tier-model 1=deepseek/deepseek-v4-pro \
+  --workers 5
+```
+
 **How it works:** each suite's `[backend.env]` sets all four `GLASSRAIL_TIER*`
 vars to OpenRouter endpoints, overriding the local config. The `glassrail-cli`
 subject maps `OPENROUTER_API_KEY` into the per-tier API-key variables, and the
@@ -152,6 +164,9 @@ Metal OOM safety; cloud has no such constraint) and passes
 `GLASSRAIL_TIER*__EXTRA_BODY` — required because Qwen3 models on OpenRouter
 default to extended thinking mode, which streams all tokens into
 `delta.reasoning` and leaves `delta.content` empty.
+Tier-model CLI overrides are layered on top of that suite env immediately before
+the subject process is spawned, so they do not change the checked-in suite
+defaults.
 
 **Cost:** OpenRouter charges per token. A full `glassrail-openrouter` run at
 default `--trials 3` now includes both the Qwen subject calls and Haiku 4.5

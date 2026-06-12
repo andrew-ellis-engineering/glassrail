@@ -78,7 +78,8 @@ Keep runs cheap:
   (the `example` suite defaults to `haiku`). The OpenRouter mirror suites grade
   with `anthropic/claude-haiku-4.5` by default, using `OPENROUTER_API_KEY`.
   For the `glassrail` backend the model is whatever your tiers serve;
-  `default_model` overrides tier 0.
+  `default_model` / `--model` override tier 0, and `--tier-model N=MODEL`
+  can pin any Glassrail tier for model-matrix runs.
 - **Trials scale linearly** — `--trials 1` while iterating, `3` for a result.
 - **Grading is mostly free** — deterministic and trajectory checks make **no**
   model calls. Only `grader = "llm"` criteria cost (one call each, on
@@ -137,8 +138,19 @@ results/               trial artifacts (gitignored)
 | `demote <task> --reason` | Regression → capability. |
 | `candidates [<suite>]` | Show tasks eligible for promotion. |
 
-Common flags: `--trials N`, `--backend`, `--model`, `--grader-backend`,
+Common flags: `--trials N`, `--backend`, `--model`, `--tier-model N=MODEL`,
+`--tier0-model MODEL` ... `--tier3-model MODEL`, `--grader-backend`,
 `--grader-model`, `--timeout S`, `--dry-run`, `--skip-grading`, `--run-name`.
+
+For `glassrail-cli` suites, `--model` remains the tier-0 shorthand. Use
+`--tier-model` when you need to vary planner/executor tiers independently:
+
+```bash
+python3 run.py suite suites/glassrail-openrouter \
+  --tier-model 0=deepseek/deepseek-v4-flash \
+  --tier-model 1=deepseek/deepseek-v4-pro \
+  --workers 5
+```
 
 **Exit codes:** `0` success · `1` a regression task scored pass^k = 0 (CI
 gating signal) · `2` framework error.

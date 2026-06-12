@@ -65,6 +65,59 @@ def _make_judge(meta: dict[str, Any], args: argparse.Namespace) -> Judge:
     )
 
 
+def _tier_model_overrides(args: argparse.Namespace) -> dict[int, str]:
+    """Parse tier-specific model overrides from CLI args.
+
+    Supported forms:
+      --tier-model 1=openai/gpt-5.4-mini
+      --tier1-model openai/gpt-5.4-mini
+    """
+    overrides: dict[int, str] = {}
+    for raw in getattr(args, "tier_model", None) or []:
+        if "=" not in raw:
+            raise LoaderError(f"--tier-model expects TIER=MODEL, got {raw!r}")
+        tier_raw, model = raw.split("=", 1)
+        try:
+            tier = int(tier_raw)
+        except ValueError as exc:
+            raise LoaderError(f"--tier-model tier must be an integer 0-3, got {tier_raw!r}") from exc
+        if tier < 0 or tier > 3:
+            raise LoaderError(f"--tier-model tier must be 0-3, got {tier}")
+        if not model.strip():
+            raise LoaderError(f"--tier-model {tier}=... needs a non-empty model")
+        overrides[tier] = model.strip()
+
+    for tier in range(4):
+        model = getattr(args, f"tier{tier}_model", None)
+        if model:
+            overrides[tier] = str(model)
+    return overrides
+
+
+def _backend_config_with_tier_models(
+    backend_config: dict[str, Any], tier_models: dict[int, str]
+) -> dict[str, Any]:
+    """Return backend config with Glassrail tier model env overrides applied."""
+    if not tier_models:
+        return backend_config
+    updated = dict(backend_config)
+    env = dict(updated.get("env") or {})
+    for tier, model in sorted(tier_models.items()):
+        env[f"GLASSRAIL_TIER{tier}__MODEL"] = model
+    updated["env"] = env
+    return updated
+
+
+def _format_tier_models(tier_models: dict[int, str]) -> str:
+    return ", ".join(f"tier{tier}={model}" for tier, model in sorted(tier_models.items()))
+
+
+def _model_label(default_model: str, tier_models: dict[int, str]) -> str:
+    if not tier_models:
+        return default_model
+    return f"{default_model} ({_format_tier_models(tier_models)})"
+
+
 # ── Parallel-execution helpers ────────────────────────────────────────────────
 
 # Per-fixture-path locks: tasks that manage the same /tmp path serialize against
@@ -107,6 +160,7 @@ def _run_task_locked(
     timeout: int | None,
     skip_grading: bool,
     backend_override: str | None,
+    tier_models: dict[int, str] | None,
 ) -> TaskResult:
     """Run *task* while holding its fixture-path locks for the full duration.
 
@@ -128,6 +182,7 @@ def _run_task_locked(
             timeout=timeout,
             skip_grading=skip_grading,
             backend_override=backend_override,
+            tier_models=tier_models,
         )
     finally:
         for lock in locks:
@@ -143,16 +198,25 @@ def run_task(
     timeout: int | None,
     skip_grading: bool,
     backend_override: str | None = None,
+    tier_models: dict[int, str] | None = None,
 ) -> TaskResult:
     backend = backend_override or task.backend
-    subject = subjects.build_subject(backend, task.backend_config)
-    effective_model = model or task.model
+    subject = subjects.build_subject(
+        backend, _backend_config_with_tier_models(task.backend_config, tier_models or {})
+    )
+    effective_model = model or (tier_models or {}).get(0) or task.model
     effective_timeout = timeout or task.timeout_s
     trial_records: list[Trial] = []
     score_records: list[Score] = []
     for run_number in range(1, trials + 1):
         with _print_lock:
-            print(f"  · {task.id}: trial {run_number}/{trials} (backend={backend} model={effective_model})…")
+            tier_note = (
+                f" tiers=({_format_tier_models(tier_models)})" if tier_models else ""
+            )
+            print(
+                f"  · {task.id}: trial {run_number}/{trials} "
+                f"(backend={backend} model={effective_model}{tier_note})…"
+            )
         trial = runner.run_trial(
             task, run_number, subject=subject, model=effective_model, timeout_s=effective_timeout
         )
@@ -197,9 +261,12 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 def cmd_task(args: argparse.Namespace) -> int:
     meta, task = loader.load_task_with_suite(Path(args.path))
+    tier_models = _tier_model_overrides(args)
     if args.dry_run:
         print(f"[dry-run] would run {args.trials} trial(s):")
         _print_task_summary(task)
+        if tier_models:
+            print(f"  tier overrides: {_format_tier_models(tier_models)}")
         return EXIT_OK
 
     run_dir = config.RESULTS_DIR / _run_name(args.run_name)
@@ -211,6 +278,7 @@ def cmd_task(args: argparse.Namespace) -> int:
         timeout=args.timeout,
         skip_grading=args.skip_grading,
         backend_override=args.backend,
+        tier_models=tier_models,
     )
     reporter.save_task_artifacts(run_dir, result)
     if not args.skip_grading:
@@ -223,6 +291,7 @@ def cmd_task(args: argparse.Namespace) -> int:
 
 def cmd_suite(args: argparse.Namespace) -> int:
     meta, tasks = loader.load_suite(Path(args.path))
+    tier_models = _tier_model_overrides(args)
     if args.tags:
         tags = set(args.tags)
         tasks = [t for t in tasks if tags & set(t.tags)]
@@ -242,6 +311,8 @@ def cmd_suite(args: argparse.Namespace) -> int:
         print(f"[dry-run] suite '{meta['name']}' — {len(tasks)} task(s), {args.trials} trial(s) each:")
         for task in tasks:
             _print_task_summary(task)
+        if tier_models:
+            print(f"  tier overrides: {_format_tier_models(tier_models)}")
         return EXIT_OK
 
     workers: int = getattr(args, "workers", 1)
@@ -260,6 +331,7 @@ def cmd_suite(args: argparse.Namespace) -> int:
                         timeout=args.timeout,
                         skip_grading=args.skip_grading,
                         backend_override=args.backend,
+                        tier_models=tier_models,
                     )
                 )
         # Collect in original submission order so the summary table is stable.
@@ -276,6 +348,7 @@ def cmd_suite(args: argparse.Namespace) -> int:
                     timeout=args.timeout,
                     skip_grading=args.skip_grading,
                     backend_override=args.backend,
+                    tier_models=tier_models,
                 )
             )
 
@@ -285,7 +358,10 @@ def cmd_suite(args: argparse.Namespace) -> int:
         run_name=run_name,
         started_at=started,
         completed_at=datetime.now(UTC),
-        model=str(args.model or meta.get("default_model", config.DEFAULT_MODEL)),
+        model=_model_label(
+            str(args.model or meta.get("default_model", config.DEFAULT_MODEL)),
+            tier_models,
+        ),
         grader_model=str(grader_model),
         harness_version=config.HARNESS_VERSION,
         trials_per_task=args.trials,
@@ -468,6 +544,22 @@ def cmd_candidates(args: argparse.Namespace) -> int:
 def _add_run_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--trials", type=int, default=config.DEFAULT_TRIALS)
     p.add_argument("--model", default=None)
+    p.add_argument(
+        "--tier-model",
+        action="append",
+        default=None,
+        metavar="N=MODEL",
+        help=(
+            "override a Glassrail tier model for this run; repeatable, e.g. "
+            "--tier-model 0=deepseek/deepseek-v4-flash --tier-model 1=deepseek/deepseek-v4-pro"
+        ),
+    )
+    for tier in range(4):
+        p.add_argument(
+            f"--tier{tier}-model",
+            default=None,
+            help=f"convenience alias for --tier-model {tier}=MODEL",
+        )
     p.add_argument(
         "--backend",
         default=None,
