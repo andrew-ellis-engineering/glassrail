@@ -24,6 +24,7 @@ _DEFAULT_SYSTEM = (
     "need to inspect a file path. When you have enough information, give the "
     "final answer as plain text."
 )
+_FILE_READ_ROOT = Path("/tmp/glassrail-eval")
 _FILE_READ_TOOL = {
     "type": "function",
     "function": {
@@ -31,9 +32,7 @@ _FILE_READ_TOOL = {
         "description": "Read a UTF-8 text file from the local eval fixture filesystem.",
         "parameters": {
             "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "Path to the file to read."}
-            },
+            "properties": {"path": {"type": "string", "description": "Path to the file to read."}},
             "required": ["path"],
             "additionalProperties": False,
         },
@@ -53,10 +52,7 @@ class ReactLoopSubject:
         api_key_env = config.get("api_key_env")
         if not self._api_key and isinstance(api_key_env, str):
             self._api_key = os.environ.get(api_key_env, "")
-        if (
-            not self._api_key
-            and self._base_url.rstrip("/") == "https://openrouter.ai/api/v1"
-        ):
+        if not self._api_key and self._base_url.rstrip("/") == "https://openrouter.ai/api/v1":
             self._api_key = os.environ.get("OPENROUTER_API_KEY", "")
         raw_extra = config.get("extra_body")
         self._extra_body = raw_extra if isinstance(raw_extra, dict) else None
@@ -151,9 +147,7 @@ class ReactLoopSubject:
             headers=headers,
             method="POST",
         )
-        with urllib.request.urlopen(  # noqa: S310 - configured base_url
-            req, timeout=timeout_s, context=_ssl_context()
-        ) as resp:
+        with urllib.request.urlopen(req, timeout=timeout_s, context=_ssl_context()) as resp:
             parsed: Any = json.loads(resp.read().decode("utf-8"))
         return parsed if isinstance(parsed, dict) else {}
 
@@ -179,7 +173,13 @@ def _execute_tool_call(call: Any) -> tuple[str, dict[str, Any]]:
     if not isinstance(raw_path, str) or not raw_path:
         return "ERROR: file_read requires a string path", step
     try:
-        return Path(raw_path).expanduser().read_text(encoding="utf-8"), step
+        path = Path(raw_path).expanduser().resolve(strict=False)
+        root = _FILE_READ_ROOT.resolve(strict=False)
+        if path != root and root not in path.parents:
+            return f"ERROR: file_read path must be under {root}", step
+        if not path.is_file():
+            return f"ERROR: file_read path is not a regular file: {path}", step
+        return path.read_text(encoding="utf-8"), step
     except OSError as exc:
         return f"ERROR: {exc}", step
 

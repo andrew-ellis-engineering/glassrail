@@ -19,7 +19,7 @@ never change:
 | `glassrail-cli` | `glassrail run --json` (subprocess) | the real planner + executor over the agent's own tier routing (your shipped model) |
 | `glassrail-gateway` | a running REST gateway (HTTP) | the deployed surface, end to end |
 | `openai-compat` | one `/chat/completions` call | a raw-model baseline (e.g. the local MLX server) |
-| `react-loop` | OpenAI-compatible chat with a local `file_read` tool loop | a conventional tool-calling baseline |
+| `react-loop` | OpenAI-compatible chat with a local `file_read` tool loop guarded to `/tmp/glassrail-eval` regular files | a conventional tool-calling baseline |
 | `claude-cli` | `claude -p` | a Claude Code skill (the original target) |
 
 The **judge** (the `llm` grader) is decoupled from the subject — keep it on a
