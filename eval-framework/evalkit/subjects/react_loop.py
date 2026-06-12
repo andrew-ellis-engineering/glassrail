@@ -11,12 +11,11 @@ from __future__ import annotations
 import json
 import os
 import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
 
 from evalkit.subjects.base import RunResult
-from evalkit.subjects.openai_compat import _ssl_context, format_endpoint_error
+from evalkit.subjects.openai_compat import chat_completion_envelope, format_endpoint_error
 
 _DEFAULT_BASE_URL = "http://localhost:8080/v1"
 _DEFAULT_SYSTEM = (
@@ -141,19 +140,12 @@ class ReactLoopSubject:
         }
         if self._extra_body:
             body.update(self._extra_body)
-        payload = json.dumps(body).encode("utf-8")
-        headers = {"Content-Type": "application/json"}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        req = urllib.request.Request(
-            self._base_url.rstrip("/") + "/chat/completions",
-            data=payload,
-            headers=headers,
-            method="POST",
+        return chat_completion_envelope(
+            base_url=self._base_url,
+            body=body,
+            api_key=self._api_key,
+            timeout_s=timeout_s,
         )
-        with urllib.request.urlopen(req, timeout=timeout_s, context=_ssl_context()) as resp:
-            parsed: Any = json.loads(resp.read().decode("utf-8"))
-        return parsed if isinstance(parsed, dict) else {}
 
 
 def _first_message(envelope: dict[str, Any]) -> dict[str, Any] | None:

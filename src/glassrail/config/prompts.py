@@ -177,6 +177,10 @@ Rules:
   Route them to a result or synthesis node whose description tells the node how
   to answer (e.g. "decline the prediction and explain why" or "ask one
   clarifying question"). A result node with no tool is always valid.
+- Unknown, future, private, random, or otherwise unverifiable exact values are
+  still answerable tasks: plan a result node that says the exact value is
+  unknown or unknowable, explains why, and avoids fabrication. Never reject
+  solely because the correct final answer is a calibrated uncertainty statement.
 - For vague or underspecified requests, emit a completed plan with a result
   node that asks one focused clarifying question or offers safe next steps.
   BAD: {"rejection":"The request is too vague"}
@@ -193,10 +197,13 @@ Rules:
   plan a tool node to read the relevant file; never answer from assumed
   knowledge. "Information unavailable" is not an acceptable answer when the
   file can be read.
-- If a task mentions a path only as a distractor, contrast, or example and the
-  requested answer can be given from stable knowledge or supplied context,
-  do not read that path. File tools are for tasks whose answer depends on the
-  contents of a specific file.
+- Treat a named path as source evidence when the request asks to inspect,
+  summarize, extract from, verify against, or otherwise answer from a file,
+  document, report, configuration, fixture, or path; read it when file_read is
+  available. Treat a path as a distractor only when the request explicitly says
+  not to read it, says the answer should come from stable/general knowledge, or
+  asks about something unrelated to that path. File tools are for tasks whose
+  answer depends on the contents of a specific file.
 - Every node description must be a non-empty string. Never set description to
   null, even for simple decision/result nodes.
 - For comparison or recommendation tasks, make the final result node explicitly
@@ -208,10 +215,11 @@ Rules:
 - For comparison tasks, the final result description must name every comparison
   axis requested by the user and say to compare each candidate on each axis
   before recommending. It must also name every candidate or option that should
-  be compared. Ask for at least one concise sentence per candidate or category,
-  plus the final recommendation. Unless the user explicitly asks for JSON, say
-  the final answer should be prose, not a raw object. Do not rely on the model
-  to infer the axes or candidates later.
+  be compared. Ask for a labeled sentence or bullet for every candidate or
+  category, with each requested axis addressed before the final recommendation.
+  Unless the user explicitly asks for JSON, say the final answer should be
+  prose, not a raw object. Do not rely on the model to infer the axes or
+  candidates later.
 - For multi-candidate comparison tasks, the final result description must say
   to visibly cover every named option and every requested axis in the final
   answer before giving the recommendation. Do not collapse the final output
@@ -362,7 +370,7 @@ For summary tasks with a requested count or required inclusions, satisfy the
 count while preserving the named entities, dates, quantities, caveats, and
 exclusions that determine correctness.
 For recommendation tasks only, include one explicit sentence near the start in the form "I recommend <option>" or "<option> is the best fit" before explaining why.
-For comparison and recommendation tasks, preserve every named candidate, option, comparison axis, constraint, trade-off, and caveat from the original request and upstream context. Do not compress a multi-option comparison into a generic winner-only answer; include at least one concise sentence about each candidate or category before or while explaining the recommendation.
+For comparison and recommendation tasks, preserve every named candidate, option, comparison axis, constraint, trade-off, and caveat from the original request and upstream context. Do not compress a multi-option comparison into a generic winner-only answer; include one labeled sentence or bullet about each candidate or category before or while explaining the recommendation.
 For multi-candidate comparisons, visibly cover every named option and every requested axis before the recommendation; do not skip losing options or leave requested axes implicit.
 For arithmetic tasks, write the final numeric answer in plain prose with units, even if upstream context is structured JSON.
 For logic or deduction tasks, include the key reasoning steps before or after the conclusion; do not return only the final name or value.

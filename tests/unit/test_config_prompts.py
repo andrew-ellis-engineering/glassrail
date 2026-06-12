@@ -47,17 +47,21 @@ def test_planner_prompt_prevents_vague_rejection_and_unregistered_tools() -> Non
     assert "stable/general knowledge is enough" in prompt
     assert "Copy the user's answer contract" in prompt
     assert "required inclusions/exclusions" in prompt
-    assert "at least one concise sentence per candidate or category" in prompt
-    assert "final answer should be prose, not a raw object" in prompt
+    assert "labeled sentence or bullet for every candidate or" in prompt
+    assert "final answer should be" in prompt
+    assert "prose, not a raw object" in prompt
     assert "visibly cover every named option" in prompt
     assert "winner-only prose" in prompt
     assert "For closed-book comparison tasks with sibling evaluation nodes" in prompt
     assert "no upstream context must not say information is missing" in prompt
-    assert "path only as a distractor" in prompt
+    assert "Treat a named path as source evidence" in prompt
     assert "answer depends on the" in prompt
     assert "contents of a specific file" in prompt
     assert "For calibration tasks" in prompt
     assert "Do not hedge stable facts" in prompt
+    assert "Never reject" in prompt
+    assert "solely because" in prompt
+    assert "calibrated uncertainty statement" in prompt
 
 
 def test_summary_prompt_prioritizes_downstream_fidelity() -> None:
@@ -103,7 +107,7 @@ def test_synthesis_and_result_prompts_preserve_caveats_without_inventing() -> No
     assert "preserve that conclusion" in result
     assert "do not replace it with a different final answer" in result
     assert "classification/branch choice and a branch-specific value" in result
-    assert "at least one concise sentence about each candidate or category" in result
+    assert "one labeled sentence or bullet about each candidate or category" in result
     assert "visibly cover every named option" in result
     assert "do not skip losing options" in result
     assert "write the final answer as prose rather than a raw JSON object" in result

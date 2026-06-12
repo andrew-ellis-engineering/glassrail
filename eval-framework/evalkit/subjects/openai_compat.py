@@ -34,19 +34,94 @@ def _ssl_context() -> ssl.SSLContext | None:
     return None
 
 
+def _http_error_body(exc: urllib.error.HTTPError) -> str:
+    body = getattr(exc, "_glassrail_error_body", "")
+    if isinstance(body, str) and body:
+        return body
+    try:
+        body = exc.read().decode("utf-8", errors="replace").strip()
+    except OSError:
+        body = ""
+    if len(body) > _ERROR_BODY_LIMIT:
+        body = body[:_ERROR_BODY_LIMIT] + "...<truncated>"
+    error_with_body: Any = exc
+    error_with_body._glassrail_error_body = body
+    return body
+
+
 def format_endpoint_error(exc: urllib.error.URLError | TimeoutError) -> str:
     """Return a useful, bounded error string for endpoint failures."""
     if isinstance(exc, urllib.error.HTTPError):
-        body = ""
-        try:
-            body = exc.read().decode("utf-8", errors="replace").strip()
-        except OSError:
-            body = ""
-        if len(body) > _ERROR_BODY_LIMIT:
-            body = body[:_ERROR_BODY_LIMIT] + "...<truncated>"
+        body = _http_error_body(exc)
         detail = f": {body}" if body else ""
         return f"HTTP {exc.code} {exc.reason}{detail}"
     return str(exc)
+
+
+def chat_completion_envelope(
+    *,
+    base_url: str,
+    body: dict[str, Any],
+    api_key: str = "",
+    timeout_s: int = 180,
+) -> dict[str, Any]:
+    """POST a chat completion, retrying once when a provider requires reasoning."""
+    url = base_url.rstrip("/") + "/chat/completions"
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    try:
+        response_body = _post_chat_completion(
+            url=url,
+            body=body,
+            headers=headers,
+            timeout_s=timeout_s,
+        )
+    except urllib.error.HTTPError as exc:
+        error_body = _http_error_body(exc)
+        retry_body = _without_disabled_reasoning(body)
+        if retry_body is None or not _requires_reasoning(error_body):
+            raise
+        response_body = _post_chat_completion(
+            url=url,
+            body=retry_body,
+            headers=headers,
+            timeout_s=timeout_s,
+        )
+
+    envelope: Any = json.loads(response_body)
+    return envelope if isinstance(envelope, dict) else {}
+
+
+def _post_chat_completion(
+    *,
+    url: str,
+    body: dict[str, Any],
+    headers: dict[str, str],
+    timeout_s: int,
+) -> str:
+    payload = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout_s, context=_ssl_context()) as resp:
+        return resp.read().decode("utf-8")
+
+
+def _requires_reasoning(error_body: str) -> bool:
+    lowered = error_body.lower()
+    return "reasoning is mandatory" in lowered and "cannot be disabled" in lowered
+
+
+def _without_disabled_reasoning(body: dict[str, Any]) -> dict[str, Any] | None:
+    reasoning = body.get("reasoning")
+    if not isinstance(reasoning, dict):
+        return None
+    effort = reasoning.get("effort")
+    disabled = effort == "none" or reasoning.get("enabled") is False
+    if not disabled:
+        return None
+    retry_body = dict(body)
+    retry_body.pop("reasoning", None)
+    return retry_body
 
 
 def chat_once(
@@ -60,7 +135,6 @@ def chat_once(
     timeout_s: int = 180,
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """One non-streaming chat completion. Returns ``(text, usage, envelope)``."""
-    url = base_url.rstrip("/") + "/chat/completions"
     messages: list[dict[str, str]] = []
     if system:
         messages.append({"role": "system", "content": system})
@@ -68,17 +142,12 @@ def chat_once(
     body: dict[str, Any] = {"model": model, "messages": messages, "stream": False}
     if extra_body:
         body.update(extra_body)
-    payload = json.dumps(body).encode("utf-8")
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout_s, context=_ssl_context()) as resp:
-        body = resp.read().decode("utf-8")
-
-    envelope: Any = json.loads(body)
-    if not isinstance(envelope, dict):
-        return "", {}, {}
+    envelope = chat_completion_envelope(
+        base_url=base_url,
+        body=body,
+        api_key=api_key,
+        timeout_s=timeout_s,
+    )
     text = ""
     choices = envelope.get("choices")
     if isinstance(choices, list) and choices and isinstance(choices[0], dict):
