@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-No unreleased changes.
+### Changed
+- README and docs now point readers to the temporary product-site URL while the
+  custom domain is pending.
 
 ## [0.1.0] - 2026-06-11
 
