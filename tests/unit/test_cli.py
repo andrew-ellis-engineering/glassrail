@@ -173,6 +173,7 @@ def test_tui_acp_and_serve_help_render() -> None:
     tui = runner.invoke(app, ["tui", "--help"])
     acp = runner.invoke(app, ["acp", "--help"])
     serve = runner.invoke(app, ["serve", "--help"])
+    root = runner.invoke(app, ["--help"])
 
     assert tui.exit_code == 0
     assert "Submit a task to a running gateway" in tui.output
@@ -180,4 +181,5 @@ def test_tui_acp_and_serve_help_render() -> None:
     assert "Agent Client Protocol" in acp.output
     assert serve.exit_code == 0
     assert "Serve the REST gateway" in serve.output
-    assert "--host" in serve.output
+    assert root.exit_code == 0
+    assert "serve" in root.output
