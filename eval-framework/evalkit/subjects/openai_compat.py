@@ -19,6 +19,7 @@ from evalkit.subjects.base import RunResult
 
 _DEFAULT_BASE_URL = "http://localhost:8080/v1"
 _CAFILE_FALLBACKS = ("/etc/ssl/cert.pem", "/opt/homebrew/etc/openssl@3/cert.pem")
+_ERROR_BODY_LIMIT = 2000
 
 
 def _ssl_context() -> ssl.SSLContext | None:
@@ -31,6 +32,21 @@ def _ssl_context() -> ssl.SSLContext | None:
         if os.path.exists(cafile):
             return ssl.create_default_context(cafile=cafile)
     return None
+
+
+def format_endpoint_error(exc: urllib.error.URLError | TimeoutError) -> str:
+    """Return a useful, bounded error string for endpoint failures."""
+    if isinstance(exc, urllib.error.HTTPError):
+        body = ""
+        try:
+            body = exc.read().decode("utf-8", errors="replace").strip()
+        except OSError:
+            body = ""
+        if len(body) > _ERROR_BODY_LIMIT:
+            body = body[:_ERROR_BODY_LIMIT] + "...<truncated>"
+        detail = f": {body}" if body else ""
+        return f"HTTP {exc.code} {exc.reason}{detail}"
+    return str(exc)
 
 
 def chat_once(
@@ -57,9 +73,7 @@ def chat_once(
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-    with urllib.request.urlopen(  # noqa: S310 - configured base_url
-        req, timeout=timeout_s, context=_ssl_context()
-    ) as resp:
+    with urllib.request.urlopen(req, timeout=timeout_s, context=_ssl_context()) as resp:
         body = resp.read().decode("utf-8")
 
     envelope: Any = json.loads(body)
@@ -87,10 +101,7 @@ class OpenAICompatSubject:
         api_key_env = config.get("api_key_env")
         if not self._api_key and isinstance(api_key_env, str):
             self._api_key = os.environ.get(api_key_env, "")
-        if (
-            not self._api_key
-            and self._base_url.rstrip("/") == "https://openrouter.ai/api/v1"
-        ):
+        if not self._api_key and self._base_url.rstrip("/") == "https://openrouter.ai/api/v1":
             self._api_key = os.environ.get("OPENROUTER_API_KEY", "")
         self._system = config.get("system")
         raw_extra = config.get("extra_body")
@@ -108,7 +119,11 @@ class OpenAICompatSubject:
                 timeout_s=timeout_s,
             )
         except (urllib.error.URLError, TimeoutError) as exc:
-            return RunResult(result_text="", success=False, error=f"endpoint error: {exc}")
+            return RunResult(
+                result_text="",
+                success=False,
+                error=f"endpoint error: {format_endpoint_error(exc)}",
+            )
         except (json.JSONDecodeError, ValueError) as exc:
             return RunResult(result_text="", success=False, error=f"{type(exc).__name__}: {exc}")
         raw_tokens = usage.get("total_tokens")

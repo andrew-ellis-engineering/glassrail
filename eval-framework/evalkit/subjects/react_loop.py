@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from evalkit.subjects.base import RunResult
-from evalkit.subjects.openai_compat import _ssl_context
+from evalkit.subjects.openai_compat import _ssl_context, format_endpoint_error
 
 _DEFAULT_BASE_URL = "http://localhost:8080/v1"
 _DEFAULT_SYSTEM = (
@@ -116,7 +116,11 @@ class ReactLoopSubject:
                     raw_stdout=json.dumps({"turns": envelopes}),
                 )
         except (urllib.error.URLError, TimeoutError) as exc:
-            return RunResult(result_text="", success=False, error=f"endpoint error: {exc}")
+            return RunResult(
+                result_text="",
+                success=False,
+                error=f"endpoint error: {format_endpoint_error(exc)}",
+            )
         except (json.JSONDecodeError, ValueError) as exc:
             return RunResult(result_text="", success=False, error=f"{type(exc).__name__}: {exc}")
 
