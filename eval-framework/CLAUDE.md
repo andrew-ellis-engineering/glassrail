@@ -10,7 +10,8 @@ boundary, like it reaches `claude -p`) and is excluded from the package's ruff /
 pyright / pytest scope.
 
 Backends live in `evalkit/subjects/`: `glassrail-cli` and `glassrail-gateway`
-(the real agent), `openai-compat` (a raw model, e.g. MLX), and `claude-cli`. The
+(the real agent), `openai-compat` (a raw model, e.g. MLX), `react-loop` (a
+standard file-read tool loop), and `claude-cli`. The
 judge (the `llm` grader) is decoupled from the subject — see `evalkit/judge.py`.
 
 Read `README.md` for usage and `DECISIONS.md` for build-time choices before
@@ -113,7 +114,7 @@ evalkit/
   models.py       dataclasses (Task, Trial, Score, …)
   loader.py       TOML → model (resolves backend + backend_config)
   subjects/       Subject seam + backends (claude_cli, glassrail_cli,
-                  glassrail_gateway, openai_compat) + build_subject
+                  glassrail_gateway, openai_compat, react_loop) + build_subject
   judge.py        the LLM judge (backend-agnostic) + build_judge
   runner.py       fixtures backup/install/restore, subject invocation, capture
   graders/        deterministic · trajectory · llm  (+ __init__ dispatcher)

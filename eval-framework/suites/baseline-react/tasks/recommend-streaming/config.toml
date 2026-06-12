@@ -1,0 +1,35 @@
+name = "recommend-streaming"
+tags = ["multistep", "synthesis", "result"]
+type = "capability"
+difficulty = 3
+timeout_s = 600
+
+expected_behavior = """
+A correct run decomposes the task (compare TCP vs UDP trade-offs, then
+recommend) and recommends UDP — or a UDP-based protocol such as WebRTC or QUIC —
+for live video streaming, citing latency/head-of-line-blocking over guaranteed
+delivery. Both protocols should be discussed before the recommendation.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Discusses UDP"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)\\budp\\b"
+
+[[criteria]]
+text = "Discusses TCP"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)\\btcp\\b"
+
+[[criteria]]
+text = "Recommends UDP (or a UDP-based protocol) for live streaming with a latency rationale"
+grader = "llm"

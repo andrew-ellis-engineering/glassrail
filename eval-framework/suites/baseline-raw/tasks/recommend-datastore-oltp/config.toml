@@ -1,0 +1,46 @@
+name = "recommend-datastore-oltp"
+tags = ["multistep", "synthesis", "result", "control-pair"]
+type = "capability"
+difficulty = 4
+control_for = "recommend-datastore-iot"
+timeout_s = 1200
+
+expected_behavior = """
+ACID transactions, complex joins, and mixed read/write OLTP patterns are the
+defining use case for a relational database (e.g. PostgreSQL, MySQL). A
+time-series DB lacks join semantics and is optimised for append-only time-range
+queries; a document store has weak multi-document transaction support. A correct
+run discusses all three and recommends a relational DB tied to the ACID and join
+constraints. Control twin of recommend-datastore-iot: guards against a model
+that always recommends the same datastore.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Mentions relational database as a category"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(relational|postgres|mysql|sql\\s+database)"
+
+[[criteria]]
+text = "Mentions time-series database for comparison"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)time[- ]series"
+
+[[criteria]]
+text = "Recommends a relational database and ties the recommendation to ACID compliance and join-heavy query patterns"
+grader = "llm"

@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added `glassrail serve`, a localhost-default uvicorn wrapper for the REST
   gateway with `--host`, `--port`, and `--reload` options.
+- Added comparative baseline scaffolding: harness token reporting, a
+  `react-loop` subject, and `baseline-raw` / `baseline-react` suites copied
+  from the Glassrail task set.
 
 ### Changed
 - `glassrail run --json` and `glassrail exec-plan --json` now keep stdout

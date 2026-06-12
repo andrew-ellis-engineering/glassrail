@@ -137,6 +137,8 @@ def _result_from_proc(returncode: int, stdout: str, stderr: str) -> RunResult:
         trajectory = []
     raw_cost = envelope.get("total_cost_usd")
     cost = float(raw_cost) if isinstance(raw_cost, (int, float)) else None
+    raw_tokens = envelope.get("total_tokens")
+    total_tokens = int(raw_tokens) if isinstance(raw_tokens, (int, float)) else None
     is_error = envelope.get("is_error") is True
     if is_error and error is None:
         status = envelope.get("status")
@@ -151,6 +153,7 @@ def _result_from_proc(returncode: int, stdout: str, stderr: str) -> RunResult:
         result_text=result_text,
         trajectory=trajectory,
         cost_usd=cost,
+        total_tokens=total_tokens,
         success=success,
         error=error,
         raw_envelope=envelope,

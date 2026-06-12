@@ -64,7 +64,7 @@ class Task:
     context_files: dict[str, str]   # name → content
     # Which subject (system under test) runs this task, and its wiring config.
     # Defaults keep older claude-skill suites working unchanged.
-    backend: str = "claude-cli"     # claude-cli | glassrail-cli | glassrail-gateway | openai-compat
+    backend: str = "claude-cli"     # claude-cli | glassrail-* | openai-compat | react-loop
     backend_config: dict[str, Any] = field(default_factory=dict)
 
 
@@ -84,6 +84,7 @@ class Trial:
     trajectory: list[dict[str, Any]]     # normalized steps [{tool: str, input: dict, ...}, ...]
     side_effects: dict[str, str | None]  # captured paths → content (post-run)
     cost_usd: float | None
+    total_tokens: int | None             # subject-reported token usage when available
     model: str
     harness_version: str
     # Pre-run content of capture paths, so file_unchanged can compare without
@@ -137,3 +138,4 @@ class SuiteResult:
     trials_per_task: int
     task_results: list[TaskResult]
     total_cost_usd: float
+    total_tokens: int | None = None

@@ -1,0 +1,51 @@
+name = "tool-args-path"
+tags = ["tool-use", "result"]
+type = "capability"
+difficulty = 3
+timeout_s = 360
+
+expected_behavior = """
+Two paths are mentioned in the prompt; only /tmp/glassrail-eval/backup.conf is
+the target. A correct run reads the right file (the backup config, not
+/etc/glassrail/app.conf) and reports retention_days = 30. This tests the
+extract_args micro-call's ability to pick the correct path when multiple
+paths appear in the context.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+"/tmp/glassrail-eval/backup.conf" = "backup.conf"
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Reports retention_days as 30"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b30\\b"
+
+[[criteria]]
+text = "Does not report the app.conf port (8443) — wrong file would show 8443"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "\\b8443\\b"
+
+[[criteria]]
+text = "Used file_read on the correct backup config path"
+grader = "trajectory"
+tool_sequence = ["file_read"]
+target = "/tmp/glassrail-eval/backup.conf"
+
+# LLM criterion removed: output is bare "30" — the judge cannot determine
+# provenance from result text alone. Provenance is already proven by the
+# trajectory criterion (file_read on /tmp/glassrail-eval/backup.conf) and the
+# not-8443 deterministic check (rules out the wrong file).

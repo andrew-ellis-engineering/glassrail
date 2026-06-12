@@ -21,7 +21,7 @@ The roadmap ([roadmap](../roadmap.md)) owns *when* these happen; the specs own
 | [Parallel execution](parallel-execution.md) | P1 — first engine workstream; prerequisite for `foreach` | — | Proposed |
 | [Node resilience](node-resilience.md) | P1 — independent; suggested after parallel execution to avoid rebase churn | — | Proposed |
 | [Routing table](routing-table.md) | P1 — prerequisite for the Phase 2.5 tier-ROI selector | — | Proposed |
-| [Comparative baselines](comparative-baselines.md) | P2 — launch evidence asset | Eval integrity (held-out suite) | Proposed |
+| [Comparative baselines](comparative-baselines.md) | P2 — launch evidence asset | Eval integrity (held-out suite) | Harness/suites implemented; full runs pending |
 
 Suggested engine order: parallel-execution → node-resilience → routing-table →
 serving-hardening (remaining items) → `foreach` (external vault spec). The P0

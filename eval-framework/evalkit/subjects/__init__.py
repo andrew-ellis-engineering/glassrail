@@ -16,6 +16,7 @@ from evalkit.subjects.glassrail_cli import GlassrailCliSubject
 from evalkit.subjects.glassrail_exec_plan import GlassrailExecPlanSubject
 from evalkit.subjects.glassrail_gateway import GlassrailGatewaySubject
 from evalkit.subjects.openai_compat import OpenAICompatSubject
+from evalkit.subjects.react_loop import ReactLoopSubject
 
 _REGISTRY: dict[str, type] = {
     "claude-cli": ClaudeCliSubject,
@@ -23,6 +24,7 @@ _REGISTRY: dict[str, type] = {
     "glassrail-exec-plan": GlassrailExecPlanSubject,
     "glassrail-gateway": GlassrailGatewaySubject,
     "openai-compat": OpenAICompatSubject,
+    "react-loop": ReactLoopSubject,
 }
 
 
@@ -47,6 +49,7 @@ __all__ = [
     "GlassrailExecPlanSubject",
     "GlassrailGatewaySubject",
     "OpenAICompatSubject",
+    "ReactLoopSubject",
     "RunResult",
     "Subject",
     "available_backends",

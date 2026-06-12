@@ -166,6 +166,7 @@ def run_trial(task: Task, run_number: int, *, subject: Subject, model: str, time
     stdout = ""
     stderr = ""
     cost: float | None = None
+    total_tokens: int | None = None
 
     # Recover from any crash that left backups behind, then take fresh ones.
     for raw in managed:
@@ -191,6 +192,7 @@ def run_trial(task: Task, run_number: int, *, subject: Subject, model: str, time
         result_text = result.result_text
         trajectory = result.trajectory
         cost = result.cost_usd
+        total_tokens = result.total_tokens
         success = result.success
         error = result.error
 
@@ -217,6 +219,7 @@ def run_trial(task: Task, run_number: int, *, subject: Subject, model: str, time
         trajectory=trajectory,
         side_effects=side_effects,
         cost_usd=cost,
+        total_tokens=total_tokens,
         model=model,
         harness_version=config.HARNESS_VERSION,
         baseline=baseline,

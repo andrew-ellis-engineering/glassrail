@@ -279,6 +279,7 @@ def cmd_suite(args: argparse.Namespace) -> int:
                 )
             )
 
+    token_values = [t.total_tokens for r in results for t in r.trials if t.total_tokens is not None]
     suite_result = SuiteResult(
         suite_name=str(meta["name"]),
         run_name=run_name,
@@ -290,6 +291,7 @@ def cmd_suite(args: argparse.Namespace) -> int:
         trials_per_task=args.trials,
         task_results=results,
         total_cost_usd=sum(t.cost_usd or 0.0 for r in results for t in r.trials),
+        total_tokens=sum(token_values) if token_values else None,
     )
     for result in results:
         reporter.save_task_artifacts(run_dir, result)

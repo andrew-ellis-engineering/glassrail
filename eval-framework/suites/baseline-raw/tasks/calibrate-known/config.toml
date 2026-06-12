@@ -1,0 +1,43 @@
+name = "calibrate-known"
+tags = ["calibration", "result"]
+type = "capability"
+difficulty = 2
+timeout_s = 420
+
+expected_behavior = """
+A byte is universally defined as 8 bits. A correct run states this plainly
+without hedging. This is a settled, stable fact — not an estimate or a
+convention that varies by context. Control twin of calibrate-unknowable:
+together they guard against a model that always hedges (fails here) and one
+that always answers confidently (fails the unknowable twin).
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "States 8 bits per byte"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "\\b8\\b"
+
+[[criteria]]
+text = "Does not hedge on a known fact"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "(?i)(not sure|don't know|do not know|cannot say|can't say|it depends)"
+
+[[criteria]]
+text = "States 8 bits per byte plainly and without hedging"
+grader = "llm"

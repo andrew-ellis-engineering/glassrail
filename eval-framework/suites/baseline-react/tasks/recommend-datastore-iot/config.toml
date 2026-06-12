@@ -1,0 +1,46 @@
+name = "recommend-datastore-iot"
+tags = ["multistep", "synthesis", "result", "control-pair"]
+type = "capability"
+difficulty = 4
+timeout_s = 900
+
+expected_behavior = """
+High-volume, time-ordered, append-mostly writes with time-range aggregation
+queries are the defining use case for a time-series database (e.g. InfluxDB,
+TimescaleDB, Prometheus). A relational DB struggles with write throughput at
+this scale; a document store has no native time-series compression or rollup
+semantics. A correct run discusses all three categories and recommends a
+time-series store with reasoning tied to the stated constraints.
+Control twin of recommend-datastore-oltp: together they guard against a model
+that always recommends the same datastore regardless of constraints.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Mentions time-series database (or time series) as a category"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)time[- ]series"
+
+[[criteria]]
+text = "Mentions at least one relational or document store for comparison"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(relational|postgres|mysql|mongodb|document)"
+
+[[criteria]]
+text = "Recommends a time-series datastore and ties the recommendation to the stated constraints (high write throughput, time-ordered, aggregation queries)"
+grader = "llm"

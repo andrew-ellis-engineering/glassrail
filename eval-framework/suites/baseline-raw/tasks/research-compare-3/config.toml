@@ -1,0 +1,47 @@
+name = "research-compare-3"
+tags = ["research", "multistep", "synthesis", "result", "control-pair"]
+type = "capability"
+difficulty = 4
+timeout_s = 900
+
+expected_behavior = """
+High-write, append-only event streaming with offset-based replay is Kafka's
+defining use case. PostgreSQL can handle event sourcing at moderate scale but
+lacks native consumer-group offset semantics and high-throughput log compaction;
+Redis (Streams) is an option but has durability trade-offs at this scale.
+A correct run covers all three candidates and recommends Kafka (or justifies
+Redis Streams with acknowledged trade-offs) citing throughput and replay
+semantics. The plan should fan out to research all three before synthesising.
+Control twin of research-compare-3-flip: guards against constraint-insensitive
+always-picks-Kafka.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Covers all three candidates"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(?=.*\\b(postgres|postgresql)\\b)(?=.*\\bredis\\b)(?=.*(\\bkafka\\b|apache[_ -]kafka))"
+
+[[criteria]]
+text = "Names a recommended option"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)((recommend|best fit|choose|go with).{0,40}(kafka|redis|postgresql|postgres)|(kafka|redis|postgresql|postgres).{0,40}(recommend|best fit|choose|go with))"
+
+[[criteria]]
+text = "Compares all three on the right axes (throughput, replay, durability) and recommends the constraint-appropriate option with justification"
+grader = "llm"

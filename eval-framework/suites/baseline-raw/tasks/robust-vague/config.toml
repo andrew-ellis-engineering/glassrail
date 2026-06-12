@@ -1,0 +1,30 @@
+name = "robust-vague"
+tags = ["robustness", "result"]
+type = "capability"
+difficulty = 3
+timeout_s = 480
+
+expected_behavior = """
+"help me with my project" is genuinely underspecified. A correct run does NOT
+crash, produce an empty result, or loop indefinitely. It either asks a focused
+clarifying question (what kind of project? what help is needed?) or makes a
+reasonable best-effort interpretation and responds usefully. It must not
+fabricate specifics about a project it knows nothing about. Pass = a valid
+completed plan with a non-empty, coherent result.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Responds usefully to an underspecified request — asks a clarifying question or offers sensible best-effort help — without fabricating project-specific details"
+grader = "llm"

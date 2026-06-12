@@ -84,13 +84,21 @@ class OpenAICompatSubject:
         config = config or {}
         self._base_url = str(config.get("base_url", _DEFAULT_BASE_URL))
         self._api_key = str(config.get("api_key", ""))
+        api_key_env = config.get("api_key_env")
+        if not self._api_key and isinstance(api_key_env, str):
+            self._api_key = os.environ.get(api_key_env, "")
+        if (
+            not self._api_key
+            and self._base_url.rstrip("/") == "https://openrouter.ai/api/v1"
+        ):
+            self._api_key = os.environ.get("OPENROUTER_API_KEY", "")
         self._system = config.get("system")
         raw_extra = config.get("extra_body")
         self._extra_body = raw_extra if isinstance(raw_extra, dict) else None
 
     def run(self, *, prompt: str, model: str, max_turns: int, timeout_s: int) -> RunResult:
         try:
-            text, _usage, envelope = chat_once(
+            text, usage, envelope = chat_once(
                 base_url=self._base_url,
                 model=model,
                 prompt=prompt,
@@ -103,10 +111,13 @@ class OpenAICompatSubject:
             return RunResult(result_text="", success=False, error=f"endpoint error: {exc}")
         except (json.JSONDecodeError, ValueError) as exc:
             return RunResult(result_text="", success=False, error=f"{type(exc).__name__}: {exc}")
+        raw_tokens = usage.get("total_tokens")
+        total_tokens = int(raw_tokens) if isinstance(raw_tokens, (int, float)) else None
         return RunResult(
             result_text=text,
             trajectory=[],
             cost_usd=None,
+            total_tokens=total_tokens,
             success=bool(text),
             error=None if text else "empty completion",
             raw_envelope=envelope,

@@ -22,6 +22,7 @@ backend returns the same normalized result, so the graders never change:
 | `glassrail-cli` | `glassrail run --json` (subprocess) | eval the real planner + executor over **your** tier routing |
 | `glassrail-gateway` | a running REST gateway over HTTP | eval the deployed surface end to end |
 | `openai-compat` | one `/chat/completions` call | baseline the raw model with no agent scaffolding |
+| `react-loop` | OpenAI-compatible chat with a local `file_read` tool loop | baseline a conventional tool-calling loop |
 | `claude-cli` | `claude -p` | eval a Claude Code skill (the framework's original target) |
 
 The glassrail backends route through the agent's **own** tier config, so they
@@ -70,6 +71,10 @@ glassrail run "Is 246 even or odd?" --json --model qwen3.6-35b-moe
 (tool nodes → the tool name, every other node → its type, with tier and branch
 recorded per step) so trajectory criteria work the same across backends. Logs go
 to stderr, so stdout stays a clean envelope.
+
+Trial artifacts also carry `total_tokens` when the subject exposes it. Suite
+summaries print mean tokens per task so raw-model, ReAct-loop, and Glassrail
+runs can be compared on economics as well as pass@k/pass^k.
 
 ## Anatomy of a task
 
@@ -131,7 +136,7 @@ cd eval-framework
 python3 run.py suite suites/glassrail-openrouter --workers 5
 python3 run.py suite suites/node-capability-openrouter --workers 5
 
-# Or all three cloud suites at once:
+# Or both cloud gate suites at once:
 python3 run.py suite suites/glassrail-openrouter --workers 5 && \
 python3 run.py suite suites/node-capability-openrouter --workers 5
 ```
@@ -161,6 +166,30 @@ judge calls. Keep `--workers` at 5 or below to avoid rate-limit 429s.
   ship-gate.
 - **Cloud to isolate infra vs model quality** — if cloud passes and local
   fails the same task, the failure is in the serving stack, not the model.
+
+## Comparative Baselines
+
+The launch-evidence suites compare the same Glassrail task prompts under the
+same OpenRouter subject model and judge:
+
+| Suite | Subject | Criteria changes |
+|---|---|---|
+| `suites/baseline-raw` | one raw `openai-compat` completion | Glassrail trajectory criteria removed |
+| `suites/baseline-react` | `react-loop` with local `file_read` | Glassrail trajectory criteria removed; positive `file_read` checks retained |
+| `suites/glassrail-openrouter` | full Glassrail planner/executor | original criteria |
+
+Run the comparison after setting `OPENROUTER_API_KEY`:
+
+```bash
+cd eval-framework
+python3 run.py suite suites/baseline-raw --workers 5 && \
+python3 run.py suite suites/baseline-react --workers 5 && \
+python3 run.py suite suites/glassrail-openrouter --workers 5
+```
+
+Publish the resulting table with suite, pass@3, pass^3, and mean tokens/task.
+State the date and harness version from `run_metadata.json`; if a baseline wins
+on any dimension, keep it in the table.
 
 ## Cost discipline
 

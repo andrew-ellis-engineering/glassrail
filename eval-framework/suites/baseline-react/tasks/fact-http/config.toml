@@ -1,0 +1,33 @@
+name = "fact-http"
+tags = ["calibration", "result"]
+type = "capability"
+difficulty = 1
+timeout_s = 420
+
+expected_behavior = """
+HTTP expands to Hypertext Transfer Protocol. A correct run states this plainly
+and ends on a result node. This is a known fact — no hedging.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Final output expands HTTP to 'Hypertext Transfer Protocol'"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)hypertext\\s+transfer\\s+protocol"
+
+[[criteria]]
+text = "Does not hedge on a known fact"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "(?i)(not sure|don't know|do not know|no idea|can't say|cannot say)"
+
+[[criteria]]
+text = "Answer is correct and direct"
+grader = "llm"

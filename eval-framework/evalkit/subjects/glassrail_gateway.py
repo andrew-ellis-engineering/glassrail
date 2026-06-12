@@ -139,6 +139,7 @@ def result_from_state(state: dict[str, Any]) -> RunResult:
         result_text=result_text,
         trajectory=trajectory_from_state(state),
         cost_usd=None,  # local/self-hosted: token count lives in the envelope
+        total_tokens=tokens,
         success=status == "completed" and error is None,
         error=error,
         raw_envelope={**state, "total_tokens": tokens},

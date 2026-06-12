@@ -70,3 +70,10 @@ prompt said to make reasonable choices and record them here rather than ask.
     those envelopes as normal failed trials (`success = false`) and leaves the
     structured envelope attached for grading/reporting. A nonzero exit with
     unparseable stdout remains an infrastructure error.
+
+12. **Comparative baselines report tokens, not latency.** From harness v0.4.0,
+    subjects may return `total_tokens`, trials persist it, and suite summaries
+    show mean tokens per task. The `react-loop` backend is deliberately a
+    plain OpenAI-compatible tool loop with only a local `file_read` tool, so
+    raw-model, ReAct-loop, and Glassrail runs can be compared on the same
+    answer-quality criteria without importing Glassrail into the harness.

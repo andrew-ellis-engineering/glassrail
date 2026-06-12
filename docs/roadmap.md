@@ -181,8 +181,9 @@ audit, these additionally gate the work:
 - [Security baseline](specs/security-baseline.md) items 3–4 ✓ — `web_fetch`
   SSRF/size hardening and optional REST bearer auth are implemented for the
   launch narrative's "auditable tool use" claim.
-- [Comparative baselines](specs/comparative-baselines.md) — the raw-model vs
-  ReAct-loop vs glassrail evidence table for the deep-dive post.
+- [Comparative baselines](specs/comparative-baselines.md) — harness token
+  reporting plus raw-model and ReAct-loop suites are implemented; the paid
+  three-way OpenRouter run and evidence table remain.
 - [Serving hardening](specs/serving-hardening.md) items 5–6 ✓ — `run` /
   `exec-plan` failure exit codes and `glassrail serve` are implemented for
   first-contact polish.

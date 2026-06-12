@@ -1,0 +1,46 @@
+name = "research-compare-3-flip"
+tags = ["research", "multistep", "synthesis", "result", "control-pair"]
+type = "capability"
+difficulty = 4
+control_for = "research-compare-3"
+timeout_s = 900
+
+expected_behavior = """
+ACID transactions, complex joins, and strong consistency are PostgreSQL's
+defining strengths. Kafka is a log, not a queryable store, and has no native
+ACID join semantics; Redis lacks durable multi-key ACID transactions and
+relational joins. A correct run covers all three and recommends PostgreSQL,
+citing its ACID guarantees and SQL join capabilities. Control twin of
+research-compare-3: the same three candidates with flipped constraints so that
+the correct pick changes — guards against a model that always recommends Kafka.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Covers all three candidates"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(?=.*\\b(postgres|postgresql)\\b)(?=.*\\bredis\\b)(?=.*(\\bkafka\\b|apache[_ -]kafka))"
+
+[[criteria]]
+text = "Names a recommended option"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)((recommend|best fit|choose|go with).{0,40}(kafka|redis|postgresql|postgres)|(kafka|redis|postgresql|postgres).{0,40}(recommend|best fit|choose|go with))"
+
+[[criteria]]
+text = "Compares all three and recommends PostgreSQL (or equivalent relational DB), citing ACID guarantees and join support for a banking system of record"
+grader = "llm"

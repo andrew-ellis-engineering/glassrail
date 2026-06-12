@@ -61,6 +61,7 @@ def save_task_artifacts(run_dir: Path, result: TaskResult) -> None:
             "pass_at_k": result.pass_at_k,
             "pass_pow_k": result.pass_pow_k,
             "mean_pass_rate": result.mean_pass_rate,
+            "mean_tokens": _task_tokens(result)[1],
         },
     )
     scores_by_run = {score.trial_num: score for score in result.scores}
@@ -87,6 +88,7 @@ def save_run_metadata(run_dir: Path, suite: SuiteResult) -> None:
             "harness_version": suite.harness_version,
             "trials_per_task": suite.trials_per_task,
             "total_cost_usd": suite.total_cost_usd,
+            "total_tokens": suite.total_tokens,
             "agent_seconds_total": sum(_task_seconds(tr)[0] for tr in suite.task_results),
             "wall_seconds": (
                 (suite.completed_at - suite.started_at).total_seconds()
@@ -94,7 +96,11 @@ def save_run_metadata(run_dir: Path, suite: SuiteResult) -> None:
                 else None
             ),
             "tasks": [
-                {"id": tr.task.id, "mean_trial_seconds": _task_seconds(tr)[1]}
+                {
+                    "id": tr.task.id,
+                    "mean_trial_seconds": _task_seconds(tr)[1],
+                    "mean_tokens": _task_tokens(tr)[1],
+                }
                 for tr in suite.task_results
             ],
         },
@@ -122,6 +128,7 @@ def load_trial(path: Path) -> Trial:
         trajectory=d.get("trajectory", []),
         side_effects=d.get("side_effects", {}),
         cost_usd=d.get("cost_usd"),
+        total_tokens=d.get("total_tokens"),
         model=d.get("model", ""),
         harness_version=d.get("harness_version", ""),
         baseline=d.get("baseline", {}),
@@ -148,6 +155,7 @@ def save_task_scores(run_dir: Path, result: TaskResult) -> None:
             "pass_at_k": result.pass_at_k,
             "pass_pow_k": result.pass_pow_k,
             "mean_pass_rate": result.mean_pass_rate,
+            "mean_tokens": _task_tokens(result)[1],
         },
     )
     for trial, score in zip(result.trials, result.scores, strict=False):
@@ -182,6 +190,18 @@ def _fmt_secs(s: float) -> str:
     return f"{s:.0f}s" if s < 90 else f"{s / 60:.1f}m"
 
 
+def _task_tokens(result: TaskResult) -> tuple[int | None, float | None]:
+    vals = [t.total_tokens for t in result.trials if t.total_tokens is not None]
+    if not vals:
+        return None, None
+    total = sum(vals)
+    return total, total / len(vals)
+
+
+def _fmt_tokens(tokens: float | None) -> str:
+    return "-" if tokens is None else f"{tokens:.0f}"
+
+
 def print_task_result(result: TaskResult) -> None:
     scores = result.scores
     k = len(scores)
@@ -206,11 +226,12 @@ def print_task_result(result: TaskResult) -> None:
     infra_count = sum(1 for s in scores if s.infra_error)
     lo, hi = stats.wilson_ci(perfect, k)
     _total, mean_s = _task_seconds(result)
+    _tokens_total, mean_tokens = _task_tokens(result)
     infra_note = f"  ⚠ {infra_count}/{k} infra-error" if infra_count else ""
     print(
         f"  → pass@{k}={result.pass_at_k:.2f}  pass^{k}={result.pass_pow_k:.2f}  "
         f"mean={result.mean_pass_rate:.2f}  pass^k 95% CI=[{lo:.2f}, {hi:.2f}]  "
-        f"mean trial={_fmt_secs(mean_s)}{infra_note}"
+        f"mean trial={_fmt_secs(mean_s)}  mean tokens={_fmt_tokens(mean_tokens)}{infra_note}"
     )
 
 
@@ -232,11 +253,12 @@ def print_suite_summary(suite: SuiteResult) -> None:
         if infra_count:
             flag += f"  ⚠{infra_count}infra"
         total_s, mean_s = _task_seconds(tr)
+        _tokens_total, mean_tokens = _task_tokens(tr)
         agent_secs += total_s
         print(
             f"  {tr.task.id:<28} {tr.task.type:<11} "
             f"pass@k={tr.pass_at_k:.2f} pass^k={tr.pass_pow_k:.2f} "
-            f"{_fmt_secs(mean_s):>6}/trial{flag}"
+            f"{_fmt_secs(mean_s):>6}/trial tokens={_fmt_tokens(mean_tokens):>6}{flag}"
         )
     _print_control_concordance(suite)
     print(f"  {'-' * 60}")

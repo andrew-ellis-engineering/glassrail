@@ -22,6 +22,7 @@ class RunResult:
     result_text: str
     trajectory: list[dict[str, Any]] = field(default_factory=list)
     cost_usd: float | None = None
+    total_tokens: int | None = None
     success: bool = False
     error: str | None = None
     raw_envelope: dict[str, Any] = field(default_factory=dict)

@@ -1,6 +1,7 @@
 # Spec: Comparative baselines (the evidence for the thesis)
 
-Status: Proposed
+Status: Parts 1–3 implemented 2026-06-11; Part 4 full runs and published
+results table pending.
 Priority: P2 — the strongest available launch asset; build during the release
 window, publish with the technical deep-dive post
 (`docs/release/grassroots-marketing.md` week-2 item).

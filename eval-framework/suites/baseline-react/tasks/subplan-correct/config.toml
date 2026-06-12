@@ -1,0 +1,38 @@
+name = "subplan-correct"
+tags = ["subplan", "planning", "research", "synthesis"]
+type = "capability"
+difficulty = 4
+timeout_s = 1500
+
+expected_behavior = """
+A correct plan treats at least one candidate-research track as a subplan rather
+than flattening every step into the parent graph. The final answer compares
+SQLite, DuckDB, and Apache Parquet for a local-first analytics notebook that
+imports CSVs, supports ad hoc SQL exploration, and publishes compact shareable
+artifacts. A strong answer usually recommends DuckDB for interactive local SQL
+analytics, with Parquet as a publication/storage artifact and SQLite only when
+transactional app storage matters more than analytics.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Run completes with a non-empty result"
+grader = "deterministic"
+check = "not_regex"
+target = "__result_text__"
+value = "^\\s*$"
+
+[[criteria]]
+text = "Covers all three storage choices"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "(?i)(?=.*\\bsqlite\\b)(?=.*\\bduckdb\\b)(?=.*\\bparquet\\b)"
+
+[[criteria]]
+text = "Compares the candidates against ingest, ad hoc SQL exploration, and shareable artifact needs, then gives a justified recommendation"
+grader = "llm"
