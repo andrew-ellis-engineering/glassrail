@@ -167,13 +167,17 @@ def test_exec_plan_json_exits_one_with_parseable_failure_envelope(tmp_path: Path
     assert "plan parse failed" in str(data["error"])
 
 
-def test_tui_and_acp_help_render() -> None:
+def test_tui_acp_and_serve_help_render() -> None:
     runner = CliRunner()
 
     tui = runner.invoke(app, ["tui", "--help"])
     acp = runner.invoke(app, ["acp", "--help"])
+    serve = runner.invoke(app, ["serve", "--help"])
 
     assert tui.exit_code == 0
     assert "Submit a task to a running gateway" in tui.output
     assert acp.exit_code == 0
     assert "Agent Client Protocol" in acp.output
+    assert serve.exit_code == 0
+    assert "Serve the REST gateway" in serve.output
+    assert "--host" in serve.output

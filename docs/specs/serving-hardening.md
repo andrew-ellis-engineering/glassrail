@@ -1,6 +1,6 @@
 # Spec: Serving hardening
 
-Status: Proposed; item 5 implemented 2026-06-11.
+Status: Proposed; items 5 and 6 implemented 2026-06-11.
 Priority: P1, with items 5 (`glassrail run` exit codes) and 6
 (`glassrail serve`) suggested early — they are small and user-facing.
 Depends on: nothing. Items are independently mergeable; one item per PR.
@@ -113,7 +113,7 @@ eval harness compensates by reading `is_error` from the JSON envelope.
   exit 1 on a scripted failure and exit 0 on success.
 - README: one sentence under "Headless, one-shot" documenting exit codes.
 
-## Item 6 — `glassrail serve` (do early)
+## Item 6 — `glassrail serve` (do early) — implemented 2026-06-11
 
 **Current:** the README tells users to run
 `uv run uvicorn glassrail.gateways.rest:app`; there is no CLI command.

@@ -94,12 +94,14 @@ rejected, or cancelled after printing the same envelope.
 **Gateway + live viewer** — start the REST gateway, then watch a task stream:
 
 ```bash
-uv run uvicorn glassrail.gateways.rest:app      # serves on :8000
+uv run glassrail serve                         # serves on 127.0.0.1:8000
 uv run glassrail tui "<task>"                   # POSTs the task, renders the live DAG + stream
 ```
 
 Set `GLASSRAIL_API_KEY` to require `Authorization: Bearer <key>` on REST
-routes and event streams; `/health` stays open for liveness checks.
+routes and event streams; `/health` stays open for liveness checks. To expose
+the gateway intentionally, pass `--host 0.0.0.0` or run raw uvicorn:
+`uv run uvicorn glassrail.gateways.rest:app --host 0.0.0.0`.
 
 The viewer draws the plan as colour-coded node boxes connected by edges
 (grouped into dependency layers, each box showing a short summary, recoloured as

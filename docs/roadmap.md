@@ -183,8 +183,9 @@ audit, these additionally gate the work:
   launch narrative's "auditable tool use" claim.
 - [Comparative baselines](specs/comparative-baselines.md) — the raw-model vs
   ReAct-loop vs glassrail evidence table for the deep-dive post.
-- [Serving hardening](specs/serving-hardening.md) items 5–6 (`run` exit codes,
-  `glassrail serve`) — first-contact polish.
+- [Serving hardening](specs/serving-hardening.md) items 5–6 ✓ — `run` /
+  `exec-plan` failure exit codes and `glassrail serve` are implemented for
+  first-contact polish.
 
 ## Phase 2 — Foundation Assistant
 

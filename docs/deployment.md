@@ -11,6 +11,16 @@ gets only the resulting virtualenv. It runs as an unprivileged user
 
 ## Build and run
 
+For local gateway serving, prefer the CLI wrapper; it binds to localhost by
+default:
+
+```bash
+glassrail serve
+glassrail serve --host 0.0.0.0 --port 8000  # only when intentionally exposing it
+```
+
+The production Docker image binds inside the container on port 8000:
+
 ```bash
 docker build -t glassrail:latest .
 docker run --rm -p 8000:8000 glassrail:latest

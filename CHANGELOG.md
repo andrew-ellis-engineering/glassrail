@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added `glassrail serve`, a localhost-default uvicorn wrapper for the REST
+  gateway with `--host`, `--port`, and `--reload` options.
+
 ### Changed
 - `glassrail run --json` and `glassrail exec-plan --json` now keep stdout
   parseable but exit 1 for failed, rejected, or cancelled tasks. The eval

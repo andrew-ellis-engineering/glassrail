@@ -14,6 +14,7 @@ import logging
 from pathlib import Path
 
 import typer
+import uvicorn
 
 from glassrail import __version__
 from glassrail.config import Settings, get_settings
@@ -73,6 +74,20 @@ def acp(
     plan and node execution stream back as ``session/update`` notifications.
     """
     asyncio.run(run_acp(fast_mode=fast))
+
+
+@app.command()
+def serve(
+    host: str = typer.Option(
+        "127.0.0.1",
+        "--host",
+        help="Interface to bind. Use 0.0.0.0 only when intentionally exposing the gateway.",
+    ),
+    port: int = typer.Option(8000, "--port", help="Port to bind."),
+    reload: bool = typer.Option(False, "--reload", help="Reload the server on source changes."),
+) -> None:
+    """Serve the REST gateway with uvicorn."""
+    uvicorn.run("glassrail.gateways.rest:app", host=host, port=port, reload=reload)
 
 
 @app.command()
