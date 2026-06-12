@@ -53,13 +53,17 @@ def grade(task: Task, trial: Trial, *, judge: Judge, cost_optimize: bool = True)
     # quality failures.  Signals: planning/provider error strings, OR a trial
     # that produced neither result text nor trajectory with no recorded error
     # (the "empty trajectory, no error" fingerprint of a silent tier-0 failure).
-    _infra_keywords = ("timed out", "planning failed", "provider", "http ", "connect")
+    _infra_keywords = (
+        "timed out",
+        "planning failed",
+        "provider",
+        "http ",
+        "connect",
+        "could not parse",
+    )
     error_str = (trial.error or "").lower()
     infra_error = bool(trial.error and any(kw in error_str for kw in _infra_keywords)) or (
-        not trial.success
-        and not trial.result_text
-        and not trial.trajectory
-        and trial.error is None
+        not trial.success and not trial.result_text and not trial.trajectory and trial.error is None
     )
 
     return Score(

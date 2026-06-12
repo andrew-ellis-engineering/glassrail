@@ -110,6 +110,7 @@ def run(
         typer.echo(json.dumps(envelope))
     else:
         typer.echo(envelope.get("result") or envelope.get("error") or "(no output)")
+    _exit_if_error(envelope)
 
 
 # ── headless run plumbing ────────────────────────────────────────────────────
@@ -204,7 +205,15 @@ def _trajectory(state: ExecutionState) -> list[dict[str, object]]:
 
 def _envelope(state: ExecutionState, *, error: str | None = None) -> dict[str, object]:
     status = state.status.value
-    is_error = state.status is TaskStatus.FAILED or error is not None
+    is_error = (
+        state.status
+        in (
+            TaskStatus.FAILED,
+            TaskStatus.REJECTED,
+            TaskStatus.CANCELLED,
+        )
+        or error is not None
+    )
     total_tokens = sum(r.tokens_used for r in state.results.values())
     return {
         "result": state.final_output or "",
@@ -225,6 +234,16 @@ def _envelope(state: ExecutionState, *, error: str | None = None) -> dict[str, o
         "branch_log": [e.model_dump(mode="json") for e in state.branch_log],
         "flagged_nodes": [r.node_id for r in state.results.values() if r.flagged],
     }
+
+
+def _exit_if_error(envelope: dict[str, object]) -> None:
+    terminal_error_statuses = {
+        TaskStatus.FAILED.value,
+        TaskStatus.REJECTED.value,
+        TaskStatus.CANCELLED.value,
+    }
+    if envelope.get("is_error") is True or envelope.get("status") in terminal_error_statuses:
+        raise typer.Exit(code=1)
 
 
 @app.command("exec-plan")
@@ -274,6 +293,7 @@ def exec_plan(
         typer.echo(json.dumps(envelope))
     else:
         typer.echo(envelope.get("result") or envelope.get("error") or "(no output)")
+    _exit_if_error(envelope)
 
 
 def _topo_sort_recursive(plan: Plan) -> None:

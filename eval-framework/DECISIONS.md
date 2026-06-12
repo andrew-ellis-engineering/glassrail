@@ -63,3 +63,10 @@ prompt said to make reasonable choices and record them here rather than ask.
     labels are planner-chosen and unstable); the branch taken lives in the
     step's `branch_taken` field, so branch correctness is graded on the
     observable result text, not on a fragile token match.
+
+11. **glassrail CLI failure envelopes are model failures, not infra failures.**
+    From harness v0.3.9, `glassrail run --json` and `glassrail exec-plan --json`
+    may exit nonzero after printing a parseable envelope. The subject treats
+    those envelopes as normal failed trials (`success = false`) and leaves the
+    structured envelope attached for grading/reporting. A nonzero exit with
+    unparseable stdout remains an infrastructure error.

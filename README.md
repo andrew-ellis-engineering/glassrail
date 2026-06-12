@@ -88,7 +88,8 @@ uv run glassrail run "<task>" --timeout 120     # wall-clock budget in seconds
 The `--json` envelope includes the accepted `plan` when planning succeeds and
 `planning_attempts` for every planner try, including raw model output plus parse
 or validation errors. This makes failed plans inspectable from headless runs and
-eval artefacts.
+eval artefacts. The command exits 0 on success and 1 when the task is failed,
+rejected, or cancelled after printing the same envelope.
 
 **Gateway + live viewer** — start the REST gateway, then watch a task stream:
 

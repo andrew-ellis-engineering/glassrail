@@ -36,6 +36,10 @@ def _scripted_env(path: Path) -> dict[str, str]:
 
 def _json_output(result: Any) -> dict[str, Any]:
     assert result.exit_code == 0, result.output
+    return _parse_json_output(result)
+
+
+def _parse_json_output(result: Any) -> dict[str, Any]:
     data = json.loads(result.output)
     assert isinstance(data, dict)
     return data
@@ -111,6 +115,24 @@ def test_run_json_emits_contract_envelope(tmp_path: Path) -> None:
     assert data["trajectory"][0]["status"] == "completed"
 
 
+def test_run_json_exits_one_with_parseable_failure_envelope(tmp_path: Path) -> None:
+    responses = tmp_path / "responses.jsonl"
+    responses.write_text("not json\nstill not json\n", encoding="utf-8")
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        ["run", "produce a deterministic CLI failure", "--json"],
+        env=_scripted_env(responses),
+    )
+
+    assert result.exit_code == 1
+    data = _parse_json_output(result)
+    assert data["status"] == "failed"
+    assert data["is_error"] is True
+    assert isinstance(data["planning_attempts"], list)
+
+
 def test_exec_plan_json_runs_harness_mechanics_fixture(monkeypatch: MonkeyPatch) -> None:
     root = Path(__file__).resolve().parents[2]
     fixture_dir = (
@@ -129,6 +151,20 @@ def test_exec_plan_json_runs_harness_mechanics_fixture(monkeypatch: MonkeyPatch)
     assert data["is_error"] is False
     assert data["trajectory"][0]["tool"] == "result"
     assert data["trajectory"][0]["output"] == "scripted result sentinel"
+
+
+def test_exec_plan_json_exits_one_with_parseable_failure_envelope(tmp_path: Path) -> None:
+    plan = tmp_path / "plan.json"
+    plan.write_text("{}", encoding="utf-8")
+    runner = CliRunner()
+
+    result = runner.invoke(app, ["exec-plan", str(plan), "--json"])
+
+    assert result.exit_code == 1
+    data = _parse_json_output(result)
+    assert data["status"] == "failed"
+    assert data["is_error"] is True
+    assert "plan parse failed" in str(data["error"])
 
 
 def test_tui_and_acp_help_render() -> None:

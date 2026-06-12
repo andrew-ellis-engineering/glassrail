@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- `glassrail run --json` and `glassrail exec-plan --json` now keep stdout
+  parseable but exit 1 for failed, rejected, or cancelled tasks. The eval
+  harness treats parseable nonzero Glassrail envelopes as normal failed trials.
 - README and docs now point readers to the temporary product-site URL while the
   custom domain is pending.
 

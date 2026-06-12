@@ -62,7 +62,7 @@ class GlassrailCliSubject:
         if missing_key_error is not None:
             return RunResult(result_text="", success=False, error=missing_key_error)
         try:
-            proc = subprocess.run(  # noqa: S603 - argv from config, no shell
+            proc = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=timeout_s, check=False, env=env
             )
         except subprocess.TimeoutExpired as exc:
@@ -139,7 +139,13 @@ def _result_from_proc(returncode: int, stdout: str, stderr: str) -> RunResult:
     cost = float(raw_cost) if isinstance(raw_cost, (int, float)) else None
     is_error = envelope.get("is_error") is True
     if is_error and error is None:
-        error = str(envelope.get("error") or "task failed")
+        status = envelope.get("status")
+        if isinstance(status, str) and status:
+            error = f"glassrail task {status}"
+        else:
+            error = "glassrail task failed"
+    if not is_error and returncode != 0 and error is None:
+        error = f"glassrail CLI exited {returncode}"
     success = returncode == 0 and not is_error and error is None
     return RunResult(
         result_text=result_text,
@@ -163,8 +169,8 @@ def _parse_envelope(stdout: str) -> dict[str, Any] | None:
         return parsed if isinstance(parsed, dict) else None
     except json.JSONDecodeError:
         pass
-    for line in reversed(text.splitlines()):
-        line = line.strip()
+    for raw_line in reversed(text.splitlines()):
+        line = raw_line.strip()
         if not line:
             continue
         try:

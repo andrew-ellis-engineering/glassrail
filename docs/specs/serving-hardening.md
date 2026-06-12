@@ -1,6 +1,6 @@
 # Spec: Serving hardening
 
-Status: Proposed
+Status: Proposed; item 5 implemented 2026-06-11.
 Priority: P1, with items 5 (`glassrail run` exit codes) and 6
 (`glassrail serve`) suggested early — they are small and user-facing.
 Depends on: nothing. Items are independently mergeable; one item per PR.
@@ -90,7 +90,7 @@ task after an explicit client response, so the race is narrower there).
 Test: two sequential resume calls — second gets 400; task completes once
 (count executor invocations with a scripted provider).
 
-## Item 5 — `glassrail run` exit codes (do early)
+## Item 5 — `glassrail run` exit codes (do early) — implemented 2026-06-11
 
 **Current:** `glassrail run` always exits 0, even when the task failed; the
 eval harness compensates by reading `is_error` from the JSON envelope.
