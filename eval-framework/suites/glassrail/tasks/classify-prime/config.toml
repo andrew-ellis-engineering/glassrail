@@ -1,13 +1,12 @@
-name = "heldout-classify-prime"
-tags = ["decision", "heldout", "control-pair"]
+name = "classify-prime"
+tags = ["decision", "control-pair"]
 type = "capability"
 difficulty = 2
 timeout_s = 120
 
 expected_behavior = """
-83 is prime, and the largest prime smaller than it is 79. The conditional
-phrasing warrants a decision node rather than a generic direct answer. Control
-twin of heldout-classify-composite.
+97 is prime, and the largest prime smaller than it is 89. The conditional
+phrasing warrants a decision node rather than a generic direct answer.
 """
 
 [fixtures]
@@ -16,18 +15,18 @@ capture = []
 [fixtures.install]
 
 [[criteria]]
-text = "Identifies 83 as prime"
+text = "Identifies 97 as prime"
 grader = "deterministic"
 check = "regex"
 target = "__result_text__"
 value = "(?i)\\bprime\\b"
 
 [[criteria]]
-text = "Reports 79 as the largest smaller prime"
+text = "Reports 89 as the largest smaller prime"
 grader = "deterministic"
 check = "regex"
 target = "__result_text__"
-value = "\\b79\\b"
+value = "\\b89\\b"
 
 [[criteria]]
 text = "Planner used a decision node"

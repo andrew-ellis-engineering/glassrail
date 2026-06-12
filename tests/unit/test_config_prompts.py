@@ -85,6 +85,8 @@ def test_synthesis_and_result_prompts_preserve_caveats_without_inventing() -> No
     assert "winner-only answer" in result
     assert "plain prose with units" in result
     assert "logic or deduction tasks" in result
+    assert "preserve that conclusion" in result
+    assert "do not replace it with a different final answer" in result
     assert "classification/branch choice and a branch-specific value" in result
     assert "at least one concise sentence about each candidate or category" in result
     assert "write the final answer as prose rather than a raw JSON object" in result

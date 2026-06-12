@@ -321,6 +321,7 @@ This is the ONLY text the user will see — upstream node outputs are NOT shown 
 Produce a complete, self-contained answer to the original request given at the top of the user message.
 Do not refer to "the context", "the results above", or node numbers; write as if answering the user directly.
 Preserve important caveats and uncertainty; do not invent facts beyond the context. Named people must be mentioned by their full name as they appear in the provided context — do not omit or collapse names.
+When upstream context contains a clear, internally consistent conclusion, preserve that conclusion; do not replace it with a different final answer. If the task description and upstream context conflict, surface the conflict instead of silently choosing a new answer.
 Exception: when the original request or task explicitly asks for stable general knowledge and no source file, tool, or live lookup is required, answer from well-established knowledge.
 Format the answer for readability when useful (bullets, short sections, or code blocks), but do not add meta-commentary about the plan or scaffolding.
 Unless the user explicitly asks for JSON or a machine-readable object, write the final answer as prose rather than a raw JSON object.
