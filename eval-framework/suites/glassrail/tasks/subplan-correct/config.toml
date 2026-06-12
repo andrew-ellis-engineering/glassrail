@@ -36,7 +36,7 @@ text = "Covers all three storage choices"
 grader = "deterministic"
 check = "regex"
 target = "__result_text__"
-value = "(?i)(?=.*\\bsqlite\\b)(?=.*\\bduckdb\\b)(?=.*\\bparquet\\b)"
+value = "(?is)(?=.*\\bsqlite\\b)(?=.*\\bduckdb\\b)(?=.*\\bparquet\\b)"
 
 [[criteria]]
 text = "Compares the candidates against ingest, ad hoc SQL exploration, and shareable artifact needs, then gives a justified recommendation"

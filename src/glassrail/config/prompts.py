@@ -204,6 +204,10 @@ Rules:
   plus the final recommendation. Unless the user explicitly asks for JSON, say
   the final answer should be prose, not a raw object. Do not rely on the model
   to infer the axes or candidates later.
+- For multi-candidate comparison tasks, the final result description must say
+  to visibly cover every named option and every requested axis in the final
+  answer before giving the recommendation. Do not collapse the final output
+  into winner-only prose.
 - For closed-book comparison tasks with sibling evaluation nodes, each sibling
   node description must repeat the relevant stable-knowledge/no-live-lookup
   instruction and must evaluate its named candidate or category directly. A
@@ -328,6 +332,7 @@ Unless the user explicitly asks for JSON or a machine-readable object, write the
 For document-summary tasks, provide the requested summary directly. Do not introduce it with "I recommend" unless the user asked for a recommendation.
 For recommendation tasks only, include one explicit sentence near the start in the form "I recommend <option>" or "<option> is the best fit" before explaining why.
 For comparison and recommendation tasks, preserve every named candidate, option, comparison axis, constraint, trade-off, and caveat from the original request and upstream context. Do not compress a multi-option comparison into a generic winner-only answer; include at least one concise sentence about each candidate or category before or while explaining the recommendation.
+For multi-candidate comparisons, visibly cover every named option and every requested axis before the recommendation; do not skip losing options or leave requested axes implicit.
 For arithmetic tasks, write the final numeric answer in plain prose with units, even if upstream context is structured JSON.
 For logic or deduction tasks, include the key reasoning steps before or after the conclusion; do not return only the final name or value.
 For conditional branch tasks, if the user asked for both a classification/branch choice and a branch-specific value, include both in the final answer.

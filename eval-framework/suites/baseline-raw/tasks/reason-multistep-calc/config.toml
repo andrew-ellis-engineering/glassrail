@@ -33,7 +33,7 @@ text = "States 1 full crate"
 grader = "deterministic"
 check = "regex"
 target = "__result_text__"
-value = "(?i)(\\b1\\b.{0,80}(crate|full)|(number_of_full_crates|full_crates|number_of_crates)\"?\\s*[:=]\\s*1)"
+value = "(?i)(\\b1\\b.{0,80}(crate|full)|\\b(full\\s+)?crates?\\s*[:=]\\s*1\\b|(number_of_full_crates|full_crates|number_of_crates)\"?\\s*[:=]\\s*1)"
 
 [[criteria]]
 text = "States total weight of 150 kg"
