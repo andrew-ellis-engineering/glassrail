@@ -8,6 +8,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from glassrail.core import ToolExecutionError
+
 pytest.importorskip("trafilatura")
 pytest.importorskip("lxml")
 
@@ -22,6 +24,11 @@ from glassrail.harness.integrations.web import (
     web_fetch,
     web_search,
 )
+
+
+def _public_resolver(host: str, port: int) -> list[str]:
+    return ["93.184.216.34"]
+
 
 _ARTICLE_HTML = """<!DOCTYPE html><html><head><title>Streaming Protocols</title></head><body>
 <header><nav>Home | Blog | Contact</nav></header>
@@ -51,7 +58,9 @@ async def test_web_fetch_returns_extracted_text() -> None:
         return httpx.Response(200, html=_ARTICLE_HTML)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        result = await web_fetch("https://example.com/streaming", client=client)
+        result = await web_fetch(
+            "https://example.com/streaming", client=client, resolver=_public_resolver
+        )
 
     assert "error" not in result
     assert result["status"] == 200
@@ -64,10 +73,52 @@ async def test_web_fetch_http_error_returns_error() -> None:
         return httpx.Response(404, html="not found")
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        result = await web_fetch("https://example.com/missing", client=client)
+        result = await web_fetch(
+            "https://example.com/missing", client=client, resolver=_public_resolver
+        )
 
     assert "error" in result
     assert "text" not in result
+
+
+async def test_web_fetch_rejects_non_http_scheme() -> None:
+    with pytest.raises(ToolExecutionError, match="http and https"):
+        await web_fetch("ftp://example.com/archive")
+
+
+async def test_web_fetch_rejects_loopback_target() -> None:
+    with pytest.raises(ToolExecutionError, match="private or reserved"):
+        await web_fetch("http://127.0.0.1/x")
+
+
+async def test_web_fetch_rejects_link_local_target() -> None:
+    with pytest.raises(ToolExecutionError, match="private or reserved"):
+        await web_fetch("http://169.254.169.254/meta")
+
+
+async def test_web_fetch_allows_private_target_when_configured() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, html=_ARTICLE_HTML)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await web_fetch("http://127.0.0.1/x", client=client, allow_private_hosts=True)
+
+    assert "error" not in result
+    assert result["status"] == 200
+
+
+async def test_web_fetch_rejects_body_over_size_cap() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"x" * 12)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(ToolExecutionError, match="max_fetch_bytes=8"):
+            await web_fetch(
+                "https://example.com/large",
+                client=client,
+                resolver=_public_resolver,
+                max_fetch_bytes=8,
+            )
 
 
 def test_register_web_registers_fetch_when_enabled() -> None:

@@ -4,12 +4,21 @@ Needs the ``web`` extra (``trafilatura``, which pulls in ``lxml``). The
 trafilatura import is lazy so the base install neither requires nor imports it
 until the integration is enabled; enabling without the extra raises a clear
 :class:`ToolRegistrationError`.
+
+``web_fetch`` rejects private-address targets after resolving the hostname and
+before connecting. That closes the common SSRF path, but a DNS rebinding race
+remains possible in this v1 guard because resolution and connection are not
+bound to the same socket.
 """
 
 from __future__ import annotations
 
+import asyncio
 import importlib
+import ipaddress
 import logging
+import socket
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, Protocol
 from urllib.parse import parse_qs, urlparse
 
@@ -24,6 +33,10 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 _USER_AGENT = "glassrail-web-fetch/0.1 (+https://github.com/andrew-ellis-engineering/glassrail)"
+_ALLOWED_FETCH_SCHEMES = {"http", "https"}
+_DEFAULT_MAX_REDIRECTS = 5
+
+HostResolver = Callable[[str, int], Sequence[str]]
 
 
 def _require_trafilatura() -> Any:
@@ -63,7 +76,10 @@ async def web_fetch(
     url: str,
     *,
     timeout_s: float = 20.0,
+    allow_private_hosts: bool = False,
+    max_fetch_bytes: int = 5_000_000,
     client: httpx.AsyncClient | None = None,
+    resolver: HostResolver | None = None,
 ) -> dict[str, Any]:
     """GET ``url`` and return its extracted main text.
 
@@ -71,21 +87,122 @@ async def web_fetch(
     transport error or when no content could be extracted. ``client`` is
     injectable for tests; when omitted a short-lived client is created.
     """
+    _validate_fetch_url(url)
+    if not allow_private_hosts:
+        await _reject_private_fetch_host(url, resolver=resolver)
+
     headers = {"User-Agent": _USER_AGENT}
     try:
         if client is not None:
-            resp = await client.get(url, headers=headers, follow_redirects=True, timeout=timeout_s)
+            html, status_code = await _stream_response(
+                client,
+                url,
+                headers=headers,
+                timeout_s=timeout_s,
+                max_fetch_bytes=max_fetch_bytes,
+            )
         else:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=timeout_s) as owned:
-                resp = await owned.get(url, headers=headers)
-        resp.raise_for_status()
+            async with httpx.AsyncClient(
+                follow_redirects=True, max_redirects=_DEFAULT_MAX_REDIRECTS, timeout=timeout_s
+            ) as owned:
+                html, status_code = await _stream_response(
+                    owned,
+                    url,
+                    headers=headers,
+                    timeout_s=timeout_s,
+                    max_fetch_bytes=max_fetch_bytes,
+                )
     except httpx.HTTPError as exc:
         return {"url": url, "error": f"{type(exc).__name__}: {exc}"}
 
-    title, text = extract_main_text(resp.text, url=url)
+    title, text = extract_main_text(html, url=url)
     if not text:
-        return {"url": url, "status": resp.status_code, "error": "no extractable content"}
-    return {"url": url, "title": title, "text": text, "status": resp.status_code}
+        return {"url": url, "status": status_code, "error": "no extractable content"}
+    return {"url": url, "title": title, "text": text, "status": status_code}
+
+
+def _validate_fetch_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in _ALLOWED_FETCH_SCHEMES:
+        raise ToolExecutionError("web_fetch only supports http and https URLs")
+    if not parsed.hostname:
+        raise ToolExecutionError("web_fetch URL must include a hostname")
+
+
+def _is_private_address(address: str) -> bool:
+    ip = ipaddress.ip_address(address)
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
+def _resolve_host_addresses(host: str, port: int) -> Sequence[str]:
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    addresses: list[str] = []
+    for info in infos:
+        sockaddr = info[4]
+        if sockaddr:
+            addresses.append(str(sockaddr[0]))
+    return addresses
+
+
+async def _reject_private_fetch_host(url: str, *, resolver: HostResolver | None = None) -> None:
+    parsed = urlparse(url)
+    host = parsed.hostname
+    if host is None:
+        raise ToolExecutionError("web_fetch URL must include a hostname")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        resolve = resolver or _resolve_host_addresses
+        try:
+            addresses = await asyncio.to_thread(resolve, host, port)
+        except OSError as exc:
+            raise ToolExecutionError(f"could not resolve host {host!r}: {exc}") from exc
+    else:
+        addresses = [str(literal)]
+
+    for address in addresses:
+        if _is_private_address(address):
+            raise ToolExecutionError(
+                f"web_fetch target {host!r} resolves to a private or reserved address"
+            )
+
+
+async def _stream_response(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    headers: dict[str, str],
+    timeout_s: float,
+    max_fetch_bytes: int,
+) -> tuple[str, int]:
+    chunks: list[bytes] = []
+    total = 0
+    async with client.stream(
+        "GET",
+        url,
+        headers=headers,
+        timeout=timeout_s,
+        follow_redirects=True,
+    ) as resp:
+        resp.raise_for_status()
+        async for chunk in resp.aiter_bytes():
+            total += len(chunk)
+            if total > max_fetch_bytes:
+                raise ToolExecutionError(
+                    f"web_fetch response exceeded max_fetch_bytes={max_fetch_bytes}"
+                )
+            chunks.append(chunk)
+        encoding = resp.encoding or "utf-8"
+        return b"".join(chunks).decode(encoding, errors="replace"), resp.status_code
 
 
 # ── Search ───────────────────────────────────────────────────────────────────
@@ -259,9 +376,16 @@ def register_web(harness: ToolHarness, config: WebToolConfig) -> None:
     if config.fetch:
         _require_trafilatura()  # fail fast with the install hint
         timeout_s = config.timeout_s
+        allow_private_hosts = config.allow_private_hosts
+        max_fetch_bytes = config.max_fetch_bytes
 
         async def _web_fetch(url: str) -> dict[str, Any]:
-            return await web_fetch(url, timeout_s=timeout_s)
+            return await web_fetch(
+                url,
+                timeout_s=timeout_s,
+                allow_private_hosts=allow_private_hosts,
+                max_fetch_bytes=max_fetch_bytes,
+            )
 
         harness.tool(
             name="web_fetch",

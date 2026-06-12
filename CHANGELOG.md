@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README and docs now point readers to the temporary product-site URL while the
   custom domain is pending.
 
+### Security
+- `web_fetch` now rejects non-HTTP(S) URLs and private/reserved network targets
+  by default, streams responses through a byte cap, and uses a bounded redirect
+  policy.
+
 ## [0.1.0] - 2026-06-11
 
 ### Added

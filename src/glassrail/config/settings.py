@@ -146,6 +146,10 @@ class WebToolConfig(BaseModel):
     """Per-request HTTP timeout for fetch and search."""
     max_results: int = 5
     """Number of search results to return."""
+    allow_private_hosts: bool = False
+    """Allow model-controlled web_fetch URLs to resolve to private/local hosts."""
+    max_fetch_bytes: int = 5_000_000
+    """Maximum response body bytes web_fetch will read before aborting."""
 
 
 class ImageToolConfig(BaseModel):

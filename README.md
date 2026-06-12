@@ -206,7 +206,9 @@ always register. Add a first-party tool by decorating a function with
 **First-party integrations** are bundled but opt-in, configured under
 `[tools.*]`. The **web** integration needs the `web` extra and is off by default:
 - `web_fetch(url)` — fetch a page and extract its main text (for reading or
-  summarising webpages).
+  summarising webpages). Fetches are limited to `http`/`https`, reject private
+  and reserved address targets by default, follow at most five redirects, and
+  stop after `tools.web.max_fetch_bytes`.
 - `web_search(query)` — search the web behind a pluggable provider:
   `duckduckgo` (no setup) or `searxng` (point at a self-hosted instance).
 
@@ -230,6 +232,8 @@ fs_roots = ["~/work", "/tmp/glassrail-eval"] # optional path confinement for fil
 [tools.web]
 fetch = true
 search = "duckduckgo"                    # or "searxng" (+ searxng_url)
+max_fetch_bytes = 5_000_000              # response body cap for web_fetch
+allow_private_hosts = false              # true only for trusted internal pages
 
 [tools.image]
 enabled = true
@@ -277,8 +281,9 @@ Current posture (hardening is tracked in
 - `file_read` and `image_generate` output paths are confined when
   `tools.fs_roots` is set. When it is unset, file tools can access any path the
   process can access and log a one-time warning.
-- The web tools fetch model-chosen URLs — enabling them means the agent has
-  outbound network access it chooses how to use.
+- `web_fetch` rejects private and reserved network targets by default and caps
+  response bytes, but web tools still fetch model-chosen URLs — enabling them
+  means the agent has outbound network access it chooses how to use.
 - Tool `risk` levels participate in approval: without an explicit override,
   `write` and `execute` tools ask in interactive mode. `mode = "auto"` still
   treats `ask` as `allow`, so use explicit `deny` overrides for tools that
