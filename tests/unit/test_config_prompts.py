@@ -45,12 +45,19 @@ def test_planner_prompt_prevents_vague_rejection_and_unregistered_tools() -> Non
     assert "numbers, units, formulas, named candidates" in prompt
     assert "Copy source-of-knowledge instructions" in prompt
     assert "stable/general knowledge is enough" in prompt
+    assert "Copy the user's answer contract" in prompt
+    assert "required inclusions/exclusions" in prompt
     assert "at least one concise sentence per candidate or category" in prompt
     assert "final answer should be prose, not a raw object" in prompt
     assert "visibly cover every named option" in prompt
     assert "winner-only prose" in prompt
     assert "For closed-book comparison tasks with sibling evaluation nodes" in prompt
     assert "no upstream context must not say information is missing" in prompt
+    assert "path only as a distractor" in prompt
+    assert "answer depends on the" in prompt
+    assert "contents of a specific file" in prompt
+    assert "For calibration tasks" in prompt
+    assert "Do not hedge stable facts" in prompt
 
 
 def test_summary_prompt_prioritizes_downstream_fidelity() -> None:
@@ -61,6 +68,8 @@ def test_summary_prompt_prioritizes_downstream_fidelity() -> None:
     assert "Your output will be consumed by" in prompt
     assert "source pointer" in prompt
     assert "include that full name even under tight bullet limits" in prompt
+    assert "fixed number of bullets" in prompt
+    assert "Preserve requested inclusions, exclusions" in prompt
 
 
 def test_summary_variant_prompts_have_distinct_roles() -> None:
@@ -77,9 +86,13 @@ def test_synthesis_and_result_prompts_preserve_caveats_without_inventing() -> No
     assert "surface the conflict" in synthesis
     assert "final user-facing answer" in synthesis
     assert "stable general knowledge" in synthesis
+    assert "requested answer contract" in synthesis
+    assert "every option, axis, count" in synthesis
     assert "Preserve important caveats and uncertainty" in result
     assert "do not invent facts" in result
     assert "stable general knowledge" in result
+    assert "Calibration rule" in result
+    assert "Do not over-hedge stable facts" in result
     assert "I recommend <option>" in result
     assert "preserve every named candidate" in result
     assert "comparison axis" in result
@@ -95,6 +108,7 @@ def test_synthesis_and_result_prompts_preserve_caveats_without_inventing() -> No
     assert "do not skip losing options" in result
     assert "write the final answer as prose rather than a raw JSON object" in result
     assert 'Do not introduce it with "I recommend"' in result
+    assert "For summary tasks with a requested count" in result
     # Result must tell the model it is the sole user-visible output
     assert "ONLY text the user will see" in result
     assert "Original user request" in result or "original request" in result

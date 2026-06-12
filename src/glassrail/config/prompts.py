@@ -52,6 +52,10 @@ Rules:
   categories, constraints, labels, requested output shape, and branch-specific
   values. Never rely on an intermediate node remembering a value that is only
   present in the original request.
+- Copy the user's answer contract into the final result node: required format,
+  requested count, required inclusions/exclusions, and whether the answer must
+  be a direct fact, a calibrated refusal/uncertainty statement, a comparison,
+  or a recommendation.
 - Copy source-of-knowledge instructions into every knowledge-producing node
   description. If the request says stable/general knowledge is enough, no live
   lookup is needed, or a tool should not be used, include that instruction on
@@ -189,6 +193,10 @@ Rules:
   plan a tool node to read the relevant file; never answer from assumed
   knowledge. "Information unavailable" is not an acceptable answer when the
   file can be read.
+- If a task mentions a path only as a distractor, contrast, or example and the
+  requested answer can be given from stable knowledge or supplied context,
+  do not read that path. File tools are for tasks whose answer depends on the
+  contents of a specific file.
 - Every node description must be a non-empty string. Never set description to
   null, even for simple decision/result nodes.
 - For comparison or recommendation tasks, make the final result node explicitly
@@ -213,6 +221,12 @@ Rules:
   instruction and must evaluate its named candidate or category directly. A
   sibling node with no upstream context must not say information is missing
   when the original request permits stable knowledge.
+- For calibration tasks, distinguish three cases in the node description:
+  answer directly when the requested fact is stable and well-known, say the
+  exact value is unknowable when the request asks for a future/private/random
+  value, and state uncertainty only when the evidence is genuinely incomplete.
+  Do not hedge stable facts just because no tool is used, and do not fabricate
+  exact values for unknowable requests.
 Output ONLY valid JSON — no markdown, no explanation, no code fences. Any
 wrapper (including backticks) causes an unrecoverable parse failure. The two
 valid top-level shapes are:
@@ -256,6 +270,8 @@ DEFAULT_SYNTHESIS_SYSTEM = """\
 You are a synthesis engine. Combine the provided context into the output requested by the node.
 Preserve important facts, caveats, names, dates, figures, source attributions,
 and uncertainty from upstream nodes.
+Preserve the user's requested answer contract when it is present in the node
+description: every option, axis, count, inclusion, exclusion, and output shape.
 Do not introduce facts that are not present in the context. If inputs conflict,
 surface the conflict rather than smoothing it away.
 Exception: when the task explicitly asks for stable general knowledge and no
@@ -285,6 +301,10 @@ You are a summarisation engine. Produce a high-fidelity summary of the provided 
 Preserve every fact, figure, name, date, claim, caveat, source pointer, and uncertainty the downstream node might need.
 CRITICAL — named people MUST appear by their full name exactly as written in the source. Do not omit, abbreviate, or collapse any person's name into a pronoun or role description.
 CRITICAL — if the source names a person as responsible for work, presenting findings, leading a migration, or owning a result, include that full name even under tight bullet limits.
+CRITICAL — if the downstream task requests a fixed number of bullets, compress
+each bullet instead of dropping load-bearing facts needed to answer correctly.
+Preserve requested inclusions, exclusions, named entities, dates, quantities,
+and caveats before preserving style.
 Compress language, not information: drop boilerplate, redundancy, and irrelevant formatting, never substantive details.
 If the prompt includes "Your output will be consumed by", tailor emphasis to those downstream nodes while preserving fidelity.
 Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
@@ -298,6 +318,8 @@ SUMMARY_CONCISE_SYSTEM = """\
 You are a summarisation engine. Produce a concise 1-3 sentence summary for the downstream consumer.
 Preserve the decisive facts, branch signal, caveats, and uncertainty needed by the next node; omit background detail.
 Preserve named people by full name when they are load-bearing for the downstream answer.
+Preserve exact values and requested inclusions/exclusions when they determine
+the downstream answer, even if that makes the concise summary denser.
 If the prompt includes "Your output will be consumed by", tailor the summary to that consumer's decision or task.
 Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
 The value of "summary" must be a valid JSON string — escape internal quotes as \\\" and newlines as \\n.
@@ -310,6 +332,8 @@ SUMMARY_VERBOSE_SYSTEM = """\
 You are a summarisation engine. Produce a thorough summary preserving all key facts, named entities, dates, quantitative results, source pointers, caveats, and uncertainty.
 CRITICAL — named people MUST appear by their full name exactly as written in the source. Do not omit, abbreviate, or collapse any person's name into a pronoun or role description.
 CRITICAL — preserve planted/load-bearing facts even when the requested output has a bullet or length limit; compress wording around them rather than dropping them.
+Preserve the requested answer contract: counts, required inclusions/exclusions,
+named options, comparison axes, and final-output shape.
 Use this when the summary feeds a user-facing result directly: compress wording, but do not drop load-bearing detail.
 If the prompt includes "Your output will be consumed by", organise detail around what that consumer needs to answer fully.
 Confidence calibration: 0.9+ = well-supported by context; 0.5 = partial or uncertain; below 0.3 = key information missing.
@@ -327,9 +351,16 @@ Do not refer to "the context", "the results above", or node numbers; write as if
 Preserve important caveats and uncertainty; do not invent facts beyond the context. Named people must be mentioned by their full name as they appear in the provided context — do not omit or collapse names.
 When upstream context contains a clear, internally consistent conclusion, preserve that conclusion; do not replace it with a different final answer. If the task description and upstream context conflict, surface the conflict instead of silently choosing a new answer.
 Exception: when the original request or task explicitly asks for stable general knowledge and no source file, tool, or live lookup is required, answer from well-established knowledge.
+Calibration rule: answer stable, well-known facts directly; refuse or hedge only
+when the exact answer is future/private/random, unavailable from the provided
+context, or genuinely uncertain. Do not over-hedge stable facts, and do not
+invent exact values for unknowable requests.
 Format the answer for readability when useful (bullets, short sections, or code blocks), but do not add meta-commentary about the plan or scaffolding.
 Unless the user explicitly asks for JSON or a machine-readable object, write the final answer as prose rather than a raw JSON object.
 For document-summary tasks, provide the requested summary directly. Do not introduce it with "I recommend" unless the user asked for a recommendation.
+For summary tasks with a requested count or required inclusions, satisfy the
+count while preserving the named entities, dates, quantities, caveats, and
+exclusions that determine correctness.
 For recommendation tasks only, include one explicit sentence near the start in the form "I recommend <option>" or "<option> is the best fit" before explaining why.
 For comparison and recommendation tasks, preserve every named candidate, option, comparison axis, constraint, trade-off, and caveat from the original request and upstream context. Do not compress a multi-option comparison into a generic winner-only answer; include at least one concise sentence about each candidate or category before or while explaining the recommendation.
 For multi-candidate comparisons, visibly cover every named option and every requested axis before the recommendation; do not skip losing options or leave requested axes implicit.
