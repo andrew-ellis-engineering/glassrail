@@ -206,6 +206,17 @@ Publish the resulting table with suite, pass@3, pass^3, and mean tokens/task.
 State the date and harness version from `run_metadata.json`; if a baseline wins
 on any dimension, keep it in the table.
 
+For broader model-matrix runs, use the eval CLI's summary command instead of
+reconstructing tables by hand:
+
+```bash
+python3 run.py matrix results/matrix-20260612T173659Z-rerun-*
+```
+
+The table reports task counts, mean pass@k/pass^k, wall time, token totals,
+pass^k-zero tasks, and sample endpoint errors so provider request failures do
+not masquerade as model-quality failures.
+
 ## Cost discipline
 
 Trials cost real inference. Keep criteria deterministic where possible (only

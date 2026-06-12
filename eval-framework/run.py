@@ -10,6 +10,7 @@ signal), 2 = framework error.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import threading
 from collections.abc import Sequence
@@ -80,7 +81,9 @@ def _tier_model_overrides(args: argparse.Namespace) -> dict[int, str]:
         try:
             tier = int(tier_raw)
         except ValueError as exc:
-            raise LoaderError(f"--tier-model tier must be an integer 0-3, got {tier_raw!r}") from exc
+            raise LoaderError(
+                f"--tier-model tier must be an integer 0-3, got {tier_raw!r}"
+            ) from exc
         if tier < 0 or tier > 3:
             raise LoaderError(f"--tier-model tier must be 0-3, got {tier}")
         if not model.strip():
@@ -210,9 +213,7 @@ def run_task(
     score_records: list[Score] = []
     for run_number in range(1, trials + 1):
         with _print_lock:
-            tier_note = (
-                f" tiers=({_format_tier_models(tier_models)})" if tier_models else ""
-            )
+            tier_note = f" tiers=({_format_tier_models(tier_models)})" if tier_models else ""
             print(
                 f"  · {task.id}: trial {run_number}/{trials} "
                 f"(backend={backend} model={effective_model}{tier_note})…"
@@ -231,9 +232,10 @@ def _print_task_summary(task: Task) -> None:
     for c in task.criteria:
         counts[c.grader] = counts.get(c.grader, 0) + 1
     ctrl = f"  control_for={task.control_for}" if task.control_for else ""
+    counts_label = f"D/T/L={counts['deterministic']}/{counts['trajectory']}/{counts['llm']}"
     print(
         f"  {task.id:<26} {task.backend:<16} model={task.model:<14} diff={task.difficulty} "
-        f"{task.type:<11} D/T/L={counts['deterministic']}/{counts['trajectory']}/{counts['llm']}{ctrl}"
+        f"{task.type:<11} {counts_label}{ctrl}"
     )
 
 
@@ -289,26 +291,36 @@ def cmd_task(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _filter_suite_tasks(tasks: list[Task], args: argparse.Namespace) -> list[Task]:
+    filtered = tasks
+    if args.tags:
+        tags = set(args.tags)
+        filtered = [task for task in filtered if tags & set(task.tags)]
+    if args.type:
+        filtered = [task for task in filtered if task.type == args.type]
+    return filtered
+
+
 def cmd_suite(args: argparse.Namespace) -> int:
     meta, tasks = loader.load_suite(Path(args.path))
     tier_models = _tier_model_overrides(args)
-    if args.tags:
-        tags = set(args.tags)
-        tasks = [t for t in tasks if tags & set(t.tags)]
-    if args.type:
-        tasks = [t for t in tasks if t.type == args.type]
+    tasks = _filter_suite_tasks(tasks, args)
     if not tasks:
         print("No tasks matched the filters.")
         return EXIT_OK
 
-    grader_model = args.grader_model or meta.get("default_grader_model", config.DEFAULT_GRADER_MODEL)
+    grader_model = args.grader_model or meta.get(
+        "default_grader_model", config.DEFAULT_GRADER_MODEL
+    )
     judge = _make_judge(meta, args)
     run_name = _run_name(args.run_name)
     run_dir = config.RESULTS_DIR / run_name
     started = datetime.now(UTC)
 
     if args.dry_run:
-        print(f"[dry-run] suite '{meta['name']}' — {len(tasks)} task(s), {args.trials} trial(s) each:")
+        print(
+            f"[dry-run] suite '{meta['name']}' — {len(tasks)} task(s), {args.trials} trial(s) each:"
+        )
         for task in tasks:
             _print_task_summary(task)
         if tier_models:
@@ -378,9 +390,7 @@ def cmd_suite(args: argparse.Namespace) -> int:
         reporter.print_suite_summary(suite_result)
     print(f"Artifacts: {run_dir}")
 
-    regression_failed = any(
-        r.task.type == "regression" and r.pass_pow_k == 0.0 for r in results
-    )
+    regression_failed = any(r.task.type == "regression" and r.pass_pow_k == 0.0 for r in results)
     return EXIT_REGRESSION if regression_failed else EXIT_OK
 
 
@@ -390,8 +400,6 @@ def cmd_score(args: argparse.Namespace) -> int:
     if not meta_path.exists():
         print(f"No task_metadata.json in {task_dir}", file=sys.stderr)
         return EXIT_ERROR
-
-    import json
 
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     suite_meta, task = loader.load_task_with_suite(Path(meta["path"]))
@@ -410,8 +418,6 @@ def cmd_score(args: argparse.Namespace) -> int:
 
 def cmd_score_suite(args: argparse.Namespace) -> int:
     """Re-grade every task in an archived run directory against current criteria."""
-    import json
-
     run_dir = Path(args.results_path).resolve()
     run_meta_path = run_dir / "run_metadata.json"
     if not run_meta_path.exists():
@@ -477,7 +483,9 @@ def cmd_promote(args: argparse.Namespace) -> int:
     )
 
     if not args.force:
-        candidates = {c["task_id"] for c in ratchet.find_promotion_candidates(suite_name, threshold)}
+        candidates = {
+            c["task_id"] for c in ratchet.find_promotion_candidates(suite_name, threshold)
+        }
         if task_id not in candidates:
             print(
                 f"{task_id} is not a promotion candidate "
@@ -516,13 +524,23 @@ def cmd_demote(args: argparse.Namespace) -> int:
 def cmd_candidates(args: argparse.Namespace) -> int:
     if args.path:
         meta = loader.load_suite_meta(Path(args.path))
-        suites = [(str(meta["name"]), int(meta.get("promotion_threshold", config.DEFAULT_PROMOTION_THRESHOLD)))]
+        suites = [
+            (
+                str(meta["name"]),
+                int(meta.get("promotion_threshold", config.DEFAULT_PROMOTION_THRESHOLD)),
+            )
+        ]
     else:
         suites = []
         for d in sorted((config.FRAMEWORK_ROOT / "suites").iterdir()):
             if (d / "suite.toml").exists():
                 m = loader.load_suite_meta(d)
-                suites.append((str(m["name"]), int(m.get("promotion_threshold", config.DEFAULT_PROMOTION_THRESHOLD))))
+                suites.append(
+                    (
+                        str(m["name"]),
+                        int(m.get("promotion_threshold", config.DEFAULT_PROMOTION_THRESHOLD)),
+                    )
+                )
 
     found = False
     for name, threshold in suites:
@@ -535,6 +553,127 @@ def cmd_candidates(args: argparse.Namespace) -> int:
             )
     if not found:
         print("No promotion candidates.")
+    return EXIT_OK
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    raw: Any = json.loads(path.read_text(encoding="utf-8"))
+    return raw if isinstance(raw, dict) else {}
+
+
+def _matrix_run_dirs(args: argparse.Namespace) -> list[Path]:
+    if args.paths:
+        dirs = [Path(p) for p in args.paths]
+    else:
+        dirs = sorted(config.RESULTS_DIR.glob("matrix-*"))
+    return [d for d in dirs if (d / "run_metadata.json").exists()]
+
+
+def _short_model_label(model: str) -> str:
+    if "(" in model and model.endswith(")"):
+        return model.split("(", 1)[1][:-1]
+    return model
+
+
+def _matrix_row(run_dir: Path) -> dict[str, Any]:
+    meta = _load_json(run_dir / "run_metadata.json")
+    task_meta = [_load_json(path) for path in sorted(run_dir.glob("*/task_metadata.json"))]
+    task_meta = [task for task in task_meta if task]
+    task_count = len(task_meta)
+    pass_at_values = [float(task.get("pass_at_k", 0.0)) for task in task_meta]
+    pass_pow_values = [float(task.get("pass_pow_k", 0.0)) for task in task_meta]
+    zero_tasks = [str(task.get("id", "")) for task in task_meta if task.get("pass_pow_k") == 0.0]
+    pass_at_full = sum(1 for task in task_meta if task.get("pass_at_k") == 1.0)
+    pass_pow_full = sum(1 for task in task_meta if task.get("pass_pow_k") == 1.0)
+    error_trials = 0
+    sample_errors: list[str] = []
+    for trial_path in sorted(run_dir.glob("*/trial-*/trial.json")):
+        trial = _load_json(trial_path)
+        error = trial.get("error")
+        if error:
+            error_trials += 1
+            if len(sample_errors) < 3:
+                sample_errors.append(str(error))
+    return {
+        "run": run_dir.name,
+        "suite": str(meta.get("suite_name", "")),
+        "model": _short_model_label(str(meta.get("model", ""))),
+        "tasks": task_count,
+        "pass_at_full": pass_at_full,
+        "pass_pow_full": pass_pow_full,
+        "pass_pow_zero": len(zero_tasks),
+        "mean_pass_at": sum(pass_at_values) / task_count if task_count else 0.0,
+        "mean_pass_pow": sum(pass_pow_values) / task_count if task_count else 0.0,
+        "wall_min": float(meta.get("wall_seconds") or 0.0) / 60.0,
+        "agent_min": float(meta.get("agent_seconds_total") or 0.0) / 60.0,
+        "tokens": int(meta.get("total_tokens") or 0),
+        "error_trials": error_trials,
+        "zero_tasks": ", ".join(zero_tasks),
+        "sample_errors": " | ".join(sample_errors),
+    }
+
+
+def _print_matrix_table(rows: list[dict[str, Any]]) -> None:
+    headers = [
+        "run",
+        "suite",
+        "model",
+        "tasks",
+        "pass@k",
+        "pass^k",
+        "zero",
+        "mean@",
+        "mean^",
+        "wall",
+        "tokens",
+        "errors",
+    ]
+    table_rows = []
+    for row in rows:
+        table_rows.append(
+            [
+                row["run"],
+                row["suite"],
+                row["model"],
+                str(row["tasks"]),
+                f"{row['pass_at_full']}/{row['tasks']}",
+                f"{row['pass_pow_full']}/{row['tasks']}",
+                str(row["pass_pow_zero"]),
+                f"{row['mean_pass_at']:.3f}",
+                f"{row['mean_pass_pow']:.3f}",
+                f"{row['wall_min']:.1f}m",
+                str(row["tokens"]),
+                str(row["error_trials"]),
+            ]
+        )
+    widths = [
+        min(48, max(len(str(cell)) for cell in [header, *[row[i] for row in table_rows]]))
+        for i, header in enumerate(headers)
+    ]
+    print("  ".join(header.ljust(widths[i]) for i, header in enumerate(headers)))
+    print("  ".join("-" * width for width in widths))
+    for row in table_rows:
+        print("  ".join(str(cell)[: widths[i]].ljust(widths[i]) for i, cell in enumerate(row)))
+
+
+def cmd_matrix(args: argparse.Namespace) -> int:
+    run_dirs = _matrix_run_dirs(args)
+    if not run_dirs:
+        print("No completed matrix runs found.")
+        return EXIT_OK
+    rows = [_matrix_row(run_dir) for run_dir in run_dirs]
+    rows.sort(key=lambda row: (row["suite"], row["model"], row["run"]))
+    _print_matrix_table(rows)
+
+    failures = [row for row in rows if row["pass_pow_zero"] or row["error_trials"]]
+    if failures and not args.no_details:
+        print("\nRuns needing attention:")
+        for row in failures:
+            print(f"- {row['run']}")
+            if row["zero_tasks"]:
+                print(f"  pass^k=0 tasks: {row['zero_tasks']}")
+            if row["sample_errors"]:
+                print(f"  sample errors: {row['sample_errors']}")
     return EXIT_OK
 
 
@@ -566,7 +705,9 @@ def _add_run_flags(p: argparse.ArgumentParser) -> None:
         help=f"override the subject backend ({', '.join(subjects.available_backends())})",
     )
     p.add_argument("--grader-model", default=None)
-    p.add_argument("--grader-backend", default=None, help="judge backend (claude-cli | openai-compat)")
+    p.add_argument(
+        "--grader-backend", default=None, help="judge backend (claude-cli | openai-compat)"
+    )
     p.add_argument("--timeout", type=int, default=None)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--skip-grading", action="store_true")
@@ -604,13 +745,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_score = sub.add_parser("score", help="re-grade archived trials (zero inference)")
     p_score.add_argument("results_path")
     p_score.add_argument("--grader-model", default=None)
-    p_score.add_argument("--grader-backend", default=None, help="judge backend (claude-cli | openai-compat)")
+    p_score.add_argument(
+        "--grader-backend", default=None, help="judge backend (claude-cli | openai-compat)"
+    )
     p_score.set_defaults(func=cmd_score)
 
     p_score_suite = sub.add_parser("score-suite", help="re-grade all tasks in an archived run")
-    p_score_suite.add_argument("results_path", help="path to a run directory (contains run_metadata.json)")
+    p_score_suite.add_argument(
+        "results_path", help="path to a run directory (contains run_metadata.json)"
+    )
     p_score_suite.add_argument("--grader-model", default=None)
-    p_score_suite.add_argument("--grader-backend", default=None, help="judge backend (claude-cli | openai-compat)")
+    p_score_suite.add_argument(
+        "--grader-backend", default=None, help="judge backend (claude-cli | openai-compat)"
+    )
     p_score_suite.set_defaults(func=cmd_score_suite)
 
     p_promote = sub.add_parser("promote", help="capability → regression")
@@ -627,6 +774,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_cand = sub.add_parser("candidates", help="list promotion candidates")
     p_cand.add_argument("path", nargs="?", default=None)
     p_cand.set_defaults(func=cmd_candidates)
+
+    p_matrix = sub.add_parser("matrix", help="summarize completed matrix runs")
+    p_matrix.add_argument(
+        "paths",
+        nargs="*",
+        help="result run directories; defaults to every results/matrix-* run",
+    )
+    p_matrix.add_argument(
+        "--no-details",
+        action="store_true",
+        help="suppress pass^k=0 task lists and sample endpoint errors",
+    )
+    p_matrix.set_defaults(func=cmd_matrix)
 
     return parser
 

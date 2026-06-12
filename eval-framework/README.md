@@ -137,6 +137,7 @@ results/               trial artifacts (gitignored)
 | `promote <task>` | Capability → regression (candidate-gated; `--force`). |
 | `demote <task> --reason` | Regression → capability. |
 | `candidates [<suite>]` | Show tasks eligible for promotion. |
+| `matrix [<run-dir> ...]` | Summarize completed model-matrix result directories. |
 
 Common flags: `--trials N`, `--backend`, `--model`, `--tier-model N=MODEL`,
 `--tier0-model MODEL` ... `--tier3-model MODEL`, `--grader-backend`,
@@ -154,6 +155,13 @@ python3 run.py suite suites/glassrail-openrouter \
 
 **Exit codes:** `0` success · `1` a regression task scored pass^k = 0 (CI
 gating signal) · `2` framework error.
+
+For model-matrix analysis, point `matrix` at explicit run directories or omit
+paths to summarize every completed `results/matrix-*` run:
+
+```bash
+python3 run.py matrix results/matrix-20260612T173659Z-rerun-*
+```
 
 ## Writing tasks
 
