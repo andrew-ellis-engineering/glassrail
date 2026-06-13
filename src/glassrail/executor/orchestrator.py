@@ -36,7 +36,7 @@ from glassrail.events import (
     TaskFailed,
 )
 from glassrail.executor.executor import Executor
-from glassrail.planner import Planner
+from glassrail.planner import Planner, rejection_retry_feedback
 from glassrail.state import StateStore
 from glassrail.telemetry import (
     ATTR_PLAN_REJECTION_REASON,
@@ -293,6 +293,34 @@ class Orchestrator:
         state.touch()
         await self._store.save_task(state)
 
+    async def _mark_plan_rejected(
+        self,
+        state: ExecutionState,
+        plan_attempt: PlanningAttempt,
+    ) -> None:
+        log.warning("[%s] Task rejected by planner: %s", state.task_id, plan_attempt.error)
+        state.status = TaskStatus.REJECTED
+        state.error = plan_attempt.error
+        state.touch()
+
+    def _answerable_rejection_retry_feedback(
+        self,
+        state: ExecutionState,
+        plan_attempt: PlanningAttempt,
+        *,
+        attempt: int,
+        attempts: int,
+    ) -> str | None:
+        retry_feedback = rejection_retry_feedback(plan_attempt.error)
+        if retry_feedback is None or attempt >= attempts - 1:
+            return None
+        log.warning(
+            "[%s] Planner rejected an answerable task (attempt %d); retrying",
+            state.task_id,
+            attempt,
+        )
+        return retry_feedback
+
     async def _present_or_execute(self, state: ExecutionState) -> None:
         """Announce the validated plan, then gate on confirmation or execute.
 
@@ -336,6 +364,7 @@ class Orchestrator:
         # can explicitly avoid repeating it.
         prior_reasoning: str | None = None
         validation_feedback: str | None = None
+        rejected_answer_feedback: str | None = None
 
         for attempt in range(attempts):
             try:
@@ -346,6 +375,7 @@ class Orchestrator:
                     feedback=feedback,
                     prior_reasoning=prior_reasoning,
                     validation_feedback=validation_feedback,
+                    rejection_feedback=rejected_answer_feedback,
                     # Enable thinking on retry only when the previous attempt
                     # failed for a non-timeout reason.  Thinking makes the
                     # planner slower; retrying a timeout with thinking enabled
@@ -389,24 +419,25 @@ class Orchestrator:
                 await self._save_planning_attempt(state, plan_attempt)
 
                 if plan_attempt.error_type == "rejection":
-                    # Deliberate planner decision — don't retry.
-                    log.warning(
-                        "[%s] Task rejected by planner: %s", state.task_id, plan_attempt.error
+                    retry_feedback = self._answerable_rejection_retry_feedback(
+                        state,
+                        plan_attempt,
+                        attempt=attempt,
+                        attempts=attempts,
                     )
-                    state.status = TaskStatus.REJECTED
-                    state.error = plan_attempt.error
-                    state.touch()
+                    if retry_feedback is not None:
+                        rejected_answer_feedback = retry_feedback
+                        prior_reasoning, validation_feedback = None, None
+                        last_error = plan_attempt.error
+                        last_error_type = "rejection"
+                        continue
+
+                    # Deliberate planner decision or retry budget exhausted.
+                    await self._mark_plan_rejected(state, plan_attempt)
                     return None
 
-                if plan_attempt.error_type == "stall":
-                    prior_reasoning = plan_attempt.error_detail or plan_attempt.raw_output
-                else:
-                    prior_reasoning = None
-                validation_feedback = (
-                    plan_attempt.error
-                    if plan_attempt.error_type in ("schema", "validation")
-                    else None
-                )
+                prior_reasoning, validation_feedback = _planning_retry_context(plan_attempt)
+                rejected_answer_feedback = None
 
                 last_error = plan_attempt.error
                 last_error_type = plan_attempt.error_type
@@ -436,6 +467,18 @@ class Orchestrator:
 
 def _summary(plan: Plan) -> str:
     return "\n".join(f"  {n.id}. [{n.type}] {n.description}" for n in plan.nodes)
+
+
+def _planning_retry_context(plan_attempt: PlanningAttempt) -> tuple[str | None, str | None]:
+    prior_reasoning = (
+        plan_attempt.error_detail or plan_attempt.raw_output
+        if plan_attempt.error_type == "stall"
+        else None
+    )
+    validation_feedback = (
+        plan_attempt.error if plan_attempt.error_type in ("schema", "validation") else None
+    )
+    return prior_reasoning, validation_feedback
 
 
 def _structural_retry_feedback(request: str, plan: Plan) -> str | None:

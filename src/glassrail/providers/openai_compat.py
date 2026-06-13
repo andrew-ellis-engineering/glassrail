@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from typing import Any, NamedTuple
+from dataclasses import dataclass
+from typing import Any, NamedTuple, cast
 
 import httpx
 
@@ -30,6 +31,32 @@ class _EventFields(NamedTuple):
     tool_name: str | None
     tool_args: str
     tokens: int | None
+
+
+@dataclass
+class _StreamState:
+    """Mutable accumulator for one streamed completion attempt."""
+
+    emitted_content: bool = False
+    saw_reasoning: bool = False
+    tool_call_name: str | None = None
+    tool_call_args: str = ""
+    finish_reason: str | None = None
+    tokens: int | None = None
+
+    def apply(self, fields: _EventFields) -> Chunk | None:
+        if fields.finish_reason is not None:
+            self.finish_reason = fields.finish_reason
+        self.saw_reasoning = self.saw_reasoning or bool(fields.reasoning)
+        if fields.tool_name is not None:
+            self.tool_call_name = fields.tool_name
+        self.tool_call_args += fields.tool_args
+        if fields.tokens is not None:
+            self.tokens = fields.tokens
+        if not fields.content:
+            return None
+        self.emitted_content = True
+        return Chunk(text=fields.content)
 
 
 class OpenAICompatProvider:
@@ -115,49 +142,50 @@ class OpenAICompatProvider:
 
         effective_timeout = timeout_s if timeout_s is not None else self._default_timeout_s
         url = f"{self._base_url}/chat/completions"
+        attempted_reasoning_retry = False
 
-        # Accumulated across deltas: tool calls arrive fragmented, and the
-        # finish_reason / usage land on separate trailing events.
-        emitted_content = False
-        saw_reasoning = False
-        tool_call_name: str | None = None
-        tool_call_args = ""
-        finish_reason: str | None = None
-        tokens: int | None = None
+        while True:
+            state = _StreamState()
 
-        try:
-            async with (
-                httpx.AsyncClient(timeout=effective_timeout, transport=self._transport) as client,
-                client.stream("POST", url, headers=headers, json=body) as resp,
-            ):
-                if resp.status_code >= 400:
-                    await resp.aread()
-                    self._raise_for_status(resp)
+            try:
+                async with (
+                    httpx.AsyncClient(
+                        timeout=effective_timeout,
+                        transport=self._transport,
+                    ) as client,
+                    client.stream("POST", url, headers=headers, json=body) as resp,
+                ):
+                    if resp.status_code >= 400:
+                        await resp.aread()
+                        retry_body = _reasoning_retry_body(
+                            resp,
+                            body=body,
+                            already_retried=attempted_reasoning_retry,
+                        )
+                        if retry_body is not None:
+                            body = retry_body
+                            attempted_reasoning_retry = True
+                            continue
+                        self._raise_for_status(resp)
 
-                async for line in resp.aiter_lines():
-                    event = _decode_sse_line(line)
-                    if event is None:
-                        continue
-                    fields = _parse_event(event)
-                    if fields.content:
-                        emitted_content = True
-                        yield Chunk(text=fields.content)
-                    saw_reasoning = saw_reasoning or bool(fields.reasoning)
-                    if fields.finish_reason is not None:
-                        finish_reason = fields.finish_reason
-                    if fields.tool_name is not None:
-                        tool_call_name = fields.tool_name
-                    tool_call_args += fields.tool_args
-                    if fields.tokens is not None:
-                        tokens = fields.tokens
-        except (httpx.TimeoutException, httpx.ConnectError) as exc:
-            raise ProviderUnavailableError(f"{self._name}: {type(exc).__name__}: {exc}") from exc
+                    async for line in resp.aiter_lines():
+                        event = _decode_sse_line(line)
+                        if event is None:
+                            continue
+                        chunk = state.apply(_parse_event(event))
+                        if chunk is not None:
+                            yield chunk
+            except (httpx.TimeoutException, httpx.ConnectError) as exc:
+                raise ProviderUnavailableError(
+                    f"{self._name}: {type(exc).__name__}: {exc}"
+                ) from exc
+            break
 
         # If the model returned reasoning tokens but no content, the reasoning
         # parameter was not honoured by the underlying provider. Surface a clear
         # error instead of letting the caller receive an empty string and produce
         # a confusing JSON parse failure downstream.
-        if not emitted_content and saw_reasoning and tool_call_name is None:
+        if not state.emitted_content and state.saw_reasoning and state.tool_call_name is None:
             raise ProviderError(
                 f"{self._name}: model returned only reasoning tokens with no content. "
                 "Reasoning is not disabled on this provider. "
@@ -166,11 +194,15 @@ class OpenAICompatProvider:
             )
 
         tool_content = ""
-        if not emitted_content and tool_call_name is not None:
-            tool_content = _synthesise_tool_content(tool_call_name, tool_call_args)
+        if not state.emitted_content and state.tool_call_name is not None:
+            tool_content = _synthesise_tool_content(state.tool_call_name, state.tool_call_args)
 
-        if tool_content or finish_reason is not None or tokens is not None:
-            yield Chunk(text=tool_content, finish_reason=finish_reason, tokens_used=tokens)
+        if tool_content or state.finish_reason is not None or state.tokens is not None:
+            yield Chunk(
+                text=tool_content,
+                finish_reason=state.finish_reason,
+                tokens_used=state.tokens,
+            )
 
     def _raise_for_status(self, resp: httpx.Response) -> None:
         """Translate HTTP error codes into typed provider exceptions.
@@ -210,6 +242,35 @@ class OpenAICompatProvider:
         if self._extra_body:
             body.update(self._extra_body)
         return body
+
+
+def _reasoning_retry_body(
+    resp: httpx.Response,
+    *,
+    body: dict[str, Any],
+    already_retried: bool,
+) -> dict[str, Any] | None:
+    if already_retried or not _requires_reasoning(resp):
+        return None
+    return _without_disabled_reasoning(body)
+
+
+def _requires_reasoning(resp: httpx.Response) -> bool:
+    body = resp.text.lower()
+    return "reasoning is mandatory" in body and "cannot be disabled" in body
+
+
+def _without_disabled_reasoning(body: dict[str, Any]) -> dict[str, Any] | None:
+    reasoning = body.get("reasoning")
+    if not isinstance(reasoning, dict):
+        return None
+    reasoning_body = cast("dict[str, Any]", reasoning)
+    disabled = reasoning_body.get("effort") == "none" or reasoning_body.get("enabled") is False
+    if not disabled:
+        return None
+    retry_body = dict(body)
+    retry_body.pop("reasoning", None)
+    return retry_body
 
 
 def _decode_sse_line(line: str) -> Any | None:

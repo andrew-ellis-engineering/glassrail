@@ -33,6 +33,7 @@ def _provider(
     handler: httpx.MockTransport,
     *,
     api_key: str = "",
+    extra_body: dict[str, object] | None = None,
 ) -> OpenAICompatProvider:
     return OpenAICompatProvider(
         name="tier0",
@@ -40,6 +41,7 @@ def _provider(
         base_url="http://test.local/v1",
         model="test-model",
         api_key=api_key,
+        extra_body=extra_body,
         transport=handler,
     )
 
@@ -94,6 +96,38 @@ async def test_request_sets_stream_and_auth() -> None:
     assert sent["stream_options"] == {"include_usage": True}
     assert sent["response_format"] == {"type": "json_object"}
     assert captured["auth"] == "Bearer secret"
+
+
+async def test_reasoning_mandatory_error_retries_without_disabled_reasoning() -> None:
+    bodies: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        if len(bodies) == 1:
+            return httpx.Response(
+                400,
+                json={
+                    "error": {
+                        "message": (
+                            "Reasoning is mandatory for this endpoint and cannot be disabled."
+                        )
+                    }
+                },
+            )
+        return httpx.Response(200, text=_sse(_content_event("ok", finish="stop")))
+
+    provider = _provider(
+        httpx.MockTransport(handler),
+        extra_body={"reasoning": {"effort": "none"}, "provider": {"require_parameters": True}},
+    )
+
+    text, _ = await collect(provider.complete(_MSG))
+
+    assert text == "ok"
+    assert bodies[0]["reasoning"] == {"effort": "none"}
+    assert "reasoning" not in bodies[1]
+    assert bodies[1]["provider"] == {"require_parameters": True}
 
 
 async def test_tool_call_is_synthesised_into_content() -> None:

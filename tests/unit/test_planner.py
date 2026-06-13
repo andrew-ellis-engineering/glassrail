@@ -11,7 +11,7 @@ import pytest
 from glassrail.config import NodeBudgets, NodePrompts, Settings, TierConfig
 from glassrail.core import NodeType, PlanRejectedError, PlanValidationError
 from glassrail.harness import ToolHarness, register_builtins
-from glassrail.planner import Planner
+from glassrail.planner import Planner, rejection_retry_feedback
 from glassrail.providers import Chunk, Message, TierRouter
 from glassrail.validator import PlanValidator
 
@@ -518,6 +518,30 @@ async def test_validation_feedback_injected_into_user_message(
     user_msg = provider.user_seen[0]
     assert "validation_feedback" in user_msg
     assert "context_needed=99" in user_msg
+
+
+async def test_rejection_feedback_injected_into_user_message(
+    harness: ToolHarness, settings: Settings
+) -> None:
+    payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
+    provider = _CapturingProvider(payload=payload)
+    planner = _planner_from(provider, harness, settings)
+
+    await planner.plan_attempt(
+        "do a thing",
+        attempt=1,
+        rejection_feedback="Ask one focused clarifying question.",
+    )
+    user_msg = provider.user_seen[0]
+    assert "rejection_feedback" in user_msg
+    assert "Ask one focused clarifying question." in user_msg
+    assert "Produce a valid plan, not a rejection" in user_msg
+
+
+def test_rejection_retry_feedback_only_targets_answerable_rejections() -> None:
+    assert rejection_retry_feedback("The request is too vague. Please specify the project.")
+    assert rejection_retry_feedback("The exact future value is unknowable; do not fabricate it.")
+    assert rejection_retry_feedback("No suitable tools available to send_email") is None
 
 
 async def test_no_prior_reasoning_leaves_prompt_clean(

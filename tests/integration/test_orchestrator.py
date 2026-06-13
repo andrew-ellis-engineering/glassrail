@@ -331,6 +331,53 @@ async def test_rejection_marks_task_rejected_and_does_not_retry() -> None:
     assert result.planning_attempts[0].error_type == "rejection"
 
 
+async def test_answerable_rejection_retries_with_feedback() -> None:
+    answerable_rejection = json.dumps(
+        {
+            "rejection": (
+                "The request is too vague. Please specify what kind of project "
+                "you are working on and what help you need."
+            )
+        }
+    )
+    clarifying_plan = json.dumps(
+        {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "result",
+                    "description": (
+                        "Ask one focused clarifying question about what kind of "
+                        "project this is and what help is needed."
+                    ),
+                    "context_needed": [],
+                }
+            ]
+        }
+    )
+    orch, store, provider = _build_capturing(
+        [
+            answerable_rejection,
+            clarifying_plan,
+            json.dumps({"output": "What kind of project is this?", "confidence": 0.9}),
+        ],
+        settings=Settings(max_replan_attempts=1),
+    )
+    state = await _seed_task(store, "Help me with my project")
+
+    await orch.run(state.task_id)
+    result = await store.load_task(state.task_id)
+
+    assert result is not None
+    assert result.status is TaskStatus.COMPLETED
+    assert result.final_output == "What kind of project is this?"
+    assert len(result.planning_attempts) == 2
+    assert result.planning_attempts[0].error_type == "rejection"
+    assert result.planning_attempts[1].valid is True
+    assert "<rejection_feedback>" in provider.user_messages[1]
+    assert "Produce a valid plan, not a rejection" in provider.user_messages[1]
+
+
 async def test_rejection_emits_plan_rejected_event() -> None:
     orch, store, bus = _build_with_bus([_REJECTION_PAYLOAD])
     state = await _seed_task(store, "send an email to nobody")

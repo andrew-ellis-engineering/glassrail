@@ -97,6 +97,9 @@ class Planner:
                 min_tier=effective_min_tier,
                 feedback=feedback,
                 thinking=True,
+                rejection_feedback=rejection_retry_feedback(attempt.error)
+                if attempt.error_type == "rejection"
+                else None,
                 validation_feedback=attempt.error if attempt.error_type == "validation" else None,
             )
             if retry.filepath:
@@ -212,6 +215,7 @@ class Planner:
         feedback: str | None = None,
         prior_reasoning: str | None = None,
         validation_feedback: str | None = None,
+        rejection_feedback: str | None = None,
         thinking: bool = False,
     ) -> PlanningAttempt:
         """Generate one plan attempt and retain raw output plus validation errors.
@@ -223,6 +227,9 @@ class Planner:
         ``validation_feedback`` carries the validator/schema failure from the
         immediately preceding attempt, letting the model correct a concrete plan
         defect instead of retrying cold.
+
+        ``rejection_feedback`` carries guidance after a previous mistaken
+        rejection of a request that can be answered with a result node.
 
         ``thinking`` re-enables extended reasoning on the model by stripping the
         ``/no_think`` directive. Used on the retry attempt after a rejection or
@@ -265,6 +272,13 @@ class Planner:
                     "validation. Produce a corrected plan that fixes this exact "
                     "problem while preserving the user's intent:\n"
                     f"<validation_feedback>\n{validation_feedback}\n</validation_feedback>"
+                )
+            if rejection_feedback:
+                user_content += (
+                    "\n\nA previous planning attempt rejected an answerable request. "
+                    "Produce a valid plan, not a rejection, that preserves the "
+                    "user's intent and answers through an ordinary result node:\n"
+                    f"<rejection_feedback>\n{rejection_feedback}\n</rejection_feedback>"
                 )
             system_prompt = self._settings.prompts.planner
             if thinking:
@@ -410,6 +424,80 @@ class Planner:
             if any(keyword in text for keyword in suspected_keywords)
             else "legitimate"
         )
+
+
+def rejection_retry_feedback(reason: str | None) -> str | None:
+    """Return retry guidance when a rejection describes an answerable task."""
+    if not reason:
+        return None
+    text = reason.lower()
+    if _looks_like_missing_capability_rejection(text):
+        return None
+    if any(
+        marker in text
+        for marker in (
+            "too vague",
+            "vague",
+            "underspecified",
+            "clarifying",
+            "please specify",
+            "safe next steps",
+        )
+    ):
+        return (
+            "The request is vague or underspecified, but that is answerable. "
+            "Emit a result node whose description asks one focused clarifying "
+            "question or offers safe next steps. Do not emit a rejection."
+        )
+    if any(
+        marker in text
+        for marker in (
+            "unknown",
+            "unknowable",
+            "future",
+            "private",
+            "random",
+            "cannot be predicted",
+            "cannot predict",
+            "uncertainty",
+            "calibrated",
+            "do not fabricate",
+            "not knowable",
+            "unverifiable",
+        )
+    ):
+        return (
+            "The exact value may be unknown or unknowable, but that is "
+            "answerable. Emit a result node whose description says the exact "
+            "value is unknown or unknowable, explains why, and avoids "
+            "fabrication. Do not emit a rejection."
+        )
+    return None
+
+
+def _looks_like_missing_capability_rejection(text: str) -> bool:
+    return any(
+        marker in text
+        for marker in (
+            "send_email",
+            "registered tool",
+            "tool is not registered",
+            "not registered",
+            "required tool",
+            "no suitable tools",
+            "available tools",
+        )
+    ) and not any(
+        answerable_marker in text
+        for answerable_marker in (
+            "calibrated uncertainty",
+            "clarifying",
+            "too vague",
+            "vague",
+            "unknown",
+            "unknowable",
+        )
+    )
 
 
 def _repair_plan_payload(plan_payload: dict[str, Any]) -> None:
