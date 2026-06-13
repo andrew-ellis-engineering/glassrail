@@ -14,8 +14,8 @@ Early development — the engine runs end to end (plan → validate → execute 
 tier routing, with persistence, a typed event stream, and a REST gateway), and
 the
 [eval framework](https://github.com/andrew-ellis-engineering/glassrail/tree/main/eval-framework)
-measures it. The Phase 1 eval gate is met and the first PyPI release is being
-published as `0.1.0`. Treat APIs as unstable while Glassrail is in 0.x. See
+measures it. The Phase 1 eval gate is met and the first PyPI release has been
+published. Treat APIs as unstable while Glassrail is in 0.x. See
 [CHANGELOG.md](https://github.com/andrew-ellis-engineering/glassrail/blob/main/CHANGELOG.md)
 for what's landed and the
 [roadmap](https://andrew-ellis-engineering.github.io/glassrail/roadmap/) for
