@@ -1,6 +1,6 @@
 [project]
 name = "glassrail"
-version = "0.1.1"
+version = "0.1.2"
 description = "A DAG-planning agent with deterministic tier routing, fresh context per node, and plan-as-document semantics."
 readme = "README.md"
 requires-python = ">=3.12"

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-06-13
+
+### Fixed
+- `glassrail version` now reports the installed package metadata version instead
+  of a duplicated runtime constant, preventing release metadata drift.
+
 ## [0.1.1] - 2026-06-13
 
 ### Added
