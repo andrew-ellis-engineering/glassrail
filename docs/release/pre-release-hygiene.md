@@ -2,8 +2,8 @@
 
 ## Purpose
 
-Make the repository credible, clean, and easy to trust before the first public
-package release and launch push. This workstream is about reducing friction and
+Make the repository credible, clean, and easy to trust before public package
+releases and launch pushes. This workstream is about reducing friction and
 embarrassment risk: stale names, stale URLs, untracked artifacts, confusing
 install instructions, accidental secrets, loose docs, and release-blocking
 quality issues.
@@ -78,7 +78,7 @@ Items to confirm before release:
 - `mkdocs.yml` `site_url`, `repo_url`, and `repo_name` point at the current
   Glassrail repo/docs home.
 - `README.md` status text says the Phase 1 eval gate is met, APIs are still
-  0.x unstable, and the first PyPI release is being prepared or already live.
+  0.x unstable, and PyPI installation is available.
 
 ### README alignment
 
@@ -89,7 +89,7 @@ release, update it so a new user immediately sees:
   inspectable, validated, and repeatable.
 - What is stable enough to try.
 - That APIs are still 0.x and may change.
-- How to install from PyPI once released.
+- How to install from PyPI.
 - How to run from source for development.
 - How to configure at least one model tier.
 - Where eval results, architecture docs, and the roadmap live.
@@ -99,9 +99,10 @@ instead.
 
 ### Changelog and version audit
 
-Before cutting the release:
+Before cutting a release:
 
-- Move the `0.1.0` section from unreleased status to a dated release section.
+- Move the version's changelog entries from unreleased status to a dated release
+  section.
 - Keep an `Unreleased` section at the top for future work.
 - Ensure release notes name user-visible capabilities and operational
   reliability work, not every internal implementation detail.

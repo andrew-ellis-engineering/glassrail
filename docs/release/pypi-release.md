@@ -3,7 +3,7 @@
 ## Purpose
 
 Publish Glassrail as an installable Python package so people can try the agent
-without cloning the repository. The first release should communicate maturity
+without cloning the repository. Public releases should communicate maturity
 where it exists - validated plans, deterministic tier routing, fresh context,
 telemetry, evals - while being explicit that the API is still 0.x and subject
 to change.
@@ -14,7 +14,7 @@ gate, and a clean operational surface.
 
 ## Scope
 
-- Publish `glassrail` to PyPI.
+- Publish a `glassrail` version to PyPI.
 - Verify package metadata and README rendering.
 - Validate install and CLI smoke tests from the published package.
 - Create a GitHub release and version tag.
@@ -58,8 +58,9 @@ compatibility policy, and a stronger field record.
 
 - Start from current `main`.
 - Apply final hygiene fixes.
-- Update `CHANGELOG.md`: date the `0.1.0` section.
-- Confirm `pyproject.toml` version is `0.1.0`.
+- Update `CHANGELOG.md`: move the version's entries from `Unreleased` to a
+  dated release section.
+- Confirm `pyproject.toml` version matches the version being released.
 - Confirm package URLs and docs URLs are current.
 - Run the full check sweep and docs build.
 
@@ -137,8 +138,8 @@ After upload, verify:
 Create and push the version tag:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v<version>
+git push origin v<version>
 ```
 
 Create a GitHub release using the changelog as source material. The release
@@ -157,17 +158,17 @@ notes should emphasize:
 PyPI releases are effectively immutable. If a bad artifact is uploaded:
 
 - Yank the broken version if users should avoid it.
-- Fix forward with `0.1.1`.
+- Fix forward with the next patch version.
 - Document the issue in the changelog.
 - Do not delete GitHub tags or rewrite release history unless no public release
   was actually published.
 
 ## Acceptance criteria
 
-- `glassrail==0.1.0` is installable from PyPI.
+- `glassrail==<version>` is installable from PyPI.
 - The installed `glassrail` command exposes help successfully.
 - The README renders correctly on PyPI.
-- GitHub has a `v0.1.0` tag and release.
+- GitHub has a matching version tag and release.
 - `CHANGELOG.md` records the dated release.
 - Docs and README point users to the release and next steps.
 - Known limitations are explicit and not buried.
@@ -185,5 +186,5 @@ Within the first hour:
 Within the first week:
 
 - Fix documentation friction quickly.
-- Cut `0.1.1` for packaging or install bugs if needed.
+- Cut a patch release for packaging or install bugs if needed.
 - Avoid bundling unrelated feature work into release fixes.
