@@ -12,6 +12,31 @@ uv sync --all-extras --group dev
 uv run pre-commit install
 ```
 
+## Pull request workflow
+
+All changes to `main` go through pull requests. Direct pushes to `main` are
+blocked for maintainers and contributors alike; work on a branch or fork, open a
+PR, let CI run, resolve review threads, and merge only after the branch is green.
+
+For outside contributors, a maintainer reviews the PR and decides whether to
+merge it. For maintainer-authored work, the same PR-and-CI path applies; the
+maintainer may merge their own PR once checks pass and any open discussion is
+resolved.
+
+Keep PRs focused. The description should cover:
+
+- What changed and why.
+- How you validated it.
+- Whether docs, config, CLI behavior, evals, or release notes need updates.
+- Any follow-up work or known risk.
+
+Large architectural changes should start as an issue or design discussion before
+code. Routine fixes, docs improvements, and tightly scoped tests can go straight
+to PR.
+
+The repository uses squash merges for a linear `main`; delete branches after
+merge unless there is a clear reason to keep them.
+
 ## Before you open a PR
 
 Run the full check sweep and make sure it's green — CI runs the same on
