@@ -1,8 +1,6 @@
 site_name: Glassrail
 site_description: A DAG-planning agent with deterministic tier routing and fresh context per node.
-site_url: https://andrew-ellis-engineering.github.io/glassrail/
-repo_url: https://github.com/andrew-ellis-engineering/glassrail
-repo_name: andrew-ellis-engineering/glassrail
+site_url: https://www.andrewellisengineering.com/glassrail/
 
 theme:
   name: material

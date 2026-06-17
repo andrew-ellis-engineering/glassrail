@@ -14,6 +14,15 @@ on:
       - "mkdocs.yml"
       - "src/glassrail/**"
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-pages
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build docs
@@ -30,8 +39,20 @@ jobs:
         run: uv sync --all-extras --group dev
       - name: Build site
         run: uv run mkdocs build --strict
-      - name: Upload site
-        uses: actions/upload-artifact@v4
+      - uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: site
           path: site/
+
+  deploy:
+    name: Deploy docs
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
