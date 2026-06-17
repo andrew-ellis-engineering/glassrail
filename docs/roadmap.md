@@ -234,7 +234,10 @@ running continuously alongside. Done since the Phase 1 baseline:
    reuse + clean shutdown. Spec: [specs/node-resilience.md](specs/node-resilience.md).
 3. **Configurable routing table** — `[routing]` node-type → tier map replacing
    the hardcoded `_select_tier` policy; prerequisite for the Phase 2.5 tier-ROI
-   selector. Spec: [specs/routing-table.md](specs/routing-table.md).
+   selector. Also the lever for large-task economics — route planner and
+   synthesis nodes to capable tiers and the bulk of leaf nodes to cheap tiers,
+   concentrating spend where the hard reasoning is. Spec:
+   [specs/routing-table.md](specs/routing-table.md).
 4. **Serving hardening** — lifespan runtime build, EventBus drop visibility +
    per-task subscriptions, SSE keepalive, resume idempotency. Spec:
    [specs/serving-hardening.md](specs/serving-hardening.md) (items 1–4; 5–6
@@ -244,6 +247,15 @@ running continuously alongside. Done since the Phase 1 baseline:
    `NodePrompts`, dead validator check, `ToolRisk` layer fix, `_Scripted`
    consolidation, `Planner.plan()` removal, subplan id/confidence,
    postprocess tests, image-tool docs).
+6. **Prompt caching for planner and node prompts** *(independent of the items
+   above; low-risk, land early)* — cache the static planner system prefix
+   (~3.8k tokens) and the per-node executor system prompts, and reorder the
+   planner prompt so the request-selected cookbook and the request itself trail
+   the static prefix that becomes the cache key. No caching exists today; the
+   prompt bytes are unchanged, so it is quality-neutral and cuts cost, not raw
+   token count. Measurement depends on the Track 2d planner-token accounting fix
+   — the run envelope counts execution nodes only, so the planner cost the cache
+   reduces is invisible until that lands.
 
 ### Track 2b — Capability layer
 
@@ -267,7 +279,12 @@ running continuously alongside. Done since the Phase 1 baseline:
   a bounded concurrency semaphore. Aggregation v1: `collect` (list of outputs)
   and `synthesis` (hand off to a synthesis node). No `reduce` or conditional
   loops. Conditional loops ("repeat until X") belong at the orchestrator layer.
-  See `vault/Spec - Foreach Node (Loops).md`.
+  See `vault/Spec - Foreach Node (Loops).md`. This is the breadth path for large
+  plans — wide, enumerable fan-out over a (possibly runtime-discovered) list,
+  cheap parallel leaves, one capable synthesis. The first large-plan demo and
+  eval target should be a wide research/analysis task, not a refactor; it plays
+  to the architecture's strengths, and the depth path (graph growth driven by
+  what execution discovers) is Phase 3.
 - **HITL clarifying-questions node** — a new node type that pauses execution to
   ask the user a targeted question before proceeding, distinct from plan
   approval. The model decides what to ask; the answer is injected into
@@ -278,6 +295,22 @@ running continuously alongside. Done since the Phase 1 baseline:
   (e.g. Obsidian vault notes). Gives the planner a starting scaffold for
   well-understood task types rather than reasoning from scratch each time.
   *[needs further spec: retrieval mechanism, file format, update workflow]*
+- **Staged planning (planner preflight + templates)** — make planning itself a
+  small fixed DAG instead of one monolithic prompt; the realization of the
+  "dedicated planner preflight/classifier node" foreshadowed by top-k cookbook
+  candidates ✓. (1) A tier-0 triage classifier routes a request to a canned
+  single-node plan when no planning is warranted (~25% of observed tasks already
+  resolve to a one-node result plan), to the HITL clarifying-questions node when
+  underspecified, or onward when real planning is needed. (2) Template-first
+  generation — promote cookbook `skeleton`s into structured plan templates so a
+  recognized shape takes its topology from the template and the LLM only fills
+  slots, against a tool schema filtered to that template's tools. (3) The current
+  monolithic planner is demoted to the fallback for unrecognized shapes; also
+  trim its prompt (the full tool JSON and the digest are redundant). The savings
+  come from gate + filter + tier, not from splitting — a naive split that
+  re-sends the schema per stage costs more. Dogfoods the DAG thesis on the last
+  opaque monolithic prompt in the system. Static-prefix caching lands in Track
+  2a; measurement depends on the Track 2d token-accounting fix.
 
 ### Track 2c — Assistant surfaces
 
@@ -340,7 +373,18 @@ running continuously alongside. Done since the Phase 1 baseline:
   the harness exit code.
 - **Comparative baselines** — raw model vs ReAct loop vs glassrail on answer
   quality and tokens/task. Spec:
-  [specs/comparative-baselines.md](specs/comparative-baselines.md).
+  [specs/comparative-baselines.md](specs/comparative-baselines.md). First
+  three-way run (2026-06-17, qwen3-8b, trials=3): glassrail leads reliability
+  (pass@k 1.00 vs 0.92, and never hard-fails a task where both baselines whiff on
+  two each) but spends ~3–4x the tokens; held-out is clean (12/12). Follow-ups
+  before publishing: (1) count planner tokens — the run envelope sums execution
+  nodes only, so the reported figure excludes the largest cost center and
+  understates spend; (2) build `baseline-react-heldout` / `baseline-raw-heldout`
+  suites with the glassrail trajectory criteria stripped, for a neutral-ground
+  comparison; (3) re-run at trials=10, since pass^k is too thin at 3. Reframe the
+  published claim from a token-economics win (refuted at small-task scale) to
+  reliability + inspectability at a token premium, with the cost thesis to be
+  re-tested at large-task scale.
 
 ## Phase 2.5 — Dreaming
 
@@ -430,6 +474,27 @@ Autonomous research, scheduler, web tools, emergent subplans, mid-graph subplans
   and an output-aggregation strategy. Requires non-trivial validator and
   executor changes. *[needs further spec: loop node schema, termination
   semantics, aggregation modes]*
+
+- **Emergent / mid-graph subplans** — the depth path for large plans: a node
+  generating a bounded sub-DAG from its own output at execution time, still
+  acyclic (the sub-DAG hangs off the parent, node- and depth-capped). What
+  discovery-driven tasks need — deep research where the question tree is found by
+  reading, not enumerated up front — and the natural extension of the static
+  subplan mechanism. *[open: pull a constrained version forward from Phase 3 if
+  depth tasks become strategically important sooner]*
+
+- **Cross-node coherence primitive** — a compact pinned global context (spec /
+  invariants) every node sees, for tasks whose global constraints fresh-per-node
+  context otherwise loses. Required before codebase refactor is viable; the
+  alternative of re-injecting full context per node defeats the token model.
+  *[needs further spec: what gets pinned, size budget, context-assembly
+  injection point]*
+
+- **Codebase refactor as multi-DAG orchestration** — the hardest large-task
+  target: discovery of blast radius, global coherence, and an act→observe→revise
+  loop (edit → run tests → replan from failures) that lives at the orchestrator
+  layer as successive DAGs, not one graph. Built on file-editing tools (Track
+  2b), a verification/test node, and the coherence primitive above. Demo last.
 
 ## Phase 4 — Production & Community
 
