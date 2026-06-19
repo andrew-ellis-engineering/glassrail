@@ -234,12 +234,14 @@ to repeat it.
 
 ### Node prompts
 
-Each node role (planner, decision, think, synthesis, summary, result, and the
-tool-output shape check) has a system prompt you can override without editing
-source — under `[prompts]` in `config.toml` or `GLASSRAIL_PROMPTS__<FIELD>`. The
-defaults live in `glassrail.config.prompts`. A custom prompt must keep
-instructing the model to emit the JSON shape its node expects (e.g. a summary
-prompt must still ask for `{"summary": ..., "confidence": ...}`).
+Each node role and LLM micro-call (`planner`, `decision`, `extract_args`,
+`think`, `synthesis`, `summary`, `summary_concise`, `summary_verbose`,
+`result`, and `shape_check`) has a system prompt you can override without
+editing source — under `[prompts]` in `config.toml` or
+`GLASSRAIL_PROMPTS__<FIELD>`. The defaults live in `glassrail.config.prompts`.
+A custom prompt must keep instructing the model to emit the JSON shape its node
+expects (e.g. a summary prompt must still ask for
+`{"summary": ..., "confidence": ...}`).
 
 ### Tools
 

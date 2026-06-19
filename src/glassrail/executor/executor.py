@@ -19,7 +19,6 @@ from typing import ClassVar, NamedTuple, cast
 from opentelemetry.trace import Status, StatusCode
 
 from glassrail.config import Settings, ToolApprovalMode, ToolApprovalPolicy
-from glassrail.config import prompts as default_prompts
 from glassrail.core import (
     BranchLogEntry,
     ExecutionState,
@@ -1100,9 +1099,9 @@ class Executor:
         prompts = self._settings.prompts
         if node.type is NodeType.SUMMARY:
             if node.format is SummaryFormat.CONCISE:
-                return default_prompts.SUMMARY_CONCISE_SYSTEM
+                return prompts.summary_concise
             if node.format is SummaryFormat.VERBOSE:
-                return default_prompts.SUMMARY_VERBOSE_SYSTEM
+                return prompts.summary_verbose
             return prompts.summary
         return {
             NodeType.THINK: prompts.think,
@@ -1135,16 +1134,14 @@ class Executor:
         tier: int,
     ) -> dict[str, object]:
         schema = self._harness.schema_for(node.tool or "")
-        prompt = (
-            f"Extract the arguments for tool '{node.tool}' from the context below.\n"
-            f"Tool schema: {json.dumps(schema)}\n\n"
-            f"Context:\n{ctx}\n\n"
-            "Respond ONLY with a JSON object of the arguments."
-        )
+        prompt = f"Tool: {node.tool}\nTool schema: {json.dumps(schema)}\n\nContext:\n{ctx}"
         try:
             raw, _ = await collect(
                 self._router.complete(
-                    [{"role": "user", "content": prompt}],
+                    [
+                        {"role": "system", "content": self._settings.prompts.extract_args},
+                        {"role": "user", "content": prompt},
+                    ],
                     min_tier=tier,
                     json_mode=True,
                     max_tokens=self._settings.budgets.extract_args,

@@ -21,6 +21,7 @@ from glassrail.config import (
 from glassrail.core import (
     ExecutionState,
     Node,
+    NodeResult,
     NodeStatus,
     NodeType,
     Plan,
@@ -1214,8 +1215,8 @@ async def test_content_node_uses_configured_prompt() -> None:
     assert provider.system_seen == ["CUSTOM SUMMARY PROMPT"]
 
 
-async def test_summary_format_selects_variant_prompts() -> None:
-    """Concise and verbose summary nodes use distinct system prompts."""
+async def test_summary_format_uses_configured_variant_prompts() -> None:
+    """Concise and verbose summary nodes use their configured system prompts."""
     provider = _CapturingProvider(
         [
             json.dumps({"summary": "short", "confidence": 0.9}),
@@ -1225,7 +1226,12 @@ async def test_summary_format_selects_variant_prompts() -> None:
     executor = Executor(
         router=TierRouter([provider]),
         harness=ToolHarness(),
-        settings=Settings(),
+        settings=Settings(
+            prompts=NodePrompts(
+                summary_concise="CUSTOM CONCISE SUMMARY PROMPT",
+                summary_verbose="CUSTOM VERBOSE SUMMARY PROMPT",
+            )
+        ),
     )
     state = _state(
         Plan(
@@ -1248,10 +1254,62 @@ async def test_summary_format_selects_variant_prompts() -> None:
 
     await executor.execute(state)
 
-    assert len(provider.system_seen) == 2
-    assert "concise 1-3 sentence summary" in provider.system_seen[0]
-    assert "thorough summary preserving all key facts" in provider.system_seen[1]
-    assert provider.system_seen[0] != provider.system_seen[1]
+    assert provider.system_seen == [
+        "CUSTOM CONCISE SUMMARY PROMPT",
+        "CUSTOM VERBOSE SUMMARY PROMPT",
+    ]
+
+
+async def test_extract_args_uses_configured_prompt() -> None:
+    """Tool-args extraction uses the configured extract_args system prompt."""
+    provider = _CapturingProvider(
+        [
+            json.dumps({"path": "/tmp/value.txt"}),
+            _SHAPE_OK,
+        ]
+    )
+    harness = ToolHarness()
+
+    async def read_path(path: str) -> dict[str, str]:
+        return {"path": path}
+
+    harness.tool(
+        name="read_path",
+        description="read a path",
+        parameters={
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+    )(read_path)
+    executor = Executor(
+        router=TierRouter([provider]),
+        harness=harness,
+        settings=Settings(prompts=NodePrompts(extract_args="CUSTOM EXTRACT ARGS PROMPT")),
+    )
+    plan = Plan(
+        nodes=[
+            Node(
+                id=2,
+                type=NodeType.TOOL,
+                description="read the path from context",
+                tool="read_path",
+                context_needed=[1],
+            )
+        ]
+    )
+    state = _state(plan)
+    state.results[1] = NodeResult(
+        node_id=1,
+        status=NodeStatus.COMPLETED,
+        output={"path": "/tmp/value.txt"},
+    )
+
+    await executor.execute(state)
+
+    assert provider.system_seen[0] == "CUSTOM EXTRACT ARGS PROMPT"
+    assert "Tool schema:" in provider.user_seen[0]
+    assert state.results[2].args_used == {"path": "/tmp/value.txt"}
 
 
 async def test_decision_context_includes_direct_dependents() -> None:

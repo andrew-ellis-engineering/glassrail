@@ -274,6 +274,19 @@ Output nothing but valid JSON: {"branch": "<chosen label>", "confidence": <0.0-1
 /no_think
 """
 
+DEFAULT_EXTRACT_ARGS_SYSTEM = """\
+You extract tool arguments from a node's context and the tool's JSON Schema.
+
+Return only the arguments object. Use keys from the schema, preserve exact
+paths, identifiers, URLs, and quoted values from the context, and do not invent
+arguments that are not supported by the schema. If the context is insufficient,
+return an empty JSON object.
+
+Respond ONLY with a JSON object.
+
+/no_think
+"""
+
 DEFAULT_SYNTHESIS_SYSTEM = """\
 You are a synthesis engine. Combine the provided context into the output requested by the node.
 Preserve important facts, caveats, names, dates, figures, source attributions,

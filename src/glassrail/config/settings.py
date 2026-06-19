@@ -116,12 +116,18 @@ class NodePrompts(BaseModel):
     """Plan generation — must request the plan JSON schema."""
     decision: str = _prompts.DEFAULT_DECISION_SYSTEM
     """Binary branch evaluation — must request {branch, confidence}."""
+    extract_args: str = _prompts.DEFAULT_EXTRACT_ARGS_SYSTEM
+    """Tool argument extraction — must request a JSON object."""
     think: str = _prompts.DEFAULT_THINK_SYSTEM
     """Multi-step reasoning — must request {reasoning, confidence}."""
     synthesis: str = _prompts.DEFAULT_SYNTHESIS_SYSTEM
     """Combine prior outputs — must request {output, confidence}."""
     summary: str = _prompts.DEFAULT_SUMMARY_SYSTEM
     """Condense upstream context — must request {summary, confidence}."""
+    summary_concise: str = _prompts.SUMMARY_CONCISE_SYSTEM
+    """Concise summary variant — must request {summary, confidence}."""
+    summary_verbose: str = _prompts.SUMMARY_VERBOSE_SYSTEM
+    """Verbose summary variant — must request {summary, confidence}."""
     result: str = _prompts.DEFAULT_RESULT_SYSTEM
     """The final answer — must request {output, confidence}."""
     shape_check: str = _prompts.DEFAULT_SHAPE_CHECK_SYSTEM

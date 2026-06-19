@@ -15,7 +15,7 @@ tests/` — includes `providers/base.py`'s `ProviderError` parentage). No
 deprecation alias: there are zero external users before the first release.
 The eval framework never imports glassrail, so it is unaffected.
 
-## 2. Fold the stray prompts into `NodePrompts`
+## 2. Fold the stray prompts into `NodePrompts` — implemented 2026-06-19
 
 Every node role's system prompt is configurable via `settings.prompts` —
 except three:

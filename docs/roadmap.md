@@ -252,14 +252,16 @@ running continuously alongside. Done since the Phase 1 baseline:
 - **Resume idempotency** ✓ — REST resume claims a paused task as executing
   before queueing background work, so duplicate submissions cannot schedule two
   resumes.
+- **Executor prompt config cleanup** ✓ — extract-args plus concise/verbose
+  summary prompts now live under `NodePrompts`, keeping all executor LLM prompt
+  roles configurable from `[prompts]`.
 
 ### Track 2a — Engine reliability core (in order)
 
 1. **Small fixes / API cleanup** — remaining items of
-   specs/small-fixes.md (stray prompts into
-   `NodePrompts`, dead validator check, `ToolRisk` layer fix, `_Scripted`
-   consolidation, `Planner.plan()` removal, subplan id/confidence,
-   postprocess tests, image-tool docs).
+   specs/small-fixes.md (dead validator check, `ToolRisk` layer fix,
+   `_Scripted` consolidation, `Planner.plan()` removal, subplan id/confidence,
+   postprocess tests).
 2. **Prompt caching for planner and node prompts** *(independent of the items
    above; low-risk, land early)* — cache the static planner system prefix
    (~3.8k tokens) and the per-node executor system prompts, and reorder the

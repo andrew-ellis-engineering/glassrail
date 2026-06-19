@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of module import, while keeping injected test/runtime wiring explicit.
 - REST and ACP event consumers now use task-scoped EventBus subscriptions so
   unrelated tasks cannot evict the active task's queued events.
+- Extract-args and summary variant prompts now flow through `NodePrompts`, so
+  all executor LLM prompt roles can be overridden from `[prompts]`.
 - Branch skip propagation now auto-skips downstream nodes whose declared
   non-decision inputs were all skipped, while preserving shared join nodes that
   consume at least one completed input.
