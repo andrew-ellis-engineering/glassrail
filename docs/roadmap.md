@@ -235,27 +235,28 @@ running continuously alongside. Done since the Phase 1 baseline:
   summary, synthesis, and result nodes now retry retry-safe provider failures
   under `[resilience]`, with retry counts recorded on `NodeResult` and scripted
   provider error directives for deterministic eval coverage.
+- **Provider connection reuse and shutdown** ✓ — OpenAI-compatible providers
+  reuse a persistent `httpx.AsyncClient`, and router/runtime shutdown now
+  closes provider resources from CLI, ACP, and REST app lifespans.
 
- ### Track 2a — Engine reliability core (in order)
+### Track 2a — Engine reliability core (in order)
 
- 1. **Node resilience, Part B** — provider connection reuse plus clean shutdown
-    for the router/runtime. Spec: specs/node-resilience.md.
-2. **Configurable routing table** — `[routing]` node-type → tier map replacing
+1. **Configurable routing table** — `[routing]` node-type → tier map replacing
    the hardcoded `_select_tier` policy; prerequisite for the Phase 2.5 tier-ROI
    selector. Also the lever for large-task economics — route planner and
    synthesis nodes to capable tiers and the bulk of leaf nodes to cheap tiers,
    concentrating spend where the hard reasoning is. Spec:
    specs/routing-table.md.
-3. **Serving hardening** — lifespan runtime build, EventBus drop visibility +
+2. **Serving hardening** — EventBus drop visibility +
    per-task subscriptions, SSE keepalive, resume idempotency. Spec:
    specs/serving-hardening.md (items 1–4; 5–6
    land in the release window).
-5. **Small fixes / API cleanup** — remaining items of
+3. **Small fixes / API cleanup** — remaining items of
    specs/small-fixes.md (stray prompts into
    `NodePrompts`, dead validator check, `ToolRisk` layer fix, `_Scripted`
    consolidation, `Planner.plan()` removal, subplan id/confidence,
    postprocess tests, image-tool docs).
-6. **Prompt caching for planner and node prompts** *(independent of the items
+4. **Prompt caching for planner and node prompts** *(independent of the items
    above; low-risk, land early)* — cache the static planner system prefix
    (~3.8k tokens) and the per-node executor system prompts, and reorder the
    planner prompt so the request-selected cookbook and the request itself trail

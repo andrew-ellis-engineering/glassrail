@@ -83,6 +83,7 @@ class OpenAICompatProvider:
         self._extra_body: dict[str, Any] = extra_body or {}
         # Injectable for tests (httpx.MockTransport). None → httpx default.
         self._transport = transport
+        self._client: httpx.AsyncClient | None = None
 
     @property
     def name(self) -> str:
@@ -95,6 +96,16 @@ class OpenAICompatProvider:
     @property
     def model(self) -> str:
         return self._model
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=None, transport=self._transport)
+        return self._client
+
+    async def aclose(self) -> None:
+        """Close the persistent HTTP client, if it has been opened."""
+        if self._client is not None:
+            await self._client.aclose()
 
     async def is_healthy(self, timeout_s: float = 3.0) -> bool:
         """Return True if the endpoint is reachable and reports healthy.
@@ -112,18 +123,17 @@ class OpenAICompatProvider:
             root = root[: -len("/v1")]
         url = f"{root}/health"
         try:
-            async with httpx.AsyncClient(timeout=timeout_s) as client:
-                resp = await client.get(url)
-                if resp.status_code == 200:
-                    try:
-                        body = resp.json()
-                        return body.get("status") == "healthy"
-                    except Exception:
-                        # Non-JSON 200 (e.g. an HTML landing page from a cloud
-                        # provider that doesn't expose /health) — assume available.
-                        return True
-                # 404 → server doesn't implement /health; assume available.
-                return resp.status_code == 404
+            resp = await self._get_client().get(url, timeout=timeout_s)
+            if resp.status_code == 200:
+                try:
+                    body = resp.json()
+                    return body.get("status") == "healthy"
+                except Exception:
+                    # Non-JSON 200 (e.g. an HTML landing page from a cloud
+                    # provider that doesn't expose /health) — assume available.
+                    return True
+            # 404 → server doesn't implement /health; assume available.
+            return resp.status_code == 404
         except (httpx.ConnectError, httpx.TimeoutException):
             return False
 
@@ -148,13 +158,13 @@ class OpenAICompatProvider:
             state = _StreamState()
 
             try:
-                async with (
-                    httpx.AsyncClient(
-                        timeout=effective_timeout,
-                        transport=self._transport,
-                    ) as client,
-                    client.stream("POST", url, headers=headers, json=body) as resp,
-                ):
+                async with self._get_client().stream(
+                    "POST",
+                    url,
+                    headers=headers,
+                    json=body,
+                    timeout=effective_timeout,
+                ) as resp:
                     if resp.status_code >= 400:
                         await resp.aread()
                         retry_body = _reasoning_retry_body(

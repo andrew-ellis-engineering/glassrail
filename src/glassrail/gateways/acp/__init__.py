@@ -40,4 +40,7 @@ async def run_acp(*, fast_mode: bool = False) -> None:
     runtime = build_runtime(_settings_for_acp(fast_mode=fast_mode), interactive_tool_approval=True)
     reader, writer = await stdio_streams()
     server = AcpServer(runtime, Connection(reader, writer))
-    await server.serve()
+    try:
+        await server.serve()
+    finally:
+        await runtime.aclose()

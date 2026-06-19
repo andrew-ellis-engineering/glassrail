@@ -1,12 +1,10 @@
 # Spec: Node resilience
 
-Status: Part A implemented (2026-06-19); Part B proposed
+Status: Implemented (2026-06-19)
 Priority: P1. Independent of other specs; suggested merge order is after
 [parallel-execution](parallel-execution.md) to avoid rebase churn in
 `executor.py`.
-Depends on: nothing (hard); [serving-hardening](serving-hardening.md) item 1
-provides the natural shutdown hook for Part B's `aclose()` — if it has not
-landed, wire `aclose()` into the call sites listed below.
+Depends on: nothing.
 
 ## Purpose
 

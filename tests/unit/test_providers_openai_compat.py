@@ -8,6 +8,7 @@ would a real streamed response.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import httpx
 import pytest
@@ -196,3 +197,33 @@ async def test_malformed_sse_lines_are_skipped() -> None:
 
     text, _ = await collect(provider.complete(_MSG))
     assert text == "clean"
+
+
+async def test_reuses_async_client_between_complete_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+    clients: list[httpx.AsyncClient] = []
+    real_client = httpx.AsyncClient
+
+    def handler(_req: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, text=_sse(_content_event(f"ok-{calls}", finish="stop")))
+
+    def client_factory(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        client = real_client(*args, **kwargs)
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(httpx, "AsyncClient", client_factory)
+    provider = _provider(httpx.MockTransport(handler))
+    try:
+        first, _ = await collect(provider.complete(_MSG))
+        second, _ = await collect(provider.complete(_MSG))
+
+        assert first == "ok-1"
+        assert second == "ok-2"
+        assert len(clients) == 1
+    finally:
+        await provider.aclose()
+
+    assert clients[0].is_closed

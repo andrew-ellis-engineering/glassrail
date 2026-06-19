@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation and PyPI project links now point at the live product site and the
   canonical docs domain; the README references the published product site instead of
   the retired temporary URL.
+- OpenAI-compatible providers now reuse a persistent HTTP client, with
+  runtime shutdown closing provider resources across CLI, ACP, and REST entry
+  points.
 - Branch skip propagation now auto-skips downstream nodes whose declared
   non-decision inputs were all skipped, while preserving shared join nodes that
   consume at least one completed input.

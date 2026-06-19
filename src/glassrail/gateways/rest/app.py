@@ -8,7 +8,8 @@ module-level default for ``uvicorn glassrail.gateways.rest:app``.
 from __future__ import annotations
 
 import secrets
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -87,6 +88,20 @@ def _terminal_snapshot(state: ExecutionState) -> Event | None:
     return None
 
 
+def _lifespan_for(on_shutdown: Callable[[], Awaitable[None]] | None) -> Any:
+    if on_shutdown is None:
+        return None
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
+        try:
+            yield
+        finally:
+            await on_shutdown()
+
+    return lifespan
+
+
 async def _event_source(
     store: StateStore,
     bus: EventBus,
@@ -130,9 +145,10 @@ def create_app(
     harness: ToolHarness,
     event_bus: EventBus | None = None,
     api_key: str | None = None,
+    on_shutdown: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
     """Build the FastAPI app from explicit collaborators."""
-    api = FastAPI(title="Glassrail", version=__version__)
+    api = FastAPI(title="Glassrail", version=__version__, lifespan=_lifespan_for(on_shutdown))
 
     @api.middleware("http")
     async def require_bearer(
@@ -249,6 +265,7 @@ def create_default_app(settings: Settings | None = None) -> FastAPI:
         harness=rt.harness,
         event_bus=rt.event_bus,
         api_key=resolved_settings.api_key,
+        on_shutdown=rt.aclose,
     )
 
 

@@ -6,6 +6,7 @@ import pytest
 
 from glassrail.config import Settings
 from glassrail.harness import ToolHarness
+from glassrail.providers import TierRouter
 from glassrail.runtime import build_runtime
 
 
@@ -31,3 +32,18 @@ def test_build_runtime_loads_tool_plugins_when_enabled(monkeypatch: pytest.Monke
     calls = _spy_load_entry_points(monkeypatch)
     build_runtime(Settings(load_tool_plugins=True))
     assert calls == ["glassrail.tools"]
+
+
+async def test_runtime_aclose_closes_router(monkeypatch: pytest.MonkeyPatch) -> None:
+    closed: list[TierRouter] = []
+
+    async def fake_aclose(self: TierRouter) -> None:
+        closed.append(self)
+
+    monkeypatch.setattr(TierRouter, "aclose", fake_aclose)
+    runtime = build_runtime(Settings())
+
+    await runtime.aclose()
+
+    assert runtime.router is not None
+    assert closed == [runtime.router]
