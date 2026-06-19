@@ -259,7 +259,7 @@ running continuously alongside. Done since the Phase 1 baseline:
 ### Track 2a — Engine reliability core (in order)
 
 1. **Small fixes / API cleanup** — remaining items of
-   specs/small-fixes.md (dead validator check, `ToolRisk` layer fix,
+   specs/small-fixes.md (`ToolRisk` layer fix,
    `_Scripted` consolidation, `Planner.plan()` removal, subplan id/confidence,
    postprocess tests).
 2. **Prompt caching for planner and node prompts** *(independent of the items

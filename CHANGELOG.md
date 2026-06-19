@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unrelated tasks cannot evict the active task's queued events.
 - Extract-args and summary variant prompts now flow through `NodePrompts`, so
   all executor LLM prompt roles can be overridden from `[prompts]`.
+- Missing decision branch targets are now validated in the topological sort
+  path only, removing a duplicate unreachable validator pass.
 - Branch skip propagation now auto-skips downstream nodes whose declared
   non-decision inputs were all skipped, while preserving shared join nodes that
   consume at least one completed input.

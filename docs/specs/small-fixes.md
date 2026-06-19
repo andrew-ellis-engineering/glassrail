@@ -36,7 +36,7 @@ Add `extract_args`, `summary_concise`, and `summary_verbose` fields to the
 executor prompt-dispatch tests (custom prompt for each of the three is
 honoured). README "Node prompts" section: note all roles are now overridable.
 
-## 3. Remove the dead validator check
+## 3. Remove the dead validator check — implemented 2026-06-19
 
 `PlanValidator._check_branch_references` in
 `src/glassrail/validator/validator.py` re-validates branch-target existence

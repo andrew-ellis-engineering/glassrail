@@ -7,7 +7,7 @@ import pytest
 from glassrail.config import Settings
 from glassrail.core import Node, NodeType, Plan, PlanValidationError
 from glassrail.harness import ToolHarness, register_builtins
-from glassrail.validator import PlanValidator
+from glassrail.validator import PlanValidator, topo_sort
 
 
 @pytest.fixture
@@ -232,6 +232,20 @@ def test_branch_reference_missing(validator: PlanValidator) -> None:
     )
     with pytest.raises(PlanValidationError, match="non-existent"):
         validator.validate(plan)
+
+
+def test_topo_sort_rejects_missing_branch_target() -> None:
+    plan = Plan(
+        nodes=[
+            _decision_node(1, {"yes": [99], "no": [2]}),
+            _tool_node(2),
+        ]
+    )
+    with pytest.raises(
+        PlanValidationError,
+        match=r"Decision node 1 branch 'yes' references non-existent node 99",
+    ):
+        topo_sort(plan)
 
 
 def test_branch_references_order_after_decision(validator: PlanValidator) -> None:
