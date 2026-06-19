@@ -242,6 +242,8 @@ class Executor:
         *,
         emit: bool,
         semaphore: asyncio.Semaphore | None = None,
+        path_prefix: str = "",
+        emit_task_completed: bool = True,
     ) -> ExecutionState:
         plan = state.plan
         if plan is None:
@@ -282,6 +284,7 @@ class Executor:
                         node_id=node_id,
                         bus=bus,
                         reason="all content dependencies were skipped",
+                        node_path=self._node_path(path_prefix, node_id),
                     )
                     dispatched = True
                     continue
@@ -298,6 +301,7 @@ class Executor:
                         node_map=node_map,
                         semaphore=semaphore,
                         bus=bus,
+                        path_prefix=path_prefix,
                     )
                 )
                 in_flight[task] = node_id
@@ -323,7 +327,10 @@ class Executor:
         state.final_output = self._extract_final_output(state, plan)
         state.status = TaskStatus.COMPLETED
         state.touch()
-        await self._emit(bus, TaskCompleted(task_id=state.task_id, final_output=state.final_output))
+        await self._emit(
+            bus if emit_task_completed else None,
+            TaskCompleted(task_id=state.task_id, final_output=state.final_output),
+        )
         return state
 
     async def _run_node(
@@ -335,6 +342,7 @@ class Executor:
         node_map: dict[int, Node],
         semaphore: asyncio.Semaphore,
         bus: EventBus | None,
+        path_prefix: str,
     ) -> None:
         if node.type is NodeType.SUBPLAN:
             await self._execute_and_record_node(
@@ -344,6 +352,7 @@ class Executor:
                 node_map=node_map,
                 semaphore=semaphore,
                 bus=bus,
+                path_prefix=path_prefix,
             )
             return
 
@@ -355,6 +364,7 @@ class Executor:
                 node_map=node_map,
                 semaphore=semaphore,
                 bus=bus,
+                path_prefix=path_prefix,
             )
 
     async def _execute_and_record_node(
@@ -366,8 +376,10 @@ class Executor:
         node_map: dict[int, Node],
         semaphore: asyncio.Semaphore,
         bus: EventBus | None,
+        path_prefix: str,
     ) -> None:
         node_id = node.id
+        node_path = self._node_path(path_prefix, node_id)
         tier = self._select_tier(node)
         with get_tracer().start_as_current_span(SPAN_NODE) as span:
             span.set_attribute(ATTR_NODE_ID, node_id)
@@ -381,10 +393,19 @@ class Executor:
                     node_id=node_id,
                     node_type=node.type,
                     tier=tier,
+                    node_path=node_path,
                 ),
             )
             t0 = time.monotonic()
-            result = await self._dispatch_node(node, state, tier, semaphore=semaphore, bus=bus)
+            result = await self._dispatch_node(
+                node,
+                state,
+                tier,
+                semaphore=semaphore,
+                bus=bus,
+                path_prefix=path_prefix,
+                node_path=node_path,
+            )
             result.execution_time_s = time.monotonic() - t0
             if result.tier_used is None:
                 result.tier_used = tier
@@ -418,12 +439,13 @@ class Executor:
                         node_id=node_id,
                         branch_taken=result.branch_taken,
                         confidence=result.confidence,
+                        node_path=node_path,
                     ),
                 )
             else:
                 skipped: set[int] = set()
 
-            await self._emit(bus, self._finished_event(state, result))
+            await self._emit(bus, self._finished_event(state, result, node_path=node_path))
 
         for skipped_id in sorted(skipped):
             if skipped_id in node_map and skipped_id not in state.results:
@@ -432,6 +454,7 @@ class Executor:
                     node_id=skipped_id,
                     bus=bus,
                     reason="excluded branch",
+                    node_path=self._node_path(path_prefix, skipped_id),
                 )
 
     async def _dispatch_node(
@@ -441,6 +464,8 @@ class Executor:
         tier: int,
         *,
         semaphore: asyncio.Semaphore,
+        path_prefix: str,
+        node_path: str | None,
         bus: EventBus | None = None,
     ) -> NodeResult:
         if node.type is NodeType.TOOL:
@@ -448,10 +473,18 @@ class Executor:
         if node.type is NodeType.DECISION:
             return await self._execute_decision(node, state, tier)
         if node.type is NodeType.SUBPLAN:
-            return await self._execute_subplan(node, state, semaphore=semaphore)
+            return await self._execute_subplan(
+                node,
+                state,
+                semaphore=semaphore,
+                emit_nested=bus is not None,
+                path_prefix=path_prefix,
+            )
         spec = _LLM_NODE_SPECS.get(node.type)
         if spec is not None:
-            return await self._execute_llm_node(node, state, tier, spec=spec, bus=bus)
+            return await self._execute_llm_node(
+                node, state, tier, spec=spec, bus=bus, node_path=node_path
+            )
         return NodeResult(
             node_id=node.id,
             status=NodeStatus.FAILED,
@@ -464,7 +497,12 @@ class Executor:
             await bus.publish(event)
 
     @staticmethod
-    def _finished_event(state: ExecutionState, result: NodeResult) -> NodeFinished:
+    def _finished_event(
+        state: ExecutionState,
+        result: NodeResult,
+        *,
+        node_path: str | None = None,
+    ) -> NodeFinished:
         return NodeFinished(
             task_id=state.task_id,
             node_id=result.node_id,
@@ -473,6 +511,7 @@ class Executor:
             flagged=result.flagged,
             tier_used=result.tier_used,
             error=result.error,
+            node_path=node_path,
         )
 
     @staticmethod
@@ -482,6 +521,7 @@ class Executor:
         node_id: int,
         bus: EventBus | None,
         reason: str,
+        node_path: str | None = None,
     ) -> None:
         result = NodeResult(node_id=node_id, status=NodeStatus.SKIPPED)
         state.results[node_id] = result
@@ -489,7 +529,7 @@ class Executor:
             state.skipped_nodes.append(node_id)
         state.touch()
         log.info("Node %d skipped (%s)", node_id, reason)
-        await Executor._emit(bus, Executor._finished_event(state, result))
+        await Executor._emit(bus, Executor._finished_event(state, result, node_path=node_path))
 
     # ── Per-node executors ────────────────────────────────────────────────
 
@@ -622,6 +662,7 @@ class Executor:
         *,
         spec: _LLMNodeSpec,
         bus: EventBus | None = None,
+        node_path: str | None = None,
     ) -> NodeResult:
         """Run a single-LLM-call node (synthesis / think / summary / result).
 
@@ -652,6 +693,7 @@ class Executor:
                 attempt_tier,
                 spec=spec,
                 bus=bus,
+                node_path=node_path,
             )
             result.tier_used = attempt_tier
             if result.status is NodeStatus.COMPLETED:
@@ -674,6 +716,7 @@ class Executor:
         *,
         spec: _LLMNodeSpec,
         bus: EventBus | None = None,
+        node_path: str | None = None,
     ) -> NodeResult:
         dependents = self._direct_dependents(node, state)
         ctx = assemble_context(node, state.results, dependent_nodes=dependents or None)
@@ -700,7 +743,9 @@ class Executor:
         )
         try:
             if node.type in _STREAMING_NODE_TYPES and bus is not None:
-                raw, tokens = await self._stream_llm_node(node, state, stream, spec, bus)
+                raw, tokens = await self._stream_llm_node(
+                    node, state, stream, spec, bus, node_path=node_path
+                )
             else:
                 raw, tokens = await collect(stream)
             try:
@@ -761,6 +806,8 @@ class Executor:
         stream: AsyncIterator[Chunk],
         spec: _LLMNodeSpec,
         bus: EventBus,
+        *,
+        node_path: str | None = None,
     ) -> tuple[str, int]:
         """Collect a streaming LLM response, publishing NodeOutputChunk events.
 
@@ -783,6 +830,7 @@ class Executor:
                             node_id=node.id,
                             node_type=node.type,
                             text=new_text,
+                            node_path=node_path,
                         ),
                     )
             if chunk.tokens_used is not None:
@@ -795,6 +843,8 @@ class Executor:
         state: ExecutionState,
         *,
         semaphore: asyncio.Semaphore,
+        emit_nested: bool,
+        path_prefix: str,
     ) -> NodeResult:
         """Run the nested plan in a fresh ExecutionState and bubble up its
         final_output as this node's output. The subplan does not see the
@@ -821,7 +871,13 @@ class Executor:
             plan=node.subplan,
         )
         try:
-            completed = await self._run(sub_state, emit=False, semaphore=semaphore)
+            completed = await self._run(
+                sub_state,
+                emit=emit_nested,
+                semaphore=semaphore,
+                path_prefix=self._child_path(path_prefix, node.id),
+                emit_task_completed=False,
+            )
         except Exception as exc:
             return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
 
@@ -840,6 +896,16 @@ class Executor:
         )
 
     # ── Helpers ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _node_path(path_prefix: str, node_id: int) -> str | None:
+        """External event path for a node, or None for top-level nodes."""
+        return f"{path_prefix}/{node_id}" if path_prefix else None
+
+    @staticmethod
+    def _child_path(path_prefix: str, node_id: int) -> str:
+        """Prefix to pass into a nested plan rooted at ``node_id``."""
+        return f"{path_prefix}/{node_id}" if path_prefix else str(node_id)
 
     async def _approve_tool_call(
         self,

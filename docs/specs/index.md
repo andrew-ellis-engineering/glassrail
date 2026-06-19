@@ -18,7 +18,7 @@ The roadmap ([roadmap](../roadmap.md)) owns *when* these happen; the specs own
 | [Security baseline](security-baseline.md) | P0 — items 1, 2, 5 before the tag; 3–4 before broad marketing | — | Implemented |
 | [Small fixes](small-fixes.md) | Mixed — item 1 (error rename) and item 9 (CLI tests) before the tag; rest anytime | — | Proposed |
 | [Serving hardening](serving-hardening.md) | P1 — item 5 (exit codes) and item 6 (`glassrail serve`) early | — | Items 5–6 implemented; remaining items proposed |
-| [Parallel execution](parallel-execution.md) | P1 — first engine workstream; prerequisite for `foreach` | — | Part A implemented; Part B proposed |
+| [Parallel execution](parallel-execution.md) | P1 — first engine workstream; prerequisite for `foreach` | — | Implemented |
 | [Node resilience](node-resilience.md) | P1 — independent; suggested after parallel execution to avoid rebase churn | — | Proposed |
 | [Routing table](routing-table.md) | P1 — prerequisite for the Phase 2.5 tier-ROI selector | — | Proposed |
 | [Comparative baselines](comparative-baselines.md) | P2 — launch evidence asset | Eval integrity (held-out suite) | Harness/suites implemented; full runs pending |

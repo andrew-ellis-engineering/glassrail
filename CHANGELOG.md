@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Independent ready DAG nodes now execute concurrently up to
   `max_concurrent_nodes` (`GLASSRAIL_MAX_CONCURRENT_NODES`, default `4`), with
   `1` preserving sequential execution.
+- REST event streams now include nested subplan node events with `node_path`
+  identifiers, while ACP and the Python TUI continue rendering only top-level
+  nodes.
 
 ### Changed
 - Documentation and PyPI project links now point at the live product site and the

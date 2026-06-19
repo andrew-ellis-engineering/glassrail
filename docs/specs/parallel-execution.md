@@ -1,9 +1,9 @@
 # Spec: Parallel node execution
 
-Status: Part A implemented (2026-06-19); Part B proposed
+Status: Implemented (2026-06-19)
 Priority: P1 — first engine workstream. Prerequisite for `foreach` (vault spec);
 `foreach`'s value is parallel fan-out and must not land on a sequential engine.
-Depends on: nothing. Part B is separately mergeable after Part A.
+Depends on: nothing.
 
 ## Purpose
 
@@ -12,10 +12,10 @@ nodes **strictly sequentially**: a plain `for node_id in plan.sorted_node_ids`
 loop awaiting one node at a time. Independent nodes — e.g. the N×M tool fan-out
 of a comparison task — are serialised even when they could run concurrently
 against cloud tiers. Public docs previously claimed "same layer = runs in
-parallel"; those claims have been corrected to "dependency layers" until this
-spec lands. This spec makes the executor actually run independent ready nodes
-concurrently, formalises skip-propagation semantics, and (Part B) makes
-subplan execution visible on the event stream.
+parallel"; those claims were corrected to "dependency layers" before Part A
+landed. This spec makes the executor actually run independent ready nodes
+concurrently, formalises skip-propagation semantics, and makes subplan
+execution visible on the event stream.
 
 ## Invariants that must survive (read before designing anything)
 
@@ -131,7 +131,7 @@ Replace the sequential loop with a ready-set scheduler:
 - Integration: full orchestrator run over a fan-out plan; final output and
   event set identical to the sequential baseline.
 
-## Part B — Subplan event visibility (separately mergeable)
+## Part B — Subplan event visibility
 
 Today `_execute_subplan` runs the nested plan with `emit=False`: subplan
 internals are invisible on every surface (REST/SSE, ACP, both TUIs), and

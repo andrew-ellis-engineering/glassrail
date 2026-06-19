@@ -228,23 +228,22 @@ running continuously alongside. Done since the Phase 1 baseline:
   immediately and auto-skips downstream nodes whose declared content inputs were
   all skipped, while preserving shared joins with at least one completed input.
    Spec: specs/parallel-execution.md Part A.
+- **Subplan event visibility** ✓ — nested subplan node events now carry
+   `node_path` on the REST event stream, while ACP and the Python TUI filter
+   nested child events to preserve their current top-level rendering.
 
 ### Track 2a — Engine reliability core (in order)
 
-1. **Parallel node execution, Part B** — subplan event visibility on the event
-   stream via `node_path`, while keeping current ACP and TUI rendering stable.
-   Prerequisite cleanup before `foreach`. Spec:
-   specs/parallel-execution.md.
-2. **Node resilience** — LLM-node retry with tier escalation
+1. **Node resilience** — LLM-node retry with tier escalation
    (`[resilience]`), scripted-provider error directives, provider connection
    reuse + clean shutdown. Spec: specs/node-resilience.md.
-3. **Configurable routing table** — `[routing]` node-type → tier map replacing
+2. **Configurable routing table** — `[routing]` node-type → tier map replacing
    the hardcoded `_select_tier` policy; prerequisite for the Phase 2.5 tier-ROI
    selector. Also the lever for large-task economics — route planner and
    synthesis nodes to capable tiers and the bulk of leaf nodes to cheap tiers,
    concentrating spend where the hard reasoning is. Spec:
    specs/routing-table.md.
-4. **Serving hardening** — lifespan runtime build, EventBus drop visibility +
+3. **Serving hardening** — lifespan runtime build, EventBus drop visibility +
    per-task subscriptions, SSE keepalive, resume idempotency. Spec:
    specs/serving-hardening.md (items 1–4; 5–6
    land in the release window).

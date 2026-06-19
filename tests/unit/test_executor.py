@@ -27,7 +27,14 @@ from glassrail.core import (
     TaskStatus,
     new_task_id,
 )
-from glassrail.events import EventBus, NodeOutputChunk, TaskCompleted
+from glassrail.events import (
+    Event,
+    EventBus,
+    NodeFinished,
+    NodeOutputChunk,
+    NodeStarted,
+    TaskCompleted,
+)
 from glassrail.executor import Executor
 from glassrail.executor.executor import JsonFieldStreamer
 from glassrail.executor.tool_approval import ToolApprovalBroker
@@ -785,6 +792,40 @@ async def test_subplan_bubbles_nested_final_output() -> None:
     out = await executor.execute(state)
     assert out.results[1].status is NodeStatus.COMPLETED
     assert out.results[1].output == "nested answer"
+
+
+async def test_subplan_emits_nested_events_with_node_path() -> None:
+    nested_payload = json.dumps({"output": "nested answer", "confidence": 0.95})
+    bus = EventBus()
+    executor = Executor(
+        router=TierRouter([_ScriptedProvider([nested_payload])]),
+        harness=ToolHarness(),
+        settings=Settings(),
+        event_bus=bus,
+    )
+    nested = Plan(nodes=[Node(id=2, type=NodeType.RESULT, description="nested final")])
+    nested.sorted_node_ids = [2]
+    plan = Plan(
+        nodes=[Node(id=4, type=NodeType.SUBPLAN, description="delegate", subplan=nested)],
+    )
+    state = _state(plan)
+
+    async with bus.subscribe() as sub:
+        await executor.execute(state)
+        events: list[Event] = []
+        while True:
+            event = await asyncio.wait_for(anext(sub), timeout=1)
+            events.append(event)
+            if isinstance(event, TaskCompleted):
+                break
+
+    started = [e for e in events if isinstance(e, NodeStarted)]
+    finished = [e for e in events if isinstance(e, NodeFinished)]
+    completed = [e for e in events if isinstance(e, TaskCompleted)]
+
+    assert [(e.node_id, e.node_path) for e in started] == [(4, None), (2, "4/2")]
+    assert [(e.node_id, e.node_path) for e in finished] == [(2, "4/2"), (4, None)]
+    assert len(completed) == 1
 
 
 async def test_subplan_request_preserves_parent_task_instructions() -> None:

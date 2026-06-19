@@ -16,6 +16,12 @@ Planning and node events carry the debugging payload needed to inspect bad
 runs: `plan_ready` includes the accepted plan, `plan_failed` / `task_failed`
 include `planning_attempts` when planning never produced a valid plan, and
 `node_finished` includes an `error` field for failed or flagged nodes.
+When a subplan runs, REST streams include its child node events too:
+`node_started`, `node_finished`, `node_output_chunk`, and `branch_decided`
+carry `node_path` for nested nodes. Top-level node events use `null`; a child
+node `2` inside subplan node `4` uses `"4/2"`. Nested subplan node events do
+not emit their own terminal `task_completed`; the outer task still owns the
+stream lifecycle.
 
 If you connect *after* the task already finished, you don't miss out: the
 server synthesises a single snapshot event for the terminal state and closes.

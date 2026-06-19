@@ -527,6 +527,96 @@ async def test_plan_graph_includes_decision_control_edges() -> None:
     ]
 
 
+class _NestedEventOrchestrator(Orchestrator):
+    def __init__(self, *, event_bus: EventBus, store: InMemoryStateStore) -> None:
+        self._bus = event_bus
+        self._store = store
+
+    async def run(self, task_id: TaskId) -> None:  # type: ignore[override]
+        state = await self._store.load_task(task_id)
+        assert state is not None
+        await self._bus.publish(
+            PlanReady(
+                task_id=task_id,
+                node_count=1,
+                plan={
+                    "nodes": [{"id": 1, "type": "subplan", "description": "delegate"}],
+                    "sorted_node_ids": [1],
+                },
+            )
+        )
+        await self._bus.publish(
+            NodeStarted(task_id=task_id, node_id=1, node_type=NodeType.SUBPLAN, tier=0)
+        )
+        await self._bus.publish(
+            NodeStarted(
+                task_id=task_id,
+                node_id=2,
+                node_type=NodeType.THINK,
+                tier=0,
+                node_path="1/2",
+            )
+        )
+        await self._bus.publish(
+            NodeOutputChunk(
+                task_id=task_id,
+                node_id=2,
+                node_type=NodeType.THINK,
+                text="internal subplan text",
+                node_path="1/2",
+            )
+        )
+        await self._bus.publish(
+            NodeFinished(
+                task_id=task_id,
+                node_id=2,
+                status=NodeStatus.COMPLETED,
+                confidence=1.0,
+                flagged=False,
+                tier_used=0,
+                node_path="1/2",
+            )
+        )
+        state.results[1] = NodeResult(
+            node_id=1, status=NodeStatus.COMPLETED, output="outer answer", tier_used=0
+        )
+        state.final_output = "outer answer"
+        state.status = TaskStatus.COMPLETED
+        await self._store.save_task(state)
+        await self._bus.publish(
+            NodeFinished(
+                task_id=task_id,
+                node_id=1,
+                status=NodeStatus.COMPLETED,
+                confidence=1.0,
+                flagged=False,
+                tier_used=0,
+            )
+        )
+        await self._bus.publish(TaskCompleted(task_id=task_id, final_output="outer answer"))
+
+
+async def test_acp_filters_nested_subplan_events() -> None:
+    conn = _RecordingConnection([])
+    bus = EventBus()
+    store = InMemoryStateStore()
+    runtime = Runtime(
+        orchestrator=_NestedEventOrchestrator(event_bus=bus, store=store),
+        store=store,
+        harness=ToolHarness(),
+        event_bus=bus,
+        settings=get_settings(),
+    )
+    server = AcpServer(runtime, conn)
+
+    await _prompt(server, conn)
+
+    messages = conn.updates_of("agent_message_chunk")
+    assert all(m["content"]["text"] != "internal subplan text" for m in messages)
+    assert any(m["content"]["text"] == "outer answer" for m in messages)
+    assert {m["nodeId"] for m in conn.updates_of("node_meta")} == {1}
+
+
 async def test_prompt_rejects_unknown_session() -> None:
     conn = _RecordingConnection([])
     server = _build_server(conn)
