@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   all executor LLM prompt roles can be overridden from `[prompts]`.
 - Missing decision branch targets are now validated in the topological sort
   path only, removing a duplicate unreachable validator pass.
+- `ToolRisk` now lives in `glassrail.core`, removing an events-to-harness layer
+  inversion while preserving the `glassrail.harness` re-export.
 - Branch skip propagation now auto-skips downstream nodes whose declared
   non-decision inputs were all skipped, while preserving shared join nodes that
   consume at least one completed input.

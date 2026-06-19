@@ -45,7 +45,7 @@ the same message — the second check is unreachable for that case. Write a
 test proving `topo_sort` raises on a missing branch target (if one doesn't
 already exist), then delete `_check_branch_references` and its call site.
 
-## 4. Move `ToolRisk` to `core` (fixes a layer inversion)
+## 4. Move `ToolRisk` to `core` (fixes a layer inversion) — implemented 2026-06-19
 
 `src/glassrail/events/types.py` imports `ToolRisk` from
 `glassrail.harness` — the events package importing *upward* into harness,

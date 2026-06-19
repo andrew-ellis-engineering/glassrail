@@ -13,8 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from glassrail.core import NodeStatus, NodeType, TaskId
-from glassrail.harness import ToolRisk
+from glassrail.core import NodeStatus, NodeType, TaskId, ToolRisk
 
 
 def _utcnow() -> datetime:

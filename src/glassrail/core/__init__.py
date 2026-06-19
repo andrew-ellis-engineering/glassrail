@@ -22,7 +22,7 @@ from glassrail.core.execution import (
     TaskStatus,
 )
 from glassrail.core.ids import TaskId, new_task_id
-from glassrail.core.plan import Node, NodeType, Plan, SummaryFormat
+from glassrail.core.plan import Node, NodeType, Plan, SummaryFormat, ToolRisk
 
 __all__ = [
     "BranchLogEntry",
@@ -41,5 +41,6 @@ __all__ = [
     "TaskStatus",
     "ToolExecutionError",
     "ToolRegistrationError",
+    "ToolRisk",
     "new_task_id",
 ]

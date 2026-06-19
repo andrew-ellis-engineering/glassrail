@@ -9,7 +9,7 @@ The graph is validated by :mod:`glassrail.validator`.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -39,6 +39,16 @@ class SummaryFormat(StrEnum):
     """Balanced paragraph; the default summary shape."""
     VERBOSE = "verbose"
     """Full detail; preserves all key facts for a user-facing result."""
+
+
+ToolRisk = Literal["read", "network", "write", "execute"]
+"""Declared side-effect risk for a tool.
+
+- ``read``    — no side effects; reads local data only.
+- ``network`` — reads from external sources; may leak information or incur cost.
+- ``write``   — modifies local state.
+- ``execute`` — runs arbitrary code or shell commands; highest risk.
+"""
 
 
 class Node(BaseModel):
