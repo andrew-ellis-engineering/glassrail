@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OpenAI-compatible providers now reuse a persistent HTTP client, with
   runtime shutdown closing provider resources across CLI, ACP, and REST entry
   points.
+- The REST gateway now builds its default runtime during the FastAPI lifespan
+  instead of module import, while keeping injected test/runtime wiring explicit.
 - Branch skip propagation now auto-skips downstream nodes whose declared
   non-decision inputs were all skipped, while preserving shared join nodes that
   consume at least one completed input.

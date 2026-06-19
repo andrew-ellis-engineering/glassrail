@@ -241,10 +241,13 @@ running continuously alongside. Done since the Phase 1 baseline:
 - **Configurable routing table** ✓ — `[routing]` now controls the deterministic
   node-type → tier map while preserving the shipped defaults; this is the
   config surface the Phase 2.5 tier-ROI selector can later write into.
+- **REST runtime lifespan wiring** ✓ — the module-level FastAPI app now defers
+  default runtime construction to ASGI lifespan startup and closes it on
+  shutdown; explicit injected apps still pre-populate their runtime.
 
 ### Track 2a — Engine reliability core (in order)
 
-1. **Serving hardening** — EventBus drop visibility +
+1. **Serving hardening (remaining)** — EventBus drop visibility +
    per-task subscriptions, SSE keepalive, resume idempotency. Spec:
    specs/serving-hardening.md (items 1–4; 5–6
    land in the release window).

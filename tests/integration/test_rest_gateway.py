@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import AsyncIterator
 from collections.abc import Sequence as _Sequence
 
 import pytest
 from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
 
 from glassrail.config import Settings
 from glassrail.core import ExecutionState, NodeResult, NodeStatus, TaskStatus, new_task_id
+from glassrail.events import EventBus
 from glassrail.executor import Executor, Orchestrator
-from glassrail.gateways.rest import create_app
+from glassrail.gateways.rest import create_app, create_default_app
 from glassrail.harness import ToolHarness, register_builtins
 from glassrail.planner import Planner
 from glassrail.providers import Chunk, Message, TierRouter
@@ -96,6 +99,40 @@ def test_auth_accepts_correct_bearer() -> None:
     client, _ = _wired(api_key="secret")
     resp = client.get("/tools", headers={"Authorization": "Bearer secret"})
     assert resp.status_code == 200
+
+
+def test_default_app_builds_runtime_during_lifespan(monkeypatch: MonkeyPatch) -> None:
+    calls: list[Settings] = []
+    closed: list[bool] = []
+
+    class _BuiltRuntime:
+        def __init__(self, settings: Settings) -> None:
+            self.orchestrator = object()
+            self.store = InMemoryStateStore()
+            self.harness = ToolHarness()
+            self.event_bus = EventBus()
+            self.settings = settings
+
+        async def aclose(self) -> None:
+            closed.append(True)
+
+    def fake_build_runtime(settings: Settings) -> _BuiltRuntime:
+        calls.append(settings)
+        return _BuiltRuntime(settings)
+
+    settings = Settings(api_key="secret")
+    rest_module = sys.modules["glassrail.gateways.rest.app"]
+    monkeypatch.setattr(rest_module, "build_runtime", fake_build_runtime)
+
+    app = create_default_app(settings)
+
+    assert calls == []
+    with TestClient(app) as client:
+        assert calls == [settings]
+        assert client.get("/health").status_code == 200
+        assert client.get("/tools").status_code == 401
+        assert client.get("/tools", headers={"Authorization": "Bearer secret"}).status_code == 200
+    assert closed == [True]
 
 
 def test_submit_task_returns_id_and_status(

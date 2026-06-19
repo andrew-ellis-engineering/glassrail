@@ -1,6 +1,6 @@
 # Spec: Serving hardening
 
-Status: Proposed; items 5 and 6 implemented 2026-06-11.
+Status: Proposed; item 1 implemented 2026-06-19, items 5 and 6 implemented 2026-06-11.
 Priority: P1, with items 5 (`glassrail run` exit codes) and 6
 (`glassrail serve`) suggested early — they are small and user-facing.
 Depends on: nothing. Items are independently mergeable; one item per PR.
@@ -13,7 +13,7 @@ event bus silently drops events under slow consumers, long streams have no
 keepalive, `/resume` can race, the CLI exits 0 on failure, and there is no
 `serve` command. Each item below fixes one of these.
 
-## Item 1 — Build the runtime in the FastAPI lifespan, not at import
+## Item 1 — Build the runtime in the FastAPI lifespan, not at import — implemented 2026-06-19
 
 **Current:** `src/glassrail/gateways/rest/app.py` ends with
 `app = create_default_app()`, which calls `build_runtime(get_settings())`

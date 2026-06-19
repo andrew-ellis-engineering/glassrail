@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import secrets
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -38,6 +39,41 @@ class TaskRequest(BaseModel):
     """Body of ``POST /task``."""
 
     request: str = Field(..., description="Natural language task description")
+
+
+@dataclass
+class _RestRuntime:
+    orchestrator: Orchestrator
+    store: StateStore
+    harness: ToolHarness
+    event_bus: EventBus | None
+    settings: Settings
+    api_key: str | None = None
+    close: Callable[[], Awaitable[None]] | None = None
+
+    async def aclose(self) -> None:
+        if self.close is not None:
+            await self.close()
+
+
+def _runtime_from_app(api: FastAPI) -> _RestRuntime:
+    runtime = getattr(api.state, "runtime", None)
+    if not isinstance(runtime, _RestRuntime):
+        raise RuntimeError("Glassrail runtime has not been initialised")
+    return runtime
+
+
+def _wrap_runtime(settings: Settings) -> _RestRuntime:
+    rt = build_runtime(settings)
+    return _RestRuntime(
+        orchestrator=rt.orchestrator,
+        store=rt.store,
+        harness=rt.harness,
+        event_bus=rt.event_bus,
+        settings=rt.settings,
+        api_key=rt.settings.api_key,
+        close=rt.aclose,
+    )
 
 
 def _sse(event: Event) -> str:
@@ -88,16 +124,17 @@ def _terminal_snapshot(state: ExecutionState) -> Event | None:
     return None
 
 
-def _lifespan_for(on_shutdown: Callable[[], Awaitable[None]] | None) -> Any:
-    if on_shutdown is None:
-        return None
-
+def _lifespan_for(
+    settings: Settings | None,
+) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
     @asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
+    async def lifespan(api: FastAPI) -> AsyncGenerator[None]:
+        if not hasattr(api.state, "runtime"):
+            api.state.runtime = _wrap_runtime(settings or Settings())
         try:
             yield
         finally:
-            await on_shutdown()
+            await _runtime_from_app(api).aclose()
 
     return lifespan
 
@@ -138,42 +175,37 @@ async def _event_stream(
         yield _sse(event)
 
 
-def create_app(
-    *,
-    orchestrator: Orchestrator,
-    store: StateStore,
-    harness: ToolHarness,
-    event_bus: EventBus | None = None,
-    api_key: str | None = None,
-    on_shutdown: Callable[[], Awaitable[None]] | None = None,
-) -> FastAPI:
-    """Build the FastAPI app from explicit collaborators."""
-    api = FastAPI(title="Glassrail", version=__version__, lifespan=_lifespan_for(on_shutdown))
-
+def _install_auth_middleware(api: FastAPI) -> None:
     @api.middleware("http")
     async def require_bearer(
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        if request.url.path != "/health" and not _authorized_header(
-            request.headers.get("authorization"), api_key
-        ):
+        if request.url.path == "/health":
+            return await call_next(request)
+        runtime = _runtime_from_app(request.app)
+        if not _authorized_header(request.headers.get("authorization"), runtime.api_key):
             return JSONResponse({"detail": "Unauthorized"}, status_code=401)
         return await call_next(request)
 
+
+def _install_task_routes(api: FastAPI) -> None:
     @api.post("/task", status_code=202)
     async def submit_task(
         body: TaskRequest,
         background_tasks: BackgroundTasks,
+        request: Request,
     ) -> dict[str, Any]:
+        runtime = _runtime_from_app(request.app)
         state = ExecutionState(task_id=new_task_id(), user_request=body.request)
-        await store.save_task(state)
-        background_tasks.add_task(orchestrator.run, state.task_id)
+        await runtime.store.save_task(state)
+        background_tasks.add_task(runtime.orchestrator.run, state.task_id)
         return {"task_id": state.task_id, "status": state.status.value}
 
     @api.get("/task/{task_id}")
-    async def get_task(task_id: str) -> dict[str, Any]:
-        state = await store.load_task(TaskId(task_id))
+    async def get_task(task_id: str, request: Request) -> dict[str, Any]:
+        runtime = _runtime_from_app(request.app)
+        state = await runtime.store.load_task(TaskId(task_id))
         if state is None:
             raise HTTPException(status_code=404, detail="Task not found")
         return state.model_dump(mode="json")
@@ -182,8 +214,10 @@ def create_app(
     async def resume_task(
         task_id: str,
         background_tasks: BackgroundTasks,
+        request: Request,
     ) -> dict[str, Any]:
-        state = await store.load_task(TaskId(task_id))
+        runtime = _runtime_from_app(request.app)
+        state = await runtime.store.load_task(TaskId(task_id))
         if state is None:
             raise HTTPException(status_code=404, detail="Task not found")
         if state.status not in (TaskStatus.AWAITING_CONFIRMATION, TaskStatus.PAUSED):
@@ -191,12 +225,13 @@ def create_app(
                 status_code=400,
                 detail=f"Task is in status '{state.status.value}', not resumable",
             )
-        background_tasks.add_task(orchestrator.resume, TaskId(task_id))
+        background_tasks.add_task(runtime.orchestrator.resume, TaskId(task_id))
         return {"task_id": task_id, "status": "resuming"}
 
     @api.get("/task/{task_id}/branch-log")
-    async def get_branch_log(task_id: str) -> dict[str, Any]:
-        state = await store.load_task(TaskId(task_id))
+    async def get_branch_log(task_id: str, request: Request) -> dict[str, Any]:
+        runtime = _runtime_from_app(request.app)
+        state = await runtime.store.load_task(TaskId(task_id))
         if state is None:
             raise HTTPException(status_code=404, detail="Task not found")
         return {
@@ -209,64 +244,93 @@ def create_app(
             ],
         }
 
+
+def _install_event_routes(api: FastAPI) -> None:
     @api.get("/task/{task_id}/events")
-    async def task_events(task_id: str) -> StreamingResponse:
-        if event_bus is None:
+    async def task_events(task_id: str, request: Request) -> StreamingResponse:
+        runtime = _runtime_from_app(request.app)
+        if runtime.event_bus is None:
             raise HTTPException(status_code=503, detail="Event stream not configured")
         tid = TaskId(task_id)
-        if await store.load_task(tid) is None:
+        if await runtime.store.load_task(tid) is None:
             raise HTTPException(status_code=404, detail="Task not found")
         return StreamingResponse(
-            _event_stream(store, event_bus, tid),
+            _event_stream(runtime.store, runtime.event_bus, tid),
             media_type="text/event-stream",
         )
 
     @api.websocket("/task/{task_id}/events")
     async def task_events_ws(websocket: WebSocket, task_id: str) -> None:
+        runtime = _runtime_from_app(websocket.app)
         # Reject before accepting so the client sees a close code, not an open
         # socket that immediately drops. 1011 = internal error, 1008 = policy.
-        if not _authorized_ws(websocket, api_key):
+        if not _authorized_ws(websocket, runtime.api_key):
             await websocket.close(code=1008, reason="Unauthorized")
             return
-        if event_bus is None:
+        if runtime.event_bus is None:
             await websocket.close(code=1011, reason="Event stream not configured")
             return
         tid = TaskId(task_id)
-        if await store.load_task(tid) is None:
+        if await runtime.store.load_task(tid) is None:
             await websocket.close(code=1008, reason="Task not found")
             return
 
         await websocket.accept()
         try:
-            async for event in _event_source(store, event_bus, tid):
+            async for event in _event_source(runtime.store, runtime.event_bus, tid):
                 await websocket.send_text(event.model_dump_json())
         except WebSocketDisconnect:
             return  # client hung up mid-stream; nothing to clean up
         await websocket.close()
 
+
+def _install_misc_routes(api: FastAPI) -> None:
     @api.get("/tools")
-    async def list_tools() -> dict[str, Any]:
-        return {"tools": harness.all_schemas()}
+    async def list_tools(request: Request) -> dict[str, Any]:
+        runtime = _runtime_from_app(request.app)
+        return {"tools": runtime.harness.all_schemas()}
 
     @api.get("/health")
     async def health() -> dict[str, Any]:
         return {"status": "ok"}
 
+
+def create_app(
+    *,
+    orchestrator: Orchestrator | None = None,
+    store: StateStore | None = None,
+    harness: ToolHarness | None = None,
+    event_bus: EventBus | None = None,
+    settings: Settings | None = None,
+    api_key: str | None = None,
+    on_shutdown: Callable[[], Awaitable[None]] | None = None,
+) -> FastAPI:
+    """Build the FastAPI app from explicit collaborators."""
+    api = FastAPI(title="Glassrail", version=__version__, lifespan=_lifespan_for(settings))
+    explicit_deps = (orchestrator, store, harness)
+    if any(dep is not None for dep in explicit_deps):
+        if orchestrator is None or store is None or harness is None:
+            raise ValueError("orchestrator, store, and harness must be provided together")
+        resolved_settings = settings or Settings()
+        api.state.runtime = _RestRuntime(
+            orchestrator=orchestrator,
+            store=store,
+            harness=harness,
+            event_bus=event_bus,
+            settings=resolved_settings,
+            api_key=api_key if api_key is not None else resolved_settings.api_key,
+            close=on_shutdown,
+        )
+    _install_auth_middleware(api)
+    _install_task_routes(api)
+    _install_event_routes(api)
+    _install_misc_routes(api)
     return api
 
 
 def create_default_app(settings: Settings | None = None) -> FastAPI:
-    """Build the app with the default in-memory wiring from :class:`Settings`."""
-    resolved_settings = settings or Settings()
-    rt = build_runtime(resolved_settings)
-    return create_app(
-        orchestrator=rt.orchestrator,
-        store=rt.store,
-        harness=rt.harness,
-        event_bus=rt.event_bus,
-        api_key=resolved_settings.api_key,
-        on_shutdown=rt.aclose,
-    )
+    """Build the default app, deferring runtime wiring to ASGI lifespan startup."""
+    return create_app(settings=settings)
 
 
 # Module-level app for `uvicorn glassrail.gateways.rest:app`.

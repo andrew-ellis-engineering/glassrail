@@ -17,7 +17,7 @@ The roadmap ([roadmap](../roadmap.md)) owns *when* these happen; the specs own
 | [Eval integrity](eval-integrity.md) | **P0 — blocks the 0.1.0 tag** | — | Implemented for the 0.1.0 gate; promotion ratchet ongoing |
 | [Security baseline](security-baseline.md) | P0 — items 1, 2, 5 before the tag; 3–4 before broad marketing | — | Implemented |
 | [Small fixes](small-fixes.md) | Mixed — item 1 (error rename) and item 9 (CLI tests) before the tag; rest anytime | — | Proposed |
-| [Serving hardening](serving-hardening.md) | P1 — item 5 (exit codes) and item 6 (`glassrail serve`) early | — | Items 5–6 implemented; remaining items proposed |
+| [Serving hardening](serving-hardening.md) | P1 — item 5 (exit codes) and item 6 (`glassrail serve`) early | — | Items 1, 5–6 implemented; remaining items proposed |
 | [Parallel execution](parallel-execution.md) | P1 — first engine workstream; prerequisite for `foreach` | — | Implemented |
 | [Node resilience](node-resilience.md) | P1 — independent; suggested after parallel execution to avoid rebase churn | — | Implemented |
 | [Routing table](routing-table.md) | P1 — prerequisite for the Phase 2.5 tier-ROI selector | — | Implemented |
