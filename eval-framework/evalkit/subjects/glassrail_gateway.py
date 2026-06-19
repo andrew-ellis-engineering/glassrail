@@ -116,6 +116,7 @@ def trajectory_from_state(state: dict[str, Any]) -> list[dict[str, Any]]:
                 "status": result.get("status"),
                 "confidence": result.get("confidence", 1.0),
                 "flagged": result.get("flagged", False),
+                "retries": result.get("retries", 0),
                 "branch_taken": branch_taken,
             }
         )

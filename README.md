@@ -151,6 +151,8 @@ parsed by `pydantic-settings`. Tiers are nested, so use the `__` delimiter:
 | HITL plan gate | `GLASSRAIL_CONFIRM_PLANS` | `false` |
 | Tool approval mode | `GLASSRAIL_TOOL_APPROVAL__MODE` | `interactive` |
 | Max concurrent nodes | `GLASSRAIL_MAX_CONCURRENT_NODES` | `4` |
+| LLM node retries | `GLASSRAIL_RESILIENCE__MAX_LLM_NODE_RETRIES` | `1` |
+| Escalate tier on retry | `GLASSRAIL_RESILIENCE__ESCALATE_TIER_ON_RETRY` | `true` |
 | Planner stall char multiplier | `GLASSRAIL_PLANNER_STALL_CHAR_MULTIPLIER` | `4` |
 | Load tool plugins | `GLASSRAIL_LOAD_TOOL_PLUGINS` | `false` |
 
@@ -163,6 +165,14 @@ Independent DAG nodes can run concurrently up to `max_concurrent_nodes`; set it
 to `1` to force sequential execution. A local tier-0 server may still serve one
 sequence at a time, so this mainly improves fan-out over cloud tiers or tools
 that can run concurrently.
+
+Main LLM node calls (`decision`, `think`, `summary`, `synthesis`, `result`) are
+retried for retry-safe provider failures such as a mid-stream disconnect or a
+blank model response. By default Glassrail makes one extra attempt and raises
+the retry's minimum tier by one; set
+`GLASSRAIL_RESILIENCE__MAX_LLM_NODE_RETRIES=0` to disable node retries, or
+`GLASSRAIL_RESILIENCE__ESCALATE_TIER_ON_RETRY=false` to retry within the same
+tier window. Tool calls are not auto-retried because they may have side effects.
 
 ### Generation ceiling
 

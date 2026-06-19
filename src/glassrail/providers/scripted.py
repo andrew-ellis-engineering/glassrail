@@ -15,11 +15,13 @@ Configure via tier env vars:
 
 from __future__ import annotations
 
+import json
 from collections import deque
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import cast
 
-from glassrail.providers.base import Chunk, Message, ProviderError
+from glassrail.providers.base import Chunk, Message, ProviderError, ProviderUnavailableError
 
 
 class ScriptedProvider:
@@ -53,4 +55,23 @@ class ScriptedProvider:
                 "more LLM calls were made than there are lines in the JSONL fixture"
             )
         text = self._responses.popleft()
+        error = _error_directive(text)
+        if error == "provider_unavailable":
+            raise ProviderUnavailableError(f"{self._name}: scripted provider unavailable")
+        if error == "provider":
+            raise ProviderError(f"{self._name}: scripted provider error")
         yield Chunk(text=text, finish_reason="stop", tokens_used=0)
+
+
+def _error_directive(text: str) -> str | None:
+    try:
+        payload_obj: object = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload_obj, dict):
+        return None
+    payload = cast("dict[str, object]", payload_obj)
+    directive = payload.get("__error__")
+    if isinstance(directive, str) and directive in {"provider_unavailable", "provider"}:
+        return directive
+    return None

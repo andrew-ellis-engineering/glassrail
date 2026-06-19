@@ -221,6 +221,15 @@ class ToolApprovalSettings(BaseModel):
         return self.overrides.get(tool_name, self.default)
 
 
+class ResilienceConfig(BaseModel):
+    """Retry policy for retry-safe model-node failures."""
+
+    max_llm_node_retries: int = Field(default=1, ge=0)
+    """Extra attempts after the first for main LLM node calls."""
+    escalate_tier_on_retry: bool = True
+    """Raise the minimum tier by one for each retry attempt."""
+
+
 _OPENROUTER_QWEN_EXTRA_BODY: dict[str, Any] = {
     "reasoning": {"effort": "none"},
     "provider": {"require_parameters": True},
@@ -343,6 +352,8 @@ class Settings(BaseSettings):
     Set to 1 to force the previous sequential execution model; values above 1
     let independent nodes in the same dependency layer run concurrently.
     """
+    resilience: ResilienceConfig = ResilienceConfig()
+    """Retry policy for main LLM node calls. Configure under ``[resilience]``."""
     planner_stall_char_multiplier: int = 4
     """Classify invalid planner output longer than planner max_tokens times
     this multiplier as a stall and feed the raw output into the retry prompt."""

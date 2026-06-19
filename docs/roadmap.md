@@ -231,12 +231,15 @@ running continuously alongside. Done since the Phase 1 baseline:
 - **Subplan event visibility** ✓ — nested subplan node events now carry
    `node_path` on the REST event stream, while ACP and the Python TUI filter
    nested child events to preserve their current top-level rendering.
+- **LLM-node retry resilience** ✓ — main model calls for decision, think,
+  summary, synthesis, and result nodes now retry retry-safe provider failures
+  under `[resilience]`, with retry counts recorded on `NodeResult` and scripted
+  provider error directives for deterministic eval coverage.
 
-### Track 2a — Engine reliability core (in order)
+ ### Track 2a — Engine reliability core (in order)
 
-1. **Node resilience** — LLM-node retry with tier escalation
-   (`[resilience]`), scripted-provider error directives, provider connection
-   reuse + clean shutdown. Spec: specs/node-resilience.md.
+ 1. **Node resilience, Part B** — provider connection reuse plus clean shutdown
+    for the router/runtime. Spec: specs/node-resilience.md.
 2. **Configurable routing table** — `[routing]` node-type → tier map replacing
    the hardcoded `_select_tier` policy; prerequisite for the Phase 2.5 tier-ROI
    selector. Also the lever for large-task economics — route planner and

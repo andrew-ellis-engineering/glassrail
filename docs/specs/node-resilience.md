@@ -1,6 +1,6 @@
 # Spec: Node resilience
 
-Status: Proposed
+Status: Part A implemented (2026-06-19); Part B proposed
 Priority: P1. Independent of other specs; suggested merge order is after
 [parallel-execution](parallel-execution.md) to avoid rebase churn in
 `executor.py`.

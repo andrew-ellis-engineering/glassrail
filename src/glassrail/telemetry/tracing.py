@@ -50,6 +50,7 @@ ATTR_NODE_ID = "glassrail.node.id"
 ATTR_NODE_TYPE = "glassrail.node.type"
 ATTR_NODE_STATUS = "glassrail.node.status"
 ATTR_NODE_CONFIDENCE = "glassrail.node.confidence"
+ATTR_NODE_RETRIES = "glassrail.node.retries"
 ATTR_TIER = "glassrail.tier"
 ATTR_MIN_TIER = "glassrail.min_tier"
 

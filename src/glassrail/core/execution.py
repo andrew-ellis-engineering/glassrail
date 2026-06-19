@@ -47,6 +47,8 @@ class NodeResult(BaseModel):
     flagged: bool = False
     """True when ``confidence`` fell below the configured threshold."""
     tokens_used: int = 0
+    retries: int = 0
+    """Retry attempts used before this result was recorded."""
     execution_time_s: float = 0.0
     error: str | None = None
     tier_used: int | None = None

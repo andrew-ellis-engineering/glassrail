@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "result",
+      "description": "Produce the final answer after a retryable model failure",
+      "context_needed": []
+    }
+  ]
+}

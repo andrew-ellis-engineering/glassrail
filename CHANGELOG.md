@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - REST event streams now include nested subplan node events with `node_path`
   identifiers, while ACP and the Python TUI continue rendering only top-level
   nodes.
+- Main LLM node calls now retry retry-safe provider failures via the
+  `[resilience]` settings, with retry counts recorded on `NodeResult`.
 
 ### Changed
 - Documentation and PyPI project links now point at the live product site and the

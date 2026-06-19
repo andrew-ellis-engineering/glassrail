@@ -44,10 +44,18 @@ from glassrail.events import (
 from glassrail.executor.context import assemble_context
 from glassrail.executor.tool_approval import ToolApprovalBroker
 from glassrail.harness import ToolHarness
-from glassrail.providers import Chunk, Message, TierRouter, collect, strip_model_output
+from glassrail.providers import (
+    Chunk,
+    Message,
+    ProviderUnavailableError,
+    TierRouter,
+    collect,
+    strip_model_output,
+)
 from glassrail.telemetry import (
     ATTR_NODE_CONFIDENCE,
     ATTR_NODE_ID,
+    ATTR_NODE_RETRIES,
     ATTR_NODE_STATUS,
     ATTR_NODE_TYPE,
     ATTR_TIER,
@@ -56,6 +64,14 @@ from glassrail.telemetry import (
 )
 
 log = logging.getLogger(__name__)
+
+
+class _EmptyLLMOutputError(Exception):
+    """Retryable model-node failure: the provider returned only blank text."""
+
+    def __init__(self, *, tokens_used: int) -> None:
+        super().__init__("empty model output")
+        self.tokens_used = tokens_used
 
 
 def _clamp_confidence(value: float, default: float, node_id: int) -> float:
@@ -423,6 +439,7 @@ class Executor:
 
             span.set_attribute(ATTR_NODE_STATUS, result.status.value)
             span.set_attribute(ATTR_NODE_CONFIDENCE, result.confidence)
+            span.set_attribute(ATTR_NODE_RETRIES, result.retries)
             if result.status is NodeStatus.FAILED:
                 span.set_status(Status(StatusCode.ERROR, result.error or "node failed"))
 
@@ -621,30 +638,63 @@ class Executor:
         ]
 
         tokens = 0
-        try:
-            raw, tokens = await collect(
-                self._router.complete(
-                    messages,
-                    min_tier=tier,
-                    json_mode=True,
-                    max_tokens=self._settings.budgets.decision,
+        attempt_tier = tier
+        max_retries = self._max_llm_node_retries()
+        attempt = 0
+        for attempt in range(max_retries + 1):
+            try:
+                raw, attempt_tokens = await self._collect_retryable_output(
+                    self._router.complete(
+                        messages,
+                        min_tier=attempt_tier,
+                        json_mode=True,
+                        max_tokens=self._settings.budgets.decision,
+                    )
                 )
-            )
-            data = json.loads(strip_model_output(raw))
-            branch = data.get("branch", node.default_branch or "yes")
-            confidence = _clamp_confidence(float(data.get("confidence", 0.5)), 0.5, node.id)
-            if node.branches and branch not in node.branches:
-                log.warning(
-                    "Node %d returned unknown branch '%s', falling back to default '%s'",
-                    node.id,
-                    branch,
-                    node.default_branch,
+                tokens += attempt_tokens
+                data = json.loads(strip_model_output(raw))
+                branch = data.get("branch", node.default_branch or "yes")
+                confidence = _clamp_confidence(float(data.get("confidence", 0.5)), 0.5, node.id)
+                if node.branches and branch not in node.branches:
+                    log.warning(
+                        "Node %d returned unknown branch '%s', falling back to default '%s'",
+                        node.id,
+                        branch,
+                        node.default_branch,
+                    )
+                    branch = node.default_branch or next(iter(node.branches))
+                return NodeResult(
+                    node_id=node.id,
+                    status=NodeStatus.COMPLETED,
+                    branch_taken=branch,
+                    confidence=confidence,
+                    tokens_used=tokens,
+                    retries=attempt,
+                    tier_used=attempt_tier,
                 )
-                branch = node.default_branch or next(iter(node.branches))
-        except Exception as exc:
-            log.warning("Decision node %d failed (%s), using default branch", node.id, exc)
-            branch = node.default_branch or (next(iter(node.branches)) if node.branches else "yes")
-            confidence = 0.0
+            except _EmptyLLMOutputError as exc:
+                tokens += exc.tokens_used
+                if attempt < max_retries:
+                    next_tier = self._retry_tier(attempt_tier)
+                    self._log_llm_retry(node, attempt, attempt_tier, next_tier, exc)
+                    attempt_tier = next_tier
+                    continue
+                log.warning("Decision node %d failed (%s), using default branch", node.id, exc)
+                break
+            except ProviderUnavailableError as exc:
+                if attempt < max_retries:
+                    next_tier = self._retry_tier(attempt_tier)
+                    self._log_llm_retry(node, attempt, attempt_tier, next_tier, exc)
+                    attempt_tier = next_tier
+                    continue
+                log.warning("Decision node %d failed (%s), using default branch", node.id, exc)
+                break
+            except Exception as exc:
+                log.warning("Decision node %d failed (%s), using default branch", node.id, exc)
+                break
+
+        branch = node.default_branch or (next(iter(node.branches)) if node.branches else "yes")
+        confidence = 0.0
 
         return NodeResult(
             node_id=node.id,
@@ -652,6 +702,8 @@ class Executor:
             branch_taken=branch,
             confidence=confidence,
             tokens_used=tokens,
+            retries=min(attempt, max_retries),
+            tier_used=attempt_tier,
         )
 
     async def _execute_llm_node(
@@ -675,37 +727,62 @@ class Executor:
         subscribers (e.g. the ACP adapter) can forward it to the client in
         real time.
         """
-        attempt_tiers = [tier]
-        if node.type is NodeType.RESULT:
-            retry_tier = self._next_configured_tier(tier)
-            if retry_tier is not None:
-                attempt_tiers.append(retry_tier)
-
         result = NodeResult(
             node_id=node.id,
             status=NodeStatus.FAILED,
             error="LLM node did not run",
         )
-        for attempt_tier in attempt_tiers:
-            result = await self._execute_llm_node_once(
-                node,
-                state,
-                attempt_tier,
-                spec=spec,
-                bus=bus,
-                node_path=node_path,
-            )
+        tokens = 0
+        attempt_tier = tier
+        max_retries = self._max_llm_node_retries()
+        for attempt in range(max_retries + 1):
+            try:
+                result = await self._execute_llm_node_once(
+                    node,
+                    state,
+                    attempt_tier,
+                    spec=spec,
+                    bus=bus,
+                    node_path=node_path,
+                )
+            except _EmptyLLMOutputError as exc:
+                tokens += exc.tokens_used
+                result = NodeResult(
+                    node_id=node.id,
+                    status=NodeStatus.FAILED,
+                    tokens_used=tokens,
+                    retries=attempt,
+                    tier_used=attempt_tier,
+                    error=str(exc),
+                )
+                if attempt < max_retries:
+                    next_tier = self._retry_tier(attempt_tier)
+                    self._log_llm_retry(node, attempt, attempt_tier, next_tier, exc)
+                    attempt_tier = next_tier
+                    continue
+                return result
+            except ProviderUnavailableError as exc:
+                result = NodeResult(
+                    node_id=node.id,
+                    status=NodeStatus.FAILED,
+                    tokens_used=tokens,
+                    retries=attempt,
+                    tier_used=attempt_tier,
+                    error=str(exc),
+                )
+                if attempt < max_retries:
+                    next_tier = self._retry_tier(attempt_tier)
+                    self._log_llm_retry(node, attempt, attempt_tier, next_tier, exc)
+                    attempt_tier = next_tier
+                    continue
+                return result
+
+            result.tokens_used += tokens
+            result.retries = attempt
             result.tier_used = attempt_tier
             if result.status is NodeStatus.COMPLETED:
                 return result
-            if node.type is NodeType.RESULT and attempt_tier != attempt_tiers[-1]:
-                log.warning(
-                    "Result node %d failed at tier %d (%s); retrying at tier %d",
-                    node.id,
-                    attempt_tier,
-                    result.error or "unknown error",
-                    attempt_tiers[-1],
-                )
+            return result
         return result
 
     async def _execute_llm_node_once(
@@ -747,7 +824,9 @@ class Executor:
                     node, state, stream, spec, bus, node_path=node_path
                 )
             else:
-                raw, tokens = await collect(stream)
+                raw, tokens = await self._collect_retryable_output(stream)
+            if not raw.strip():
+                raise _EmptyLLMOutputError(tokens_used=tokens)
             try:
                 data = json.loads(strip_model_output(raw))
             except json.JSONDecodeError:
@@ -782,6 +861,8 @@ class Executor:
             output = raw_output if raw_output is not None else raw
             raw_confidence = float(data.get("confidence", spec.default_confidence))
             confidence = _clamp_confidence(raw_confidence, spec.default_confidence, node.id)
+        except (ProviderUnavailableError, _EmptyLLMOutputError):
+            raise
         except Exception as exc:
             return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
 
@@ -793,11 +874,47 @@ class Executor:
             tokens_used=tokens,
         )
 
-    def _next_configured_tier(self, tier: int) -> int | None:
-        higher = sorted(
-            {provider.tier for provider in self._router.providers if provider.tier > tier}
+    @staticmethod
+    async def _collect_retryable_output(stream: AsyncIterator[Chunk]) -> tuple[str, int]:
+        raw, tokens = await collect(stream)
+        if not raw.strip():
+            raise _EmptyLLMOutputError(tokens_used=tokens)
+        return raw, tokens
+
+    def _max_llm_node_retries(self) -> int:
+        return max(0, self._settings.resilience.max_llm_node_retries)
+
+    def _retry_tier(self, previous_tier: int) -> int:
+        if not self._settings.resilience.escalate_tier_on_retry:
+            return previous_tier
+        return min(previous_tier + 1, self._highest_configured_tier())
+
+    def _highest_configured_tier(self) -> int:
+        return max(provider.tier for provider in self._router.providers)
+
+    @staticmethod
+    def _log_llm_retry(
+        node: Node,
+        attempt: int,
+        prior_tier: int,
+        next_tier: int,
+        exc: Exception,
+    ) -> None:
+        log.warning(
+            "Node %d LLM attempt %d failed at tier %d (%s); retrying at tier %d",
+            node.id,
+            attempt + 1,
+            prior_tier,
+            exc,
+            next_tier,
+            extra={
+                "node_id": node.id,
+                "attempt": attempt + 1,
+                "prior_tier": prior_tier,
+                "next_tier": next_tier,
+                "error": str(exc),
+            },
         )
-        return higher[0] if higher else None
 
     async def _stream_llm_node(
         self,

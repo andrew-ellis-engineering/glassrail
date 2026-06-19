@@ -22,6 +22,9 @@ carry `node_path` for nested nodes. Top-level node events use `null`; a child
 node `2` inside subplan node `4` uses `"4/2"`. Nested subplan node events do
 not emit their own terminal `task_completed`; the outer task still owns the
 stream lifecycle.
+If a streaming LLM node is retried after a mid-stream provider failure, already
+emitted `node_output_chunk` fragments remain in the stream and the retry emits
+fresh chunks; v1 does not send a retraction marker.
 
 If you connect *after* the task already finished, you don't miss out: the
 server synthesises a single snapshot event for the terminal state and closes.

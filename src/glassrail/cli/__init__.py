@@ -210,6 +210,7 @@ def _trajectory(state: ExecutionState) -> list[dict[str, object]]:
                 "status": result.status.value if result else "pending",
                 "confidence": result.confidence if result else 1.0,
                 "flagged": result.flagged if result else False,
+                "retries": result.retries if result else 0,
                 "branch_taken": branch,
                 "args_used": result.args_used if result else None,
                 "output": out_str,

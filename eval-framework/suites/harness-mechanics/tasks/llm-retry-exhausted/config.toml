@@ -1,0 +1,39 @@
+name = "llm-retry-exhausted"
+tags = ["llm-node", "harness-mechanics", "resilience"]
+type = "regression"
+difficulty = 1
+
+expected_behavior = """
+When a retryable provider-unavailable failure repeats until the RESULT node's
+retry budget is exhausted, the node is marked failed and the task completes
+with no final_output.
+
+Fixture caveat: the exec-plan subject points all four tiers at the same
+responses file, but each tier gets its own provider queue. This task disables
+tier escalation so the retry stays on tier 0 and consumes the second line.
+"""
+
+[backend_config.env]
+GLASSRAIL_TIER0__KIND = "scripted"
+GLASSRAIL_TIER1__KIND = "scripted"
+GLASSRAIL_TIER2__KIND = "scripted"
+GLASSRAIL_TIER3__KIND = "scripted"
+GLASSRAIL_RESILIENCE__ESCALATE_TIER_ON_RETRY = "false"
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Result node failed after retry exhaustion"
+grader = "trajectory"
+node_id = 1
+expect_status = "failed"
+
+[[criteria]]
+text = "Result text is empty when retry exhaustion leaves no final output"
+grader = "deterministic"
+check = "regex"
+target = "__result_text__"
+value = "^\\s*$"
