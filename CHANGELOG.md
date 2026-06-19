@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `[resilience]` settings, with retry counts recorded on `NodeResult`.
 - `[routing]` settings now configure the deterministic node-type to tier table,
   including the `reasoning_required` tier floor.
+- EventBus subscriptions can now be scoped to a task and expose per-subscriber
+  drop counts, with warnings when slow consumers shed queued events.
 
 ### Changed
 - Documentation and PyPI project links now point at the live product site and the
@@ -28,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   points.
 - The REST gateway now builds its default runtime during the FastAPI lifespan
   instead of module import, while keeping injected test/runtime wiring explicit.
+- REST and ACP event consumers now use task-scoped EventBus subscriptions so
+  unrelated tasks cannot evict the active task's queued events.
 - Branch skip propagation now auto-skips downstream nodes whose declared
   non-decision inputs were all skipped, while preserving shared join nodes that
   consume at least one completed input.

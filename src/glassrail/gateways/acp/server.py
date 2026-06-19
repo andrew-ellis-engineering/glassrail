@@ -192,15 +192,14 @@ class AcpServer:
         # the turn is driven entirely by the events these emit, never by the
         # task's completion, so a pause at the gate doesn't look like an ending.
         current = asyncio.create_task(self._rt.orchestrator.run(task_id))
-        async with self._rt.event_bus.subscribe() as sub:
+        async with self._rt.event_bus.subscribe(task_id=task_id) as sub:
             try:
                 while True:
                     event = await self._next_event(sub, cancel)
                     if event is None:
                         stop_reason = "cancelled"
                         break
-                    if event.task_id != task_id:
-                        continue
+                    assert event.task_id == task_id
                     if isinstance(event, AwaitingConfirmation):
                         outcome = await self._handle_gate(session, tracker, task_id)
                         if isinstance(outcome, str):

@@ -1,6 +1,6 @@
 # Spec: Serving hardening
 
-Status: Proposed; item 1 implemented 2026-06-19, items 5 and 6 implemented 2026-06-11.
+Status: Proposed; items 1–2 implemented 2026-06-19, items 5 and 6 implemented 2026-06-11.
 Priority: P1, with items 5 (`glassrail run` exit codes) and 6
 (`glassrail serve`) suggested early — they are small and user-facing.
 Depends on: nothing. Items are independently mergeable; one item per PR.
@@ -36,7 +36,7 @@ there is no shutdown hook.
 - `uvicorn glassrail.gateways.rest:app` keeps working (module-level `app`
   remains, but now construction of the runtime is deferred to startup).
 
-## Item 2 — EventBus: drop visibility and per-task subscriptions
+## Item 2 — EventBus: drop visibility and per-task subscriptions — implemented 2026-06-19
 
 **Current:** `src/glassrail/events/bus.py` fans out to bounded queues
 (`max_queue=1000`) with drop-oldest eviction and **no signal** when an event

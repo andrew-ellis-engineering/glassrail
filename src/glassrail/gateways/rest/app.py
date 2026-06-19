@@ -150,7 +150,7 @@ async def _event_source(
     already finished, it yields a single synthesised snapshot and stops rather
     than blocking on events that have already fired.
     """
-    async with bus.subscribe() as sub:
+    async with bus.subscribe(task_id=task_id) as sub:
         state = await store.load_task(task_id)
         if state is not None:
             snapshot = _terminal_snapshot(state)
@@ -158,8 +158,7 @@ async def _event_source(
                 yield snapshot
                 return
         async for event in sub:
-            if event.task_id != task_id:
-                continue
+            assert event.task_id == task_id
             yield event
             if event.type in TERMINAL_EVENT_TYPES:
                 return

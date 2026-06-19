@@ -244,11 +244,13 @@ running continuously alongside. Done since the Phase 1 baseline:
 - **REST runtime lifespan wiring** ✓ — the module-level FastAPI app now defers
   default runtime construction to ASGI lifespan startup and closes it on
   shutdown; explicit injected apps still pre-populate their runtime.
+- **EventBus drop visibility and task-scoped subscriptions** ✓ — slow
+  subscribers now expose drop counts and warnings, and REST/ACP event consumers
+  subscribe per task so unrelated task events cannot evict active streams.
 
 ### Track 2a — Engine reliability core (in order)
 
-1. **Serving hardening (remaining)** — EventBus drop visibility +
-   per-task subscriptions, SSE keepalive, resume idempotency. Spec:
+1. **Serving hardening (remaining)** — SSE keepalive and resume idempotency. Spec:
    specs/serving-hardening.md (items 1–4; 5–6
    land in the release window).
 2. **Small fixes / API cleanup** — remaining items of
