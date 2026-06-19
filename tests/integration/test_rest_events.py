@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from collections.abc import Sequence as _Sequence
@@ -10,10 +11,11 @@ from typing import cast
 from fastapi.testclient import TestClient
 
 from glassrail.config import Settings
-from glassrail.core import new_task_id
+from glassrail.core import ExecutionState, new_task_id
 from glassrail.events import EventBus
 from glassrail.executor import Executor, Orchestrator
 from glassrail.gateways.rest import create_app
+from glassrail.gateways.rest.app import event_stream
 from glassrail.harness import ToolHarness, register_builtins
 from glassrail.planner import Planner
 from glassrail.providers import Chunk, Message, TierRouter
@@ -135,3 +137,18 @@ def test_events_snapshot_for_failed_task() -> None:
     attempts = events[0]["attempts"]
     assert isinstance(attempts, list)
     assert len(cast("list[object]", attempts)) == 2
+
+
+async def test_sse_stream_emits_keepalive_comment_when_idle() -> None:
+    store = InMemoryStateStore()
+    bus = EventBus()
+    task_id = new_task_id()
+    await store.save_task(ExecutionState(task_id=task_id, user_request="wait"))
+
+    stream = event_stream(store, bus, task_id, keepalive_s=0.01)
+    try:
+        frame = await asyncio.wait_for(anext(stream), timeout=1.0)
+    finally:
+        await stream.aclose()
+
+    assert frame == ": keepalive\n\n"

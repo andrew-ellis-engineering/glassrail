@@ -7,6 +7,7 @@ module-level default for ``uvicorn glassrail.gateways.rest:app``.
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
@@ -164,14 +165,31 @@ async def _event_source(
                 return
 
 
-async def _event_stream(
+async def event_stream(
     store: StateStore,
     bus: EventBus,
     task_id: TaskId,
-) -> AsyncIterator[str]:
+    *,
+    keepalive_s: float = 15.0,
+) -> AsyncGenerator[str]:
     """Yield SSE frames for ``task_id`` until a terminal event."""
-    async for event in _event_source(store, bus, task_id):
-        yield _sse(event)
+    async with bus.subscribe(task_id=task_id) as sub:
+        state = await store.load_task(task_id)
+        if state is not None:
+            snapshot = _terminal_snapshot(state)
+            if snapshot is not None:
+                yield _sse(snapshot)
+                return
+        while True:
+            try:
+                event = await asyncio.wait_for(anext(sub), timeout=keepalive_s)
+            except TimeoutError:
+                yield ": keepalive\n\n"
+                continue
+            assert event.task_id == task_id
+            yield _sse(event)
+            if event.type in TERMINAL_EVENT_TYPES:
+                return
 
 
 def _install_auth_middleware(api: FastAPI) -> None:
@@ -254,7 +272,7 @@ def _install_event_routes(api: FastAPI) -> None:
         if await runtime.store.load_task(tid) is None:
             raise HTTPException(status_code=404, detail="Task not found")
         return StreamingResponse(
-            _event_stream(runtime.store, runtime.event_bus, tid),
+            event_stream(runtime.store, runtime.event_bus, tid),
             media_type="text/event-stream",
         )
 

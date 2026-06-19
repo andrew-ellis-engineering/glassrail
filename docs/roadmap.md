@@ -247,10 +247,12 @@ running continuously alongside. Done since the Phase 1 baseline:
 - **EventBus drop visibility and task-scoped subscriptions** ✓ — slow
   subscribers now expose drop counts and warnings, and REST/ACP event consumers
   subscribe per task so unrelated task events cannot evict active streams.
+- **SSE keepalive** ✓ — task event streams emit idle comment frames while
+  waiting for long-running nodes, with WebSocket liveness left to uvicorn pings.
 
 ### Track 2a — Engine reliability core (in order)
 
-1. **Serving hardening (remaining)** — SSE keepalive and resume idempotency. Spec:
+1. **Serving hardening (remaining)** — resume idempotency. Spec:
    specs/serving-hardening.md (items 1–4; 5–6
    land in the release window).
 2. **Small fixes / API cleanup** — remaining items of

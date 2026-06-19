@@ -34,7 +34,7 @@ _EVENTS: list[dict[str, Any]] = [
 
 
 def _sse_body(events: list[dict[str, Any]]) -> str:
-    return "".join(f"data: {json.dumps(e)}\n\n" for e in events)
+    return ": keepalive\n\n" + "".join(f"data: {json.dumps(e)}\n\n" for e in events)
 
 
 def _handler(request: httpx.Request) -> httpx.Response:

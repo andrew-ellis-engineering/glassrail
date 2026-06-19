@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   including the `reasoning_required` tier floor.
 - EventBus subscriptions can now be scoped to a task and expose per-subscriber
   drop counts, with warnings when slow consumers shed queued events.
+- SSE task event streams now emit idle keepalive comment frames so proxies and
+  clients can keep long-running streams open.
 
 ### Changed
 - Documentation and PyPI project links now point at the live product site and the

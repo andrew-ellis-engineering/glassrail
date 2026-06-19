@@ -1,6 +1,6 @@
 # Spec: Serving hardening
 
-Status: Proposed; items 1–2 implemented 2026-06-19, items 5 and 6 implemented 2026-06-11.
+Status: Proposed; items 1–3 implemented 2026-06-19, items 5 and 6 implemented 2026-06-11.
 Priority: P1, with items 5 (`glassrail run` exit codes) and 6
 (`glassrail serve`) suggested early — they are small and user-facing.
 Depends on: nothing. Items are independently mergeable; one item per PR.
@@ -56,7 +56,7 @@ is dropped; consumers filter by `task_id` manually.
   task-scoped subscription never sees another task's events (extend
   `tests/unit/test_events_bus.py`).
 
-## Item 3 — SSE keepalive
+## Item 3 — SSE keepalive — implemented 2026-06-19
 
 **Current:** no traffic during a long-running node; idle proxies and client
 timeouts kill the stream silently. (WebSocket is already covered by uvicorn's
