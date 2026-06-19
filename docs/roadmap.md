@@ -238,25 +238,22 @@ running continuously alongside. Done since the Phase 1 baseline:
 - **Provider connection reuse and shutdown** ✓ — OpenAI-compatible providers
   reuse a persistent `httpx.AsyncClient`, and router/runtime shutdown now
   closes provider resources from CLI, ACP, and REST app lifespans.
+- **Configurable routing table** ✓ — `[routing]` now controls the deterministic
+  node-type → tier map while preserving the shipped defaults; this is the
+  config surface the Phase 2.5 tier-ROI selector can later write into.
 
 ### Track 2a — Engine reliability core (in order)
 
-1. **Configurable routing table** — `[routing]` node-type → tier map replacing
-   the hardcoded `_select_tier` policy; prerequisite for the Phase 2.5 tier-ROI
-   selector. Also the lever for large-task economics — route planner and
-   synthesis nodes to capable tiers and the bulk of leaf nodes to cheap tiers,
-   concentrating spend where the hard reasoning is. Spec:
-   specs/routing-table.md.
-2. **Serving hardening** — EventBus drop visibility +
+1. **Serving hardening** — EventBus drop visibility +
    per-task subscriptions, SSE keepalive, resume idempotency. Spec:
    specs/serving-hardening.md (items 1–4; 5–6
    land in the release window).
-3. **Small fixes / API cleanup** — remaining items of
+2. **Small fixes / API cleanup** — remaining items of
    specs/small-fixes.md (stray prompts into
    `NodePrompts`, dead validator check, `ToolRisk` layer fix, `_Scripted`
    consolidation, `Planner.plan()` removal, subplan id/confidence,
    postprocess tests, image-tool docs).
-4. **Prompt caching for planner and node prompts** *(independent of the items
+3. **Prompt caching for planner and node prompts** *(independent of the items
    above; low-risk, land early)* — cache the static planner system prefix
    (~3.8k tokens) and the per-node executor system prompts, and reorder the
    planner prompt so the request-selected cookbook and the request itself trail

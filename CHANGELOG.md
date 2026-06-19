@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nodes.
 - Main LLM node calls now retry retry-safe provider failures via the
   `[resilience]` settings, with retry counts recorded on `NodeResult`.
+- `[routing]` settings now configure the deterministic node-type to tier table,
+  including the `reasoning_required` tier floor.
 
 ### Changed
 - Documentation and PyPI project links now point at the live product site and the

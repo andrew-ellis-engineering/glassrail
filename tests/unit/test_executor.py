@@ -12,6 +12,7 @@ import pytest
 from glassrail.config import (
     NodeBudgets,
     NodePrompts,
+    RoutingConfig,
     Settings,
     ToolApprovalMode,
     ToolApprovalPolicy,
@@ -101,11 +102,16 @@ class _FailsAfterFirstChunkProvider:
         raise ProviderUnavailableError("stream died")
 
 
-def _executor(responses: list[str | Exception], *, tier: int = 0) -> tuple[Executor, ToolHarness]:
+def _executor(
+    responses: list[str | Exception],
+    *,
+    tier: int = 0,
+    settings: Settings | None = None,
+) -> tuple[Executor, ToolHarness]:
     harness = ToolHarness()
     register_builtins(harness)
     router = TierRouter([_ScriptedProvider(responses, tier=tier)])
-    return Executor(router=router, harness=harness, settings=Settings()), harness
+    return Executor(router=router, harness=harness, settings=settings or Settings()), harness
 
 
 def _state(plan: Plan) -> ExecutionState:
@@ -728,6 +734,100 @@ async def test_summary_condenses_upstream_context() -> None:
     assert node_result.status is NodeStatus.COMPLETED
     assert node_result.output == "two facts: A and B"
     assert node_result.tier_used == 0
+
+
+async def test_summary_uses_configured_routing_tier() -> None:
+    summary_payload = json.dumps({"summary": "two facts: A and B", "confidence": 0.95})
+    settings = Settings(routing=RoutingConfig(summary=1))
+    executor, _ = _executor([summary_payload], tier=1, settings=settings)
+    plan = Plan(nodes=[Node(id=1, type=NodeType.SUMMARY, description="condense")])
+    state = _state(plan)
+
+    result = await executor.execute(state)
+
+    assert result.results[1].tier_used == 1
+
+
+async def test_reasoning_required_uses_configured_floor() -> None:
+    synth_payload = json.dumps({"output": "synthesis", "confidence": 0.9})
+    settings = Settings(routing=RoutingConfig(synthesis=0, reasoning_required=3))
+    executor, _ = _executor([synth_payload], tier=3, settings=settings)
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.SYNTHESIS,
+                description="combine the evidence",
+                reasoning_required=True,
+            )
+        ]
+    )
+    state = _state(plan)
+
+    result = await executor.execute(state)
+
+    assert result.results[1].tier_used == 3
+
+
+async def test_forced_tier_overrides_routing_table() -> None:
+    result_payload = json.dumps({"output": "answer", "confidence": 0.9})
+    settings = Settings(routing=RoutingConfig(result=0, reasoning_required=2))
+    executor, _ = _executor([result_payload], tier=3, settings=settings)
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.RESULT,
+                description="answer directly",
+                reasoning_required=True,
+                forced_tier=3,
+            )
+        ]
+    )
+    state = _state(plan)
+
+    result = await executor.execute(state)
+
+    assert result.results[1].tier_used == 3
+
+
+async def test_tool_shape_check_uses_configured_tool_tier() -> None:
+    harness = ToolHarness()
+
+    async def produce_value() -> dict[str, str]:
+        return {"value": "ok"}
+
+    harness.tool(
+        name="produce_value",
+        description="produce a value",
+        parameters={"type": "object"},
+    )(produce_value)
+    tier0 = _ScriptedProvider(
+        [json.dumps({"matches_expectation": False, "issue": "tier 0 should be skipped"})],
+        tier=0,
+    )
+    tier1 = _ScriptedProvider([_SHAPE_OK], tier=1)
+    executor = Executor(
+        router=TierRouter([tier0, tier1]),
+        harness=harness,
+        settings=Settings(routing=RoutingConfig(tool=1)),
+    )
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.TOOL,
+                description="produce a value",
+                tool="produce_value",
+            )
+        ]
+    )
+    state = _state(plan)
+
+    result = await executor.execute(state)
+
+    assert result.results[1].tier_used == 1
+    assert result.results[1].flagged is False
 
 
 async def test_summary_failure_marks_node_failed() -> None:

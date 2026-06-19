@@ -172,7 +172,9 @@ async def test_planner_tells_model_the_tier_surface(harness: ToolHarness) -> Non
     assert "below min_tier=1" in user_msg
     assert "tier 1:" in user_msg
     assert "not configured (missing API key)" in user_msg
-    assert "Think nodes and reasoning_required=true nodes start at tier 2" in user_msg
+    assert "Node routing table:" in user_msg
+    assert "think=2" in user_msg
+    assert "reasoning_required=true start at least at tier 2" in user_msg
 
 
 async def test_planner_includes_plan_cookbook(harness: ToolHarness) -> None:

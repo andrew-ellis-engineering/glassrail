@@ -20,7 +20,7 @@ The roadmap ([roadmap](../roadmap.md)) owns *when* these happen; the specs own
 | [Serving hardening](serving-hardening.md) | P1 — item 5 (exit codes) and item 6 (`glassrail serve`) early | — | Items 5–6 implemented; remaining items proposed |
 | [Parallel execution](parallel-execution.md) | P1 — first engine workstream; prerequisite for `foreach` | — | Implemented |
 | [Node resilience](node-resilience.md) | P1 — independent; suggested after parallel execution to avoid rebase churn | — | Implemented |
-| [Routing table](routing-table.md) | P1 — prerequisite for the Phase 2.5 tier-ROI selector | — | Proposed |
+| [Routing table](routing-table.md) | P1 — prerequisite for the Phase 2.5 tier-ROI selector | — | Implemented |
 | [Comparative baselines](comparative-baselines.md) | P2 — launch evidence asset | Eval integrity (held-out suite) | Harness/suites implemented; full runs pending |
 
 Suggested engine order: parallel-execution → node-resilience → routing-table →

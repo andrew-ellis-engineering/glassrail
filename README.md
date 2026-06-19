@@ -153,6 +153,9 @@ parsed by `pydantic-settings`. Tiers are nested, so use the `__` delimiter:
 | Max concurrent nodes | `GLASSRAIL_MAX_CONCURRENT_NODES` | `4` |
 | LLM node retries | `GLASSRAIL_RESILIENCE__MAX_LLM_NODE_RETRIES` | `1` |
 | Escalate tier on retry | `GLASSRAIL_RESILIENCE__ESCALATE_TIER_ON_RETRY` | `true` |
+| Summary node tier | `GLASSRAIL_ROUTING__SUMMARY` | `0` |
+| Think node tier | `GLASSRAIL_ROUTING__THINK` | `2` |
+| Reasoning-required tier floor | `GLASSRAIL_ROUTING__REASONING_REQUIRED` | `2` |
 | Planner stall char multiplier | `GLASSRAIL_PLANNER_STALL_CHAR_MULTIPLIER` | `4` |
 | Load tool plugins | `GLASSRAIL_LOAD_TOOL_PLUGINS` | `false` |
 
@@ -173,6 +176,26 @@ the retry's minimum tier by one; set
 `GLASSRAIL_RESILIENCE__MAX_LLM_NODE_RETRIES=0` to disable node retries, or
 `GLASSRAIL_RESILIENCE__ESCALATE_TIER_ON_RETRY=false` to retry within the same
 tier window. Tool calls are not auto-retried because they may have side effects.
+
+### Tier routing
+
+Glassrail routes node types through a deterministic table under `[routing]`.
+The defaults preserve the shipped behavior: `decision`, `tool`, `summary`,
+`synthesis`, and `result` start at tier 0; `think` starts at tier 2; and
+`reasoning_required = true` raises any node to at least tier 2. `forced_tier`
+on a plan node still overrides the table, while provider fallthrough on
+unavailability remains unchanged.
+
+```toml
+[routing]
+summary = 1
+synthesis = 1
+think = 2
+reasoning_required = 2
+```
+
+Fields are `decision`, `tool`, `synthesis`, `think`, `summary`, `result`, and
+`reasoning_required`, each in the fixed tier range `0..3`.
 
 ### Generation ceiling
 

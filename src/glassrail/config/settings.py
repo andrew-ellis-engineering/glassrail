@@ -230,6 +230,43 @@ class ResilienceConfig(BaseModel):
     """Raise the minimum tier by one for each retry attempt."""
 
 
+class RoutingConfig(BaseModel):
+    """Deterministic node-type to tier routing policy."""
+
+    decision: int = 0
+    """Tier for decision nodes."""
+    tool: int = 0
+    """Tier for tool-adjacent LLM micro-calls such as arg extraction."""
+    synthesis: int = 0
+    """Tier for synthesis nodes."""
+    think: int = 2
+    """Tier for think nodes."""
+    summary: int = 0
+    """Tier for summary nodes."""
+    result: int = 0
+    """Tier for result nodes."""
+    reasoning_required: int = 2
+    """Minimum tier applied when a node sets reasoning_required."""
+
+    @model_validator(mode="after")
+    def _check_tier_range(self) -> RoutingConfig:
+        # Tier count is fixed at four in Settings today. If tiers become
+        # dynamic, validate these fields against len(settings.tiers) instead.
+        for field in (
+            "decision",
+            "tool",
+            "synthesis",
+            "think",
+            "summary",
+            "result",
+            "reasoning_required",
+        ):
+            value = getattr(self, field)
+            if value < 0 or value > 3:
+                raise ValueError(f"routing.{field} must be between 0 and 3")
+        return self
+
+
 _OPENROUTER_QWEN_EXTRA_BODY: dict[str, Any] = {
     "reasoning": {"effort": "none"},
     "provider": {"require_parameters": True},
@@ -354,6 +391,8 @@ class Settings(BaseSettings):
     """
     resilience: ResilienceConfig = ResilienceConfig()
     """Retry policy for main LLM node calls. Configure under ``[resilience]``."""
+    routing: RoutingConfig = RoutingConfig()
+    """Deterministic node-type to tier map. Configure under ``[routing]``."""
     planner_stall_char_multiplier: int = 4
     """Classify invalid planner output longer than planner max_tokens times
     this multiplier as a stall and feed the raw output into the retry prompt."""

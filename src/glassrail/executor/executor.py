@@ -592,7 +592,7 @@ class Executor:
                 node_id=node.id, status=NodeStatus.EMPTY, output=raw_output, args_used=args
             )
 
-        ok, issue = await self._check_output_shape(node, raw_output)
+        ok, issue = await self._check_output_shape(node, raw_output, tier)
         if not ok:
             log.warning("Node %d unexpected result shape: %s", node.id, issue)
             return NodeResult(
@@ -1114,15 +1114,19 @@ class Executor:
         """Pick a tier for ``node``. Deterministic — the model never decides."""
         if node.forced_tier is not None:
             return node.forced_tier
-        if node.type is NodeType.DECISION:
-            return 0
-        if node.type is NodeType.TOOL:
-            return 0
-        if node.type is NodeType.THINK:
-            return 2
+
+        routing = self._settings.routing
+        base = {
+            NodeType.DECISION: routing.decision,
+            NodeType.TOOL: routing.tool,
+            NodeType.SYNTHESIS: routing.synthesis,
+            NodeType.THINK: routing.think,
+            NodeType.SUMMARY: routing.summary,
+            NodeType.RESULT: routing.result,
+        }.get(node.type, 0)
         if node.reasoning_required:
-            return 2
-        return 0
+            base = max(base, routing.reasoning_required)
+        return base
 
     async def _extract_args(
         self,
@@ -1157,6 +1161,7 @@ class Executor:
         self,
         node: Node,
         output: object,
+        tier: int,
     ) -> tuple[bool, str | None]:
         """Lightweight gate: does the tool output look like what the node asked for?"""
         try:
@@ -1174,7 +1179,7 @@ class Executor:
                         {"role": "system", "content": self._settings.prompts.shape_check},
                         {"role": "user", "content": prompt},
                     ],
-                    min_tier=0,
+                    min_tier=tier,
                     json_mode=True,
                     max_tokens=self._settings.budgets.shape_check,
                 )

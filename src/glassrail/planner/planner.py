@@ -153,13 +153,17 @@ class Planner:
         for index, tier in enumerate(self._settings.tiers):
             status = self._tier_status(index=index, min_tier=min_tier)
             lines.append(f"- tier {index}: model={tier.model}, endpoint={tier.base_url}, {status}")
+        routing = self._settings.routing
         lines.extend(
             [
-                "- Default routing: tool, decision, summary, synthesis, and result "
-                "nodes start at tier 0.",
-                "- Think nodes and reasoning_required=true nodes start at tier 2. "
+                "- Node routing table: "
+                f"tool={routing.tool}, decision={routing.decision}, "
+                f"summary={routing.summary}, synthesis={routing.synthesis}, "
+                f"think={routing.think}, result={routing.result}.",
+                "- Nodes with reasoning_required=true start at least at "
+                f"tier {routing.reasoning_required}. "
                 "Use them only for real multi-step reasoning, and prefer ordinary "
-                "summary/synthesis/result nodes when tier 2+ are not configured.",
+                "summary/synthesis/result nodes when higher tiers are not configured.",
                 "- If you set forced_tier, choose only an eligible configured tier "
                 "from the list above.",
             ]
