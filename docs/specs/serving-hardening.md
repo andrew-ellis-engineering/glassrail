@@ -1,6 +1,6 @@
 # Spec: Serving hardening
 
-Status: Proposed; items 1–3 implemented 2026-06-19, items 5 and 6 implemented 2026-06-11.
+Status: Implemented (2026-06-19).
 Priority: P1, with items 5 (`glassrail run` exit codes) and 6
 (`glassrail serve`) suggested early — they are small and user-facing.
 Depends on: nothing. Items are independently mergeable; one item per PR.
@@ -72,7 +72,7 @@ unaffected — verify `gateways/tui/client.py` skips non-`data:` lines (it
 already strips by prefix; add a test). Document the keepalive in
 `docs/streaming.md`.
 
-## Item 4 — Resume idempotency
+## Item 4 — Resume idempotency — implemented 2026-06-19
 
 **Current:** `POST /task/{id}/resume` checks status then queues
 `orchestrator.resume` as a background task; two near-simultaneous calls can

@@ -249,18 +249,18 @@ running continuously alongside. Done since the Phase 1 baseline:
   subscribe per task so unrelated task events cannot evict active streams.
 - **SSE keepalive** ✓ — task event streams emit idle comment frames while
   waiting for long-running nodes, with WebSocket liveness left to uvicorn pings.
+- **Resume idempotency** ✓ — REST resume claims a paused task as executing
+  before queueing background work, so duplicate submissions cannot schedule two
+  resumes.
 
 ### Track 2a — Engine reliability core (in order)
 
-1. **Serving hardening (remaining)** — resume idempotency. Spec:
-   specs/serving-hardening.md (items 1–4; 5–6
-   land in the release window).
-2. **Small fixes / API cleanup** — remaining items of
+1. **Small fixes / API cleanup** — remaining items of
    specs/small-fixes.md (stray prompts into
    `NodePrompts`, dead validator check, `ToolRisk` layer fix, `_Scripted`
    consolidation, `Planner.plan()` removal, subplan id/confidence,
    postprocess tests, image-tool docs).
-3. **Prompt caching for planner and node prompts** *(independent of the items
+2. **Prompt caching for planner and node prompts** *(independent of the items
    above; low-risk, land early)* — cache the static planner system prefix
    (~3.8k tokens) and the per-node executor system prompts, and reorder the
    planner prompt so the request-selected cookbook and the request itself trail

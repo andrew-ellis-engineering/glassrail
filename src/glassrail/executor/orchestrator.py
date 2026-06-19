@@ -156,7 +156,11 @@ class Orchestrator:
             if state is None:
                 log.warning("Orchestrator.resume: task %s not found", task_id)
                 return
-            if state.status not in (TaskStatus.AWAITING_CONFIRMATION, TaskStatus.PAUSED):
+            if state.status not in (
+                TaskStatus.AWAITING_CONFIRMATION,
+                TaskStatus.PAUSED,
+                TaskStatus.EXECUTING,
+            ):
                 log.warning(
                     "Orchestrator.resume: task %s is in status %s, not resumable",
                     task_id,

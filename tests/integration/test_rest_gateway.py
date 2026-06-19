@@ -5,13 +5,22 @@ from __future__ import annotations
 import sys
 from collections.abc import AsyncIterator
 from collections.abc import Sequence as _Sequence
+from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 
 from glassrail.config import Settings
-from glassrail.core import ExecutionState, NodeResult, NodeStatus, TaskStatus, new_task_id
+from glassrail.core import (
+    ExecutionState,
+    NodeResult,
+    NodeStatus,
+    Plan,
+    TaskId,
+    TaskStatus,
+    new_task_id,
+)
 from glassrail.events import EventBus
 from glassrail.executor import Executor, Orchestrator
 from glassrail.gateways.rest import create_app, create_default_app
@@ -189,6 +198,43 @@ async def test_resume_missing_returns_404(
     client, _ = wired
     resp = client.post(f"/task/{new_task_id()}/resume")
     assert resp.status_code == 404
+
+
+async def test_resume_claims_task_before_queueing_background_resume() -> None:
+    class _ResumeSpy:
+        def __init__(self) -> None:
+            self.calls: list[TaskId] = []
+
+        async def resume(self, task_id: TaskId) -> None:
+            self.calls.append(task_id)
+
+    store = InMemoryStateStore()
+    task_id = new_task_id()
+    state = ExecutionState(
+        task_id=task_id,
+        user_request="approve me",
+        plan=Plan(nodes=[]),
+        status=TaskStatus.AWAITING_CONFIRMATION,
+    )
+    await store.save_task(state)
+    spy = _ResumeSpy()
+    app = create_app(
+        orchestrator=cast("Orchestrator", spy),
+        store=store,
+        harness=ToolHarness(),
+    )
+    client = TestClient(app)
+
+    first = client.post(f"/task/{task_id}/resume")
+    second = client.post(f"/task/{task_id}/resume")
+    saved = await store.load_task(task_id)
+
+    assert first.status_code == 200
+    assert second.status_code == 400
+    assert second.json()["detail"] == "Task is in status 'executing', not resumable"
+    assert saved is not None
+    assert saved.status is TaskStatus.EXECUTING
+    assert spy.calls == [task_id]
 
 
 async def test_branch_log_endpoint(

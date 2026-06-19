@@ -194,6 +194,28 @@ async def test_confirm_gate_pauses_and_resume_finishes() -> None:
     assert done.final_output == "nothing scheduled."
 
 
+async def test_resume_tolerates_preclaimed_executing_state() -> None:
+    orch, store = _build(
+        [_PLAN_PAYLOAD, _SHAPE_OK, _SYNTH_OUT, _RESULT_OUT],
+        settings=Settings(confirm_plans=True),
+    )
+    state = await _seed_task(store)
+
+    await orch.run(state.task_id)
+    paused = await store.load_task(state.task_id)
+    assert paused is not None
+    assert paused.status is TaskStatus.AWAITING_CONFIRMATION
+    paused.status = TaskStatus.EXECUTING
+    paused.touch()
+    await store.save_task(paused)
+
+    await orch.resume(state.task_id)
+    done = await store.load_task(state.task_id)
+    assert done is not None
+    assert done.status is TaskStatus.COMPLETED
+    assert done.final_output == "nothing scheduled."
+
+
 _PLAN_REVISED = json.dumps(
     {
         "nodes": [
