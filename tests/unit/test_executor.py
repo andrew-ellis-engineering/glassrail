@@ -114,6 +114,89 @@ async def test_single_tool_completes() -> None:
     assert node_result.execution_time_s >= 0
 
 
+async def test_independent_ready_nodes_run_concurrently() -> None:
+    waiting = 0
+    both_waiting = asyncio.Event()
+    release = asyncio.Event()
+    harness = ToolHarness()
+
+    @harness.tool(name="root", description="root", parameters={"type": "object"})
+    async def _root(**_: object) -> dict[str, str]:
+        return {"root": "done"}
+
+    async def _barrier(label: str) -> dict[str, str]:
+        nonlocal waiting
+        waiting += 1
+        if waiting == 2:
+            both_waiting.set()
+            release.set()
+        await asyncio.wait_for(release.wait(), timeout=1)
+        return {"branch": label}
+
+    @harness.tool(name="left", description="left", parameters={"type": "object"})
+    async def _left(**_: object) -> dict[str, str]:
+        return await _barrier("left")
+
+    @harness.tool(name="right", description="right", parameters={"type": "object"})
+    async def _right(**_: object) -> dict[str, str]:
+        return await _barrier("right")
+
+    result_payload = json.dumps({"output": "done", "confidence": 1.0})
+    executor = Executor(
+        router=TierRouter([_ScriptedProvider([_SHAPE_OK] * 6 + [result_payload])]),
+        harness=harness,
+        settings=Settings(max_concurrent_nodes=2),
+    )
+    plan = Plan(
+        nodes=[
+            Node(id=1, type=NodeType.TOOL, description="root", tool="root"),
+            Node(id=2, type=NodeType.TOOL, description="left", tool="left", context_needed=[1]),
+            Node(id=3, type=NodeType.TOOL, description="right", tool="right", context_needed=[1]),
+            Node(id=4, type=NodeType.RESULT, description="final", context_needed=[2, 3]),
+        ]
+    )
+
+    result = await executor.execute(_state(plan))
+
+    assert both_waiting.is_set()
+    assert result.results[2].status is NodeStatus.COMPLETED
+    assert result.results[3].status is NodeStatus.COMPLETED
+    assert result.final_output == "done"
+
+
+async def test_max_concurrent_nodes_one_preserves_sequential_order() -> None:
+    order: list[str] = []
+    harness = ToolHarness()
+
+    def _register_tool(name: str) -> None:
+        @harness.tool(name=name, description=name, parameters={"type": "object"})
+        async def _tool(**_: object) -> dict[str, str]:
+            order.append(name)
+            return {"tool": name}
+
+    _register_tool("root")
+    _register_tool("left")
+    _register_tool("right")
+    result_payload = json.dumps({"output": "done", "confidence": 1.0})
+    executor = Executor(
+        router=TierRouter([_ScriptedProvider([_SHAPE_OK] * 6 + [result_payload])]),
+        harness=harness,
+        settings=Settings(max_concurrent_nodes=1),
+    )
+    plan = Plan(
+        nodes=[
+            Node(id=1, type=NodeType.TOOL, description="root", tool="root"),
+            Node(id=2, type=NodeType.TOOL, description="left", tool="left", context_needed=[1]),
+            Node(id=3, type=NodeType.TOOL, description="right", tool="right", context_needed=[1]),
+            Node(id=4, type=NodeType.RESULT, description="final", context_needed=[2, 3]),
+        ]
+    )
+
+    await executor.execute(_state(plan))
+
+    assert order == ["root", "left", "right"]
+
+
 async def test_tool_approval_deny_blocks_execution() -> None:
     calls = 0
     harness = ToolHarness()
@@ -390,9 +473,8 @@ async def test_final_output_ignores_result_with_only_skipped_content() -> None:
     decision_payload = json.dumps({"branch": "yes", "confidence": 0.9})
     yes_payload = json.dumps({"reasoning": "half is 123", "confidence": 1.0})
     result_payload = json.dumps({"output": "123", "confidence": 1.0})
-    stale_result_payload = json.dumps({"output": "248", "confidence": 1.0})
     executor, _ = _executor(
-        [decision_payload, yes_payload, result_payload, stale_result_payload],
+        [decision_payload, yes_payload, result_payload],
         tier=2,
     )
     plan = Plan(
@@ -418,7 +500,7 @@ async def test_final_output_ignores_result_with_only_skipped_content() -> None:
     assert result.results[2].status is NodeStatus.COMPLETED
     assert result.results[3].status is NodeStatus.SKIPPED
     assert result.results[4].status is NodeStatus.COMPLETED
-    assert result.results[5].status is NodeStatus.COMPLETED
+    assert result.results[5].status is NodeStatus.SKIPPED
     assert result.final_output == "123"
 
 
@@ -449,6 +531,33 @@ async def test_decision_preserves_shared_join_after_branch_skip() -> None:
     assert result.results[3].status is NodeStatus.SKIPPED
     assert result.results[4].status is NodeStatus.COMPLETED
     assert result.final_output == "final from yes-path"
+
+
+async def test_decision_skips_downstream_node_that_only_uses_skipped_content() -> None:
+    decision_payload = json.dumps({"branch": "yes", "confidence": 0.9})
+    yes_payload = json.dumps({"output": "yes-path", "confidence": 1.0})
+    executor, _ = _executor([decision_payload, yes_payload])
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.DECISION,
+                description="branch",
+                condition="is it yes?",
+                branches={"yes": [2], "no": [3]},
+                default_branch="yes",
+            ),
+            Node(id=2, type=NodeType.SYNTHESIS, description="yes path"),
+            Node(id=3, type=NodeType.SYNTHESIS, description="no path"),
+            Node(id=4, type=NodeType.RESULT, description="depends only on no", context_needed=[3]),
+        ]
+    )
+
+    result = await executor.execute(_state(plan))
+
+    assert result.results[3].status is NodeStatus.SKIPPED
+    assert result.results[4].status is NodeStatus.SKIPPED
+    assert 4 in result.skipped_nodes
 
 
 async def test_decision_default_branch_used_on_llm_failure() -> None:

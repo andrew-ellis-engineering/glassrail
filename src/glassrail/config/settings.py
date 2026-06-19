@@ -337,6 +337,12 @@ class Settings(BaseSettings):
     max_plan_nodes: int = 24
     max_decision_nesting_depth: int = 2
     max_replan_attempts: int = 1
+    max_concurrent_nodes: int = 4
+    """Maximum number of ready DAG nodes that may execute at once.
+
+    Set to 1 to force the previous sequential execution model; values above 1
+    let independent nodes in the same dependency layer run concurrently.
+    """
     planner_stall_char_multiplier: int = 4
     """Classify invalid planner output longer than planner max_tokens times
     this multiplier as a stall and feed the raw output into the retry prompt."""

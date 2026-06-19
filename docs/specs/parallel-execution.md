@@ -1,6 +1,6 @@
 # Spec: Parallel node execution
 
-Status: Proposed
+Status: Part A implemented (2026-06-19); Part B proposed
 Priority: P1 — first engine workstream. Prerequisite for `foreach` (vault spec);
 `foreach`'s value is parallel fan-out and must not land on a sequential engine.
 Depends on: nothing. Part B is separately mergeable after Part A.

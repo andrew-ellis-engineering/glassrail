@@ -222,12 +222,18 @@ running continuously alongside. Done since the Phase 1 baseline:
   Phase 1; the remaining gap — risk-derived defaults so `write`/`execute`
   tools ask by default — is specs/security-baseline.md
   item 2.)*
+- **Parallel node ready-set scheduler** ✓ — independent nodes now execute
+  concurrently up to `max_concurrent_nodes`, with `1` preserving sequential
+  execution. Branch skip propagation now records skipped branch targets
+  immediately and auto-skips downstream nodes whose declared content inputs were
+  all skipped, while preserving shared joins with at least one completed input.
+   Spec: specs/parallel-execution.md Part A.
 
 ### Track 2a — Engine reliability core (in order)
 
-1. **Parallel node execution** — ready-set scheduler with bounded concurrency
-   (`max_concurrent_nodes`), formalised transitive-skip semantics, and subplan
-   event visibility. Prerequisite for `foreach`. Spec:
+1. **Parallel node execution, Part B** — subplan event visibility on the event
+   stream via `node_path`, while keeping current ACP and TUI rendering stable.
+   Prerequisite cleanup before `foreach`. Spec:
    specs/parallel-execution.md.
 2. **Node resilience** — LLM-node retry with tier escalation
    (`[resilience]`), scripted-provider error directives, provider connection

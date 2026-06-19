@@ -7,6 +7,7 @@ node runs at, the model never does.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import math
@@ -235,7 +236,13 @@ class Executor:
         """Execute the plan, emitting lifecycle events to the bus."""
         return await self._run(state, emit=True)
 
-    async def _run(self, state: ExecutionState, *, emit: bool) -> ExecutionState:
+    async def _run(
+        self,
+        state: ExecutionState,
+        *,
+        emit: bool,
+        semaphore: asyncio.Semaphore | None = None,
+    ) -> ExecutionState:
         plan = state.plan
         if plan is None:
             raise RuntimeError("Cannot execute: state has no plan")
@@ -244,75 +251,74 @@ class Executor:
         # internal nodes (whose ids may collide with the parent's) don't
         # leak onto the parent task's event stream.
         bus = self._bus if emit else None
-        skipped: set[int] = set()
         node_map = {n.id: n for n in plan.nodes}
+        deps = self._dependency_map(plan)
+        max_concurrent = max(1, self._settings.max_concurrent_nodes)
+        semaphore = semaphore or asyncio.Semaphore(max_concurrent)
+        pending: set[int] = set(plan.sorted_node_ids)
+        in_flight: dict[asyncio.Task[None], int] = {}
 
         state.status = TaskStatus.EXECUTING
         state.touch()
 
-        for node_id in plan.sorted_node_ids:
-            node = node_map[node_id]
+        while pending or in_flight:
+            dispatched = False
+            for node_id in plan.sorted_node_ids:
+                if node_id not in pending:
+                    continue
+                node = node_map[node_id]
+                if node_id in state.results:
+                    pending.remove(node_id)
+                    continue
+                if not deps[node_id].issubset(state.results):
+                    continue
 
-            if node_id in skipped:
-                result = NodeResult(node_id=node_id, status=NodeStatus.SKIPPED)
-                state.results[node_id] = result
-                state.skipped_nodes.append(node_id)
-                log.info("Node %d skipped (excluded branch)", node_id)
-                await self._emit(bus, self._finished_event(state, result))
+                pending.remove(node_id)
+                if self._only_uses_skipped_content(
+                    node, state, plan, missing_counts_as_skipped=False
+                ):
+                    await self._record_skipped_node(
+                        state,
+                        node_id=node_id,
+                        bus=bus,
+                        reason="all content dependencies were skipped",
+                    )
+                    dispatched = True
+                    continue
+
+                if len(in_flight) >= max_concurrent:
+                    pending.add(node_id)
+                    break
+
+                task = asyncio.create_task(
+                    self._run_node(
+                        node,
+                        state,
+                        plan=plan,
+                        node_map=node_map,
+                        semaphore=semaphore,
+                        bus=bus,
+                    )
+                )
+                in_flight[task] = node_id
+                dispatched = True
+
+            if not in_flight:
+                if pending and not dispatched:
+                    blocked = {
+                        node_id: sorted(deps[node_id] - state.results.keys())
+                        for node_id in sorted(pending)
+                    }
+                    raise RuntimeError(f"Cannot execute plan: no ready nodes remain: {blocked}")
                 continue
 
-            tier = self._select_tier(node)
-            with get_tracer().start_as_current_span(SPAN_NODE) as span:
-                span.set_attribute(ATTR_NODE_ID, node_id)
-                span.set_attribute(ATTR_NODE_TYPE, node.type.value)
-                span.set_attribute(ATTR_TIER, tier)
+            if dispatched and len(in_flight) < max_concurrent:
+                continue
 
-                await self._emit(
-                    bus,
-                    NodeStarted(
-                        task_id=state.task_id,
-                        node_id=node_id,
-                        node_type=node.type,
-                        tier=tier,
-                    ),
-                )
-                t0 = time.monotonic()
-                result = await self._dispatch_node(node, state, tier, skipped, bus=bus)
-                result.execution_time_s = time.monotonic() - t0
-                if result.tier_used is None:
-                    result.tier_used = tier
-
-                if (
-                    result.status is NodeStatus.COMPLETED
-                    and result.confidence < self._settings.confidence_threshold
-                ):
-                    result.flagged = True
-                    log.warning(
-                        "Node %d flagged: confidence %.2f below threshold",
-                        node_id,
-                        result.confidence,
-                    )
-
-                span.set_attribute(ATTR_NODE_STATUS, result.status.value)
-                span.set_attribute(ATTR_NODE_CONFIDENCE, result.confidence)
-                if result.status is NodeStatus.FAILED:
-                    span.set_status(Status(StatusCode.ERROR, result.error or "node failed"))
-
-                state.results[node_id] = result
-                state.completed_nodes.append(node_id)
-                state.touch()
-
-                if node.type is NodeType.DECISION:
-                    await self._emit(
-                        bus,
-                        BranchDecided(
-                            task_id=state.task_id,
-                            node_id=node_id,
-                            branch_taken=result.branch_taken,
-                            confidence=result.confidence,
-                        ),
-                    )
-                await self._emit(bus, self._finished_event(state, result))
+            done, _ = await asyncio.wait(in_flight, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                in_flight.pop(task)
+                await task
 
         state.final_output = self._extract_final_output(state, plan)
         state.status = TaskStatus.COMPLETED
@@ -320,22 +326,129 @@ class Executor:
         await self._emit(bus, TaskCompleted(task_id=state.task_id, final_output=state.final_output))
         return state
 
+    async def _run_node(
+        self,
+        node: Node,
+        state: ExecutionState,
+        *,
+        plan: Plan,
+        node_map: dict[int, Node],
+        semaphore: asyncio.Semaphore,
+        bus: EventBus | None,
+    ) -> None:
+        if node.type is NodeType.SUBPLAN:
+            await self._execute_and_record_node(
+                node,
+                state,
+                plan=plan,
+                node_map=node_map,
+                semaphore=semaphore,
+                bus=bus,
+            )
+            return
+
+        async with semaphore:
+            await self._execute_and_record_node(
+                node,
+                state,
+                plan=plan,
+                node_map=node_map,
+                semaphore=semaphore,
+                bus=bus,
+            )
+
+    async def _execute_and_record_node(
+        self,
+        node: Node,
+        state: ExecutionState,
+        *,
+        plan: Plan,
+        node_map: dict[int, Node],
+        semaphore: asyncio.Semaphore,
+        bus: EventBus | None,
+    ) -> None:
+        node_id = node.id
+        tier = self._select_tier(node)
+        with get_tracer().start_as_current_span(SPAN_NODE) as span:
+            span.set_attribute(ATTR_NODE_ID, node_id)
+            span.set_attribute(ATTR_NODE_TYPE, node.type.value)
+            span.set_attribute(ATTR_TIER, tier)
+
+            await self._emit(
+                bus,
+                NodeStarted(
+                    task_id=state.task_id,
+                    node_id=node_id,
+                    node_type=node.type,
+                    tier=tier,
+                ),
+            )
+            t0 = time.monotonic()
+            result = await self._dispatch_node(node, state, tier, semaphore=semaphore, bus=bus)
+            result.execution_time_s = time.monotonic() - t0
+            if result.tier_used is None:
+                result.tier_used = tier
+
+            if (
+                result.status is NodeStatus.COMPLETED
+                and result.confidence < self._settings.confidence_threshold
+            ):
+                result.flagged = True
+                log.warning(
+                    "Node %d flagged: confidence %.2f below threshold",
+                    node_id,
+                    result.confidence,
+                )
+
+            span.set_attribute(ATTR_NODE_STATUS, result.status.value)
+            span.set_attribute(ATTR_NODE_CONFIDENCE, result.confidence)
+            if result.status is NodeStatus.FAILED:
+                span.set_status(Status(StatusCode.ERROR, result.error or "node failed"))
+
+            state.results[node_id] = result
+            state.completed_nodes.append(node_id)
+            state.touch()
+
+            if node.type is NodeType.DECISION:
+                skipped = self._record_branch_decision(state, node, result)
+                await self._emit(
+                    bus,
+                    BranchDecided(
+                        task_id=state.task_id,
+                        node_id=node_id,
+                        branch_taken=result.branch_taken,
+                        confidence=result.confidence,
+                    ),
+                )
+            else:
+                skipped: set[int] = set()
+
+            await self._emit(bus, self._finished_event(state, result))
+
+        for skipped_id in sorted(skipped):
+            if skipped_id in node_map and skipped_id not in state.results:
+                await self._record_skipped_node(
+                    state,
+                    node_id=skipped_id,
+                    bus=bus,
+                    reason="excluded branch",
+                )
+
     async def _dispatch_node(
         self,
         node: Node,
         state: ExecutionState,
         tier: int,
-        skipped: set[int],
+        *,
+        semaphore: asyncio.Semaphore,
         bus: EventBus | None = None,
     ) -> NodeResult:
         if node.type is NodeType.TOOL:
             return await self._execute_tool(node, state, tier)
         if node.type is NodeType.DECISION:
-            result = await self._execute_decision(node, state, tier)
-            self._record_branch_decision(state, node, result, skipped)
-            return result
+            return await self._execute_decision(node, state, tier)
         if node.type is NodeType.SUBPLAN:
-            return await self._execute_subplan(node, state)
+            return await self._execute_subplan(node, state, semaphore=semaphore)
         spec = _LLM_NODE_SPECS.get(node.type)
         if spec is not None:
             return await self._execute_llm_node(node, state, tier, spec=spec, bus=bus)
@@ -361,6 +474,22 @@ class Executor:
             tier_used=result.tier_used,
             error=result.error,
         )
+
+    @staticmethod
+    async def _record_skipped_node(
+        state: ExecutionState,
+        *,
+        node_id: int,
+        bus: EventBus | None,
+        reason: str,
+    ) -> None:
+        result = NodeResult(node_id=node_id, status=NodeStatus.SKIPPED)
+        state.results[node_id] = result
+        if node_id not in state.skipped_nodes:
+            state.skipped_nodes.append(node_id)
+        state.touch()
+        log.info("Node %d skipped (%s)", node_id, reason)
+        await Executor._emit(bus, Executor._finished_event(state, result))
 
     # ── Per-node executors ────────────────────────────────────────────────
 
@@ -664,6 +793,8 @@ class Executor:
         self,
         node: Node,
         state: ExecutionState,
+        *,
+        semaphore: asyncio.Semaphore,
     ) -> NodeResult:
         """Run the nested plan in a fresh ExecutionState and bubble up its
         final_output as this node's output. The subplan does not see the
@@ -690,7 +821,7 @@ class Executor:
             plan=node.subplan,
         )
         try:
-            completed = await self._run(sub_state, emit=False)
+            completed = await self._run(sub_state, emit=False, semaphore=semaphore)
         except Exception as exc:
             return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
 
@@ -878,8 +1009,8 @@ class Executor:
         state: ExecutionState,
         node: Node,
         result: NodeResult,
-        skipped: set[int],
-    ) -> None:
+    ) -> set[int]:
+        skipped: set[int] = set()
         if result.branch_taken and node.branches:
             for branch_name, branch_nodes in node.branches.items():
                 if branch_name != result.branch_taken:
@@ -900,6 +1031,7 @@ class Executor:
             result.branch_taken,
             result.confidence,
         )
+        return skipped
 
     def _extract_final_output(self, state: ExecutionState, plan: Plan) -> str | None:
         """The last completed RESULT node's output is the final answer; if
@@ -919,7 +1051,35 @@ class Executor:
         return None
 
     @staticmethod
-    def _only_uses_skipped_content(node: Node, state: ExecutionState, plan: Plan) -> bool:
+    def _dependency_map(plan: Plan) -> dict[int, set[int]]:
+        """All data and decision-control dependencies for scheduler readiness."""
+        deps = {node.id: set(node.context_needed) for node in plan.nodes}
+        for node in plan.nodes:
+            if node.type is not NodeType.DECISION or not node.branches:
+                continue
+            for branch_nodes in node.branches.values():
+                for target_id in branch_nodes:
+                    if target_id in deps:
+                        deps[target_id].add(node.id)
+        return deps
+
+    @staticmethod
+    def _content_dependencies(node: Node, plan: Plan) -> list[int]:
+        node_map = {n.id: n for n in plan.nodes}
+        return [
+            dep
+            for dep in node.context_needed
+            if node_map.get(dep, node).type is not NodeType.DECISION
+        ]
+
+    @staticmethod
+    def _only_uses_skipped_content(
+        node: Node,
+        state: ExecutionState,
+        plan: Plan,
+        *,
+        missing_counts_as_skipped: bool = True,
+    ) -> bool:
         """True when all non-decision inputs to a final candidate were skipped.
 
         This keeps an untaken branch's downstream result node from winning the
@@ -928,15 +1088,15 @@ class Executor:
         """
         if not node.context_needed:
             return False
-        node_map = {n.id: n for n in plan.nodes}
-        content_deps = [
-            dep
-            for dep in node.context_needed
-            if node_map.get(dep, node).type is not NodeType.DECISION
-        ]
+        content_deps = Executor._content_dependencies(node, plan)
         if not content_deps:
             return False
-        return all(
-            (result := state.results.get(dep)) is None or result.status is NodeStatus.SKIPPED
-            for dep in content_deps
-        )
+        for dep in content_deps:
+            result = state.results.get(dep)
+            if result is None:
+                if missing_counts_as_skipped:
+                    continue
+                return False
+            if result.status is not NodeStatus.SKIPPED:
+                return False
+        return True

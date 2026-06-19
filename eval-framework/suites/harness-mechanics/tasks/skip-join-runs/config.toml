@@ -1,0 +1,44 @@
+name = "skip-join-runs"
+tags = ["execution-model", "harness-mechanics", "branch-propagation"]
+type = "regression"
+difficulty = 2
+
+expected_behavior = """
+A join node that consumes one completed dependency and one skipped dependency
+must still run. Only nodes whose non-decision context dependencies are all
+SKIPPED are auto-skipped.
+"""
+
+[fixtures]
+capture = []
+
+[fixtures.install]
+
+[[criteria]]
+text = "Decision took 'yes' branch"
+grader = "trajectory"
+node_id = 1
+expect_branch = "yes"
+
+[[criteria]]
+text = "Node 2 (taken branch) completed"
+grader = "trajectory"
+node_id = 2
+expect_status = "completed"
+
+[[criteria]]
+text = "Node 3 (untaken branch) is skipped"
+grader = "trajectory"
+node_id = 3
+expect_status = "skipped"
+
+[[criteria]]
+text = "Node 4 (join over completed and skipped deps) still completed"
+grader = "trajectory"
+node_id = 4
+expect_status = "completed"
+
+[[criteria]]
+text = "Plan terminates on a result node"
+grader = "trajectory"
+tool_sequence = ["result"]

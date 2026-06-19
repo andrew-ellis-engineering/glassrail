@@ -1,3 +1,2 @@
 {"branch": "yes", "confidence": 0.95}
 {"output": "yes-branch result", "confidence": 0.9}
-{"output": "node 4 ran with absent context from skipped node 3", "confidence": 0.9}

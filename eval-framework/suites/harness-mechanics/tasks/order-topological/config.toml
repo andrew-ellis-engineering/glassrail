@@ -4,11 +4,10 @@ type = "regression"
 difficulty = 2
 
 expected_behavior = """
-Nodes must execute in topological order (plan.sorted_node_ids).  For a diamond
-DAG (1 → 2, 1 → 3, 2 → 4, 3 → 4) the trajectory must show node 1 before
-nodes 2 and 3, and those before node 4.  Parallelism is allowed between 2 and 3.
-The expect_before/expect_after criteria assert actual trajectory index positions,
-not just completion status — a harness running nodes in reverse would fail here.
+The trajectory must preserve dependency-edge order even though independent
+nodes may execute in parallel. For a diamond DAG (1 → 2, 1 → 3, 2 → 4, 3 → 4),
+node 1 must appear before nodes 2 and 3, and nodes 2 and 3 must appear before
+node 4. No total ordering is asserted between nodes 2 and 3.
 """
 
 [fixtures]
@@ -29,16 +28,28 @@ node_id = 4
 expect_status = "completed"
 
 [[criteria]]
-text = "Node 1 (root) appears before nodes 2, 3, and 4 in the trajectory"
+text = "Node 1 (root) appears before direct children 2 and 3 in the trajectory"
 grader = "trajectory"
 node_id = 1
-expect_before = [2, 3, 4]
+expect_before = [2, 3]
 
 [[criteria]]
-text = "Node 4 (sink) appears after nodes 1, 2, and 3 in the trajectory"
+text = "Node 2 (left branch) appears before node 4 in the trajectory"
+grader = "trajectory"
+node_id = 2
+expect_before = [4]
+
+[[criteria]]
+text = "Node 3 (right branch) appears before node 4 in the trajectory"
+grader = "trajectory"
+node_id = 3
+expect_before = [4]
+
+[[criteria]]
+text = "Node 4 (sink) appears after its direct dependencies in the trajectory"
 grader = "trajectory"
 node_id = 4
-expect_after = [1, 2, 3]
+expect_after = [2, 3]
 
 [[criteria]]
 text = "Plan terminates on a result node"

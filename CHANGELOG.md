@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Independent ready DAG nodes now execute concurrently up to
+  `max_concurrent_nodes` (`GLASSRAIL_MAX_CONCURRENT_NODES`, default `4`), with
+  `1` preserving sequential execution.
+
+### Changed
+- Documentation and PyPI project links now point at the live product site and the
+  canonical docs domain; the README references the published product site instead of
+  the retired temporary URL.
+- Branch skip propagation now auto-skips downstream nodes whose declared
+  non-decision inputs were all skipped, while preserving shared join nodes that
+  consume at least one completed input.
+
 ## [0.1.2] - 2026-06-13
 
 ### Fixed

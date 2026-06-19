@@ -18,10 +18,9 @@ measures it. The Phase 1 eval gate is met and the first PyPI release has been
 published. Treat APIs as unstable while Glassrail is in 0.x. See
 [CHANGELOG.md](https://github.com/andrew-ellis-engineering/glassrail/blob/main/CHANGELOG.md)
 for what's landed and the
-[roadmap](https://andrew-ellis-engineering.github.io/glassrail/roadmap/) for
-what's next. The temporary product-site URL is
-[andrew-ellis-engineering.github.io/glassrail.github.io](https://andrew-ellis-engineering.github.io/glassrail.github.io/)
-until a custom domain is wired up.
+[roadmap](https://www.andrewellisengineering.com/glassrail/roadmap/) for
+what's next. The product site is
+[andrewellisengineering.com/glassrail-website](https://www.andrewellisengineering.com/glassrail-website/).
 
 ## Principles
 
@@ -106,7 +105,7 @@ the gateway intentionally, pass `--host 0.0.0.0` or run raw uvicorn:
 The viewer draws the plan as colour-coded node boxes connected by edges
 (grouped into dependency layers, each box showing a short summary, recoloured as
 they run) above a per-node table; `--no-dag` shows the table alone. See
-[Terminal UI](https://andrew-ellis-engineering.github.io/glassrail/tui/).
+[Terminal UI](https://www.andrewellisengineering.com/glassrail/tui/).
 
 **Editor / agent clients (ACP)** — speak the [Agent Client
 Protocol](https://agentclientprotocol.com) as a JSON-RPC 2.0 server over stdio,
@@ -136,7 +135,7 @@ server-side.)
 **REST API directly** — `POST /task` returns a `task_id`; follow it over
 Server-Sent Events or a WebSocket at `/task/{id}/events`, or poll
 `GET /task/{id}`. See
-[Streaming events](https://andrew-ellis-engineering.github.io/glassrail/streaming/).
+[Streaming events](https://www.andrewellisengineering.com/glassrail/streaming/).
 
 ## Configuration
 
@@ -151,6 +150,7 @@ parsed by `pydantic-settings`. Tiers are nested, so use the `__` delimiter:
 | Tier 1 API key | `GLASSRAIL_TIER1__API_KEY` | *(empty)* |
 | HITL plan gate | `GLASSRAIL_CONFIRM_PLANS` | `false` |
 | Tool approval mode | `GLASSRAIL_TOOL_APPROVAL__MODE` | `interactive` |
+| Max concurrent nodes | `GLASSRAIL_MAX_CONCURRENT_NODES` | `4` |
 | Planner stall char multiplier | `GLASSRAIL_PLANNER_STALL_CHAR_MULTIPLIER` | `4` |
 | Load tool plugins | `GLASSRAIL_LOAD_TOOL_PLUGINS` | `false` |
 
@@ -158,6 +158,11 @@ Tiers 1–3 default to OpenRouter models; override any field the same way. With 
 local model as your only tier, raise `GLASSRAIL_TIER0__TIMEOUT_S` (e.g. to `120`)
 — a large local model can take longer than the 10 s default, and a timeout is
 treated as the tier being unavailable.
+
+Independent DAG nodes can run concurrently up to `max_concurrent_nodes`; set it
+to `1` to force sequential execution. A local tier-0 server may still serve one
+sequence at a time, so this mainly improves fan-out over cloud tiers or tools
+that can run concurrently.
 
 ### Generation ceiling
 
@@ -280,7 +285,7 @@ startup.
 
 Glassrail is early 0.x software run by its operator, not a hardened service.
 Current posture (hardening is tracked in
-[Security baseline](https://andrew-ellis-engineering.github.io/glassrail/specs/security-baseline/)):
+[Security baseline](https://www.andrewellisengineering.com/glassrail/specs/security-baseline/)):
 
 - The REST gateway is unauthenticated by default for local development. Set
   `GLASSRAIL_API_KEY` before exposing it beyond localhost; when set, every REST
@@ -309,7 +314,7 @@ cd eval-framework && python3 run.py suite suites/glassrail
 
 The `glassrail-cli` backend drives the real planner and executor over the agent's
 own tier routing via `glassrail run --json`. See
-[Evals](https://andrew-ellis-engineering.github.io/glassrail/evals/).
+[Evals](https://www.andrewellisengineering.com/glassrail/evals/).
 
 ## Development
 
@@ -324,7 +329,7 @@ See
 for the full check sweep and PR guidelines,
 [CLAUDE.md](https://github.com/andrew-ellis-engineering/glassrail/blob/main/CLAUDE.md)
 for the package layout and conventions, and the
-[docs site](https://andrew-ellis-engineering.github.io/glassrail/) for the
+[docs site](https://www.andrewellisengineering.com/glassrail/) for the
 architecture, streaming, observability, and deployment references.
 
 ## License
