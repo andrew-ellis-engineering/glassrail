@@ -1021,6 +1021,7 @@ class Executor:
         except Exception as exc:
             return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
 
+        final_result = self._final_output_result(completed, node.subplan)
         if completed.final_output is None:
             return NodeResult(
                 node_id=node.id,
@@ -1032,7 +1033,7 @@ class Executor:
             node_id=node.id,
             status=NodeStatus.COMPLETED,
             output=completed.final_output,
-            confidence=1.0,
+            confidence=final_result.confidence if final_result is not None else 1.0,
         )
 
     # ── Helpers ───────────────────────────────────────────────────────────
@@ -1247,6 +1248,11 @@ class Executor:
         the plan declared no RESULT node, fall back to the last completed
         synthesis/summary node so older or imperfect plans keep producing the
         best completed answer they have."""
+        result = self._final_output_result(state, plan)
+        return str(result.output) if result is not None else None
+
+    def _final_output_result(self, state: ExecutionState, plan: Plan) -> NodeResult | None:
+        """Return the node result that supplies this plan's final output."""
         for target in (NodeType.RESULT, NodeType.SYNTHESIS, NodeType.SUMMARY):
             for node_id in reversed(plan.sorted_node_ids):
                 node = next((n for n in plan.nodes if n.id == node_id), None)
@@ -1256,7 +1262,7 @@ class Executor:
                     continue
                 result = state.results.get(node_id)
                 if result and result.status is NodeStatus.COMPLETED:
-                    return str(result.output)
+                    return result
         return None
 
     @staticmethod

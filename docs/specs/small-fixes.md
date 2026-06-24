@@ -90,7 +90,7 @@ suppressed; after [parallel-execution](parallel-execution.md) Part B they
 carry `node_path`, and a distinct task-id prefix keeps any future persistence
 collision-free). Test: child state's task_id is distinct and prefixed.
 
-## 8. Subplan confidence from the inner plan
+## 8. Subplan confidence from the inner plan — implemented 2026-06-24
 
 `_execute_subplan` hardcodes `confidence=1.0` on success, masking low-quality
 nested output from the flag check. Set the subplan node's confidence to the

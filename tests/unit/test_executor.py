@@ -1005,6 +1005,66 @@ async def test_subplan_bubbles_nested_final_output() -> None:
     assert out.results[1].output == "nested answer"
 
 
+async def test_subplan_uses_nested_final_output_confidence() -> None:
+    nested_payload = json.dumps({"output": "low confidence answer", "confidence": 0.4})
+    executor, _ = _executor([nested_payload])
+    nested = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="nested final")])
+    nested.sorted_node_ids = [1]
+    plan = Plan(
+        nodes=[Node(id=1, type=NodeType.SUBPLAN, description="delegate", subplan=nested)],
+    )
+    state = _state(plan)
+
+    out = await executor.execute(state)
+
+    result = out.results[1]
+    assert result.status is NodeStatus.COMPLETED
+    assert result.output == "low confidence answer"
+    assert result.confidence == 0.4
+    assert result.flagged is True
+
+
+async def test_subplan_defaults_confidence_when_source_result_unavailable() -> None:
+    class FinalOnlyExecutor(Executor):
+        async def _run(
+            self,
+            state: ExecutionState,
+            *,
+            emit: bool,
+            semaphore: asyncio.Semaphore | None = None,
+            path_prefix: str = "",
+            emit_task_completed: bool = True,
+            bus_override: object | None = None,
+        ) -> ExecutionState:
+            del emit, semaphore, path_prefix, emit_task_completed, bus_override
+            state.status = TaskStatus.COMPLETED
+            state.final_output = "nested answer"
+            return state
+
+    nested = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="nested final")])
+    nested.sorted_node_ids = [1]
+    node = Node(id=7, type=NodeType.SUBPLAN, description="delegate", subplan=nested)
+    state = _state(Plan(nodes=[node]))
+    executor = FinalOnlyExecutor(
+        router=TierRouter([make_scripted([])]),
+        harness=ToolHarness(),
+        settings=Settings(),
+    )
+
+    execute_subplan = getattr(executor, "_execute_subplan")
+    result = await execute_subplan(
+        node,
+        state,
+        semaphore=asyncio.Semaphore(1),
+        emit_nested=False,
+        path_prefix="",
+    )
+
+    assert result.status is NodeStatus.COMPLETED
+    assert result.output == "nested answer"
+    assert result.confidence == 1.0
+
+
 async def test_subplan_child_state_uses_derived_task_id() -> None:
     class CapturingExecutor(Executor):
         def __init__(self) -> None:

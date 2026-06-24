@@ -49,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   planner API, with retries owned by the orchestrator.
 - Nested subplans now execute with a derived child task id internally while
   preserving parent-scoped nested node events for streaming consumers.
+- Subplan node confidence now reflects the nested node that produced the final
+  subplan output, so low-confidence nested answers are flagged at the parent
+  boundary.
 - Branch skip propagation now auto-skips downstream nodes whose declared
   non-decision inputs were all skipped, while preserving shared join nodes that
   consume at least one completed input.
