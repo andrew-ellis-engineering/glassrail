@@ -12,8 +12,9 @@ from glassrail.config import NodeBudgets, NodePrompts, Settings, TierConfig
 from glassrail.core import NodeType, PlanRejectedError, PlanValidationError
 from glassrail.harness import ToolHarness, register_builtins
 from glassrail.planner import Planner, rejection_retry_feedback
-from glassrail.providers import Chunk, Message, TierRouter
+from glassrail.providers import Chunk, LLMProvider, Message, TierRouter
 from glassrail.validator import PlanValidator
+from tests.conftest import make_capturing_scripted
 
 
 class _FixedProvider:
@@ -56,7 +57,7 @@ def settings() -> Settings:
     return Settings(planner_min_tier=0)
 
 
-def _planner_from(provider: _FixedProvider, harness: ToolHarness, settings: Settings) -> Planner:
+def _planner_from(provider: LLMProvider, harness: ToolHarness, settings: Settings) -> Planner:
     router = TierRouter([provider])
     validator = PlanValidator(harness=harness, settings=settings)
     return Planner(router=router, harness=harness, validator=validator, settings=settings)
@@ -85,34 +86,10 @@ async def test_plan_round_trips_simple_payload(harness: ToolHarness, settings: S
     assert plan.sorted_node_ids == [1]
 
 
-class _CapturingProvider(_FixedProvider):
-    """Records the ``max_tokens`` and messages of each call."""
-
-    def __init__(self, *, payload: str, tier: int = 0) -> None:
-        super().__init__(payload=payload, tier=tier)
-        self.max_tokens_seen: list[int] = []
-        self.system_seen: list[str] = []
-        self.user_seen: list[str] = []
-
-    async def complete(
-        self,
-        messages: list[Message],
-        *,
-        json_mode: bool = False,
-        max_tokens: int = 1024,
-        timeout_s: float | None = None,
-    ) -> AsyncIterator[Chunk]:
-        self.max_tokens_seen.append(max_tokens)
-        self.system_seen.append(next(m["content"] for m in messages if m["role"] == "system"))
-        self.user_seen.append(next(m["content"] for m in messages if m["role"] == "user"))
-        del json_mode, timeout_s
-        yield Chunk(text=self._payload, tokens_used=42)
-
-
 async def test_planner_uses_its_configured_budget(harness: ToolHarness) -> None:
     """The plan generation call is capped at the configured planner budget."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
-    provider = _CapturingProvider(payload=payload)
+    provider = make_capturing_scripted([payload], tokens_used=42)
     settings = Settings(budgets=NodeBudgets(planner=5005), planner_min_tier=0)
     planner = _planner_from(provider, harness, settings)
 
@@ -123,7 +100,7 @@ async def test_planner_uses_its_configured_budget(harness: ToolHarness) -> None:
 async def test_planner_uses_its_configured_prompt(harness: ToolHarness) -> None:
     """A custom planner prompt is sent as the system message."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
-    provider = _CapturingProvider(payload=payload)
+    provider = make_capturing_scripted([payload], tokens_used=42)
     settings = Settings(prompts=NodePrompts(planner="CUSTOM PLANNER PROMPT"), planner_min_tier=0)
     planner = _planner_from(provider, harness, settings)
 
@@ -135,7 +112,7 @@ async def test_planner_tells_model_the_node_limits(harness: ToolHarness) -> None
     """The configured plan/subplan caps are injected into the request so the
     model knows its budget — even when the system prompt is overridden."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
-    provider = _CapturingProvider(payload=payload)
+    provider = make_capturing_scripted([payload], tokens_used=42)
     settings = Settings(
         max_plan_nodes=24,
         max_subplans_per_plan=2,
@@ -155,7 +132,7 @@ async def test_planner_tells_model_the_node_limits(harness: ToolHarness) -> None
 async def test_planner_tells_model_the_tier_surface(harness: ToolHarness) -> None:
     """The planner sees which tiers are eligible/configured before shaping a plan."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
-    provider = _CapturingProvider(payload=payload, tier=1)
+    provider = make_capturing_scripted([payload], tier=1, tokens_used=42)
     settings = Settings(
         prompts=NodePrompts(planner="CUSTOM"),
         tier0=TierConfig(base_url="http://localhost:8080/v1", model="tier-0", api_key=""),
@@ -180,7 +157,7 @@ async def test_planner_tells_model_the_tier_surface(harness: ToolHarness) -> Non
 async def test_planner_includes_plan_cookbook(harness: ToolHarness) -> None:
     """The planner receives reusable plan patterns even with a custom system prompt."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
-    provider = _CapturingProvider(payload=payload)
+    provider = make_capturing_scripted([payload], tokens_used=42)
     settings = Settings(prompts=NodePrompts(planner="CUSTOM"), planner_min_tier=0)
     planner = _planner_from(provider, harness, settings)
 
@@ -199,7 +176,7 @@ async def test_planner_includes_plan_cookbook(harness: ToolHarness) -> None:
 async def test_planner_includes_tool_capability_digest(harness: ToolHarness) -> None:
     """The planner sees a coarse capability map before raw tool schemas."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
-    provider = _CapturingProvider(payload=payload)
+    provider = make_capturing_scripted([payload], tokens_used=42)
     planner = _planner_from(provider, harness, Settings(planner_min_tier=0))
 
     await planner.plan("read a local file")
@@ -215,7 +192,7 @@ async def test_feedback_is_woven_into_the_planning_prompt(
 ) -> None:
     """On a guided replan, the user's feedback is injected into the request."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
-    provider = _CapturingProvider(payload=payload)
+    provider = make_capturing_scripted([payload], tokens_used=42)
     planner = _planner_from(provider, harness, settings)
 
     await planner.plan("summarise the doc", feedback="use bullet points, not prose")
@@ -227,7 +204,7 @@ async def test_feedback_is_woven_into_the_planning_prompt(
 async def test_no_feedback_leaves_prompt_clean(harness: ToolHarness, settings: Settings) -> None:
     """Without feedback the revision block is absent from the prompt."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
-    provider = _CapturingProvider(payload=payload)
+    provider = make_capturing_scripted([payload], tokens_used=42)
     planner = _planner_from(provider, harness, settings)
 
     await planner.plan("summarise the doc")
@@ -495,7 +472,7 @@ async def test_prior_reasoning_injected_into_user_message(
     harness: ToolHarness, settings: Settings
 ) -> None:
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
-    provider = _CapturingProvider(payload=payload)
+    provider = make_capturing_scripted([payload], tokens_used=42)
     planner = _planner_from(provider, harness, settings)
 
     await planner.plan_attempt("do a thing", attempt=1, prior_reasoning="Step 1: consider X")
@@ -509,7 +486,7 @@ async def test_validation_feedback_injected_into_user_message(
     harness: ToolHarness, settings: Settings
 ) -> None:
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
-    provider = _CapturingProvider(payload=payload)
+    provider = make_capturing_scripted([payload], tokens_used=42)
     planner = _planner_from(provider, harness, settings)
 
     await planner.plan_attempt(
@@ -526,7 +503,7 @@ async def test_rejection_feedback_injected_into_user_message(
     harness: ToolHarness, settings: Settings
 ) -> None:
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
-    provider = _CapturingProvider(payload=payload)
+    provider = make_capturing_scripted([payload], tokens_used=42)
     planner = _planner_from(provider, harness, settings)
 
     await planner.plan_attempt(
@@ -550,7 +527,7 @@ async def test_no_prior_reasoning_leaves_prompt_clean(
     harness: ToolHarness, settings: Settings
 ) -> None:
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
-    provider = _CapturingProvider(payload=payload)
+    provider = make_capturing_scripted([payload], tokens_used=42)
     planner = _planner_from(provider, harness, settings)
 
     await planner.plan_attempt("do a thing", attempt=0)
@@ -561,7 +538,7 @@ async def test_no_validation_feedback_leaves_prompt_clean(
     harness: ToolHarness, settings: Settings
 ) -> None:
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
-    provider = _CapturingProvider(payload=payload)
+    provider = make_capturing_scripted([payload], tokens_used=42)
     planner = _planner_from(provider, harness, settings)
 
     await planner.plan_attempt("do a thing", attempt=0)

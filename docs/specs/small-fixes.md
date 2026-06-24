@@ -59,7 +59,7 @@ re-exported from `core/__init__.py`); `harness/registry.py` and
 re-export `ToolSchema` from `glassrail.harness.__init__` and import from the
 package, removing the submodule reach-in.
 
-## 5. Consolidate the `_Scripted` test fake
+## 5. Consolidate the `_Scripted` test fake — implemented 2026-06-19
 
 The scripted-provider fake is copy-pasted into six test files (grep
 `class _Scripted` under `tests/`). Add factories to `tests/conftest.py` —

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
-from collections.abc import Sequence as _Sequence
 
 import pytest
 
@@ -42,38 +41,7 @@ from glassrail.executor.executor import JsonFieldStreamer
 from glassrail.executor.tool_approval import ToolApprovalBroker
 from glassrail.harness import ToolHarness, register_builtins
 from glassrail.providers import Chunk, Message, ProviderError, ProviderUnavailableError, TierRouter
-
-
-class _ScriptedProvider:
-    """Fake provider that pops scripted responses in order."""
-
-    def __init__(self, responses: _Sequence[str | Exception], *, tier: int = 0) -> None:
-        self._responses: list[str | Exception] = list(responses)
-        self._tier = tier
-
-    @property
-    def name(self) -> str:
-        return "scripted"
-
-    @property
-    def tier(self) -> int:
-        return self._tier
-
-    async def complete(
-        self,
-        messages: list[Message],
-        *,
-        json_mode: bool = False,
-        max_tokens: int = 1024,
-        timeout_s: float | None = None,
-    ) -> AsyncIterator[Chunk]:
-        del messages, json_mode, max_tokens, timeout_s
-        if not self._responses:
-            raise RuntimeError("Scripted provider exhausted")
-        response = self._responses.pop(0)
-        if isinstance(response, Exception):
-            raise response
-        yield Chunk(text=response, tokens_used=1)
+from tests.conftest import make_capturing_scripted, make_scripted
 
 
 class _FailsAfterFirstChunkProvider:
@@ -111,7 +79,7 @@ def _executor(
 ) -> tuple[Executor, ToolHarness]:
     harness = ToolHarness()
     register_builtins(harness)
-    router = TierRouter([_ScriptedProvider(responses, tier=tier)])
+    router = TierRouter([make_scripted(responses, tier=tier)])
     return Executor(router=router, harness=harness, settings=settings or Settings()), harness
 
 
@@ -187,7 +155,7 @@ async def test_independent_ready_nodes_run_concurrently() -> None:
 
     result_payload = json.dumps({"output": "done", "confidence": 1.0})
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK] * 6 + [result_payload])]),
+        router=TierRouter([make_scripted([_SHAPE_OK] * 6 + [result_payload])]),
         harness=harness,
         settings=Settings(max_concurrent_nodes=2),
     )
@@ -223,7 +191,7 @@ async def test_max_concurrent_nodes_one_preserves_sequential_order() -> None:
     _register_tool("right")
     result_payload = json.dumps({"output": "done", "confidence": 1.0})
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK] * 6 + [result_payload])]),
+        router=TierRouter([make_scripted([_SHAPE_OK] * 6 + [result_payload])]),
         harness=harness,
         settings=Settings(max_concurrent_nodes=1),
     )
@@ -252,7 +220,7 @@ async def test_tool_approval_deny_blocks_execution() -> None:
         return {"ok": "yes"}
 
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([])]),
+        router=TierRouter([make_scripted([])]),
         harness=harness,
         settings=Settings(
             tool_approval=ToolApprovalSettings(overrides={"danger": ToolApprovalPolicy.DENY})
@@ -283,7 +251,7 @@ async def test_tool_approval_ask_uses_broker() -> None:
         return {"written": "yes"}
 
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        router=TierRouter([make_scripted([_SHAPE_OK])]),
         harness=harness,
         settings=Settings(
             tool_approval=ToolApprovalSettings(overrides={"writer": ToolApprovalPolicy.ASK})
@@ -315,7 +283,7 @@ async def test_write_risk_tool_asks_by_default_in_interactive_mode() -> None:
         return {"written": "yes"}
 
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        router=TierRouter([make_scripted([_SHAPE_OK])]),
         harness=harness,
         settings=Settings(),
         event_bus=bus,
@@ -347,7 +315,7 @@ async def test_write_risk_tool_runs_without_prompt_in_auto_mode() -> None:
         return {"written": "yes"}
 
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        router=TierRouter([make_scripted([_SHAPE_OK])]),
         harness=harness,
         settings=Settings(
             tool_approval=ToolApprovalSettings(
@@ -374,7 +342,7 @@ async def test_explicit_allow_override_bypasses_write_risk_prompt() -> None:
         return {"written": "yes"}
 
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        router=TierRouter([make_scripted([_SHAPE_OK])]),
         harness=harness,
         settings=Settings(
             tool_approval=ToolApprovalSettings(
@@ -400,7 +368,7 @@ async def test_read_risk_tool_follows_default_policy() -> None:
         return {"read": "yes"}
 
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        router=TierRouter([make_scripted([_SHAPE_OK])]),
         harness=harness,
         settings=Settings(
             tool_approval=ToolApprovalSettings(
@@ -442,7 +410,7 @@ async def test_tool_approval_auto_mode_allows_ask_but_not_deny() -> None:
         )
     )
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        router=TierRouter([make_scripted([_SHAPE_OK])]),
         harness=harness,
         settings=ask_settings,
     )
@@ -459,7 +427,7 @@ async def test_tool_approval_auto_mode_allows_ask_but_not_deny() -> None:
         )
     )
     deny_executor = Executor(
-        router=TierRouter([_ScriptedProvider([])]),
+        router=TierRouter([make_scripted([])]),
         harness=harness,
         settings=deny_settings,
     )
@@ -681,7 +649,7 @@ def empty_tool_executor() -> Executor:
     harness.tool(name="empty_tool", description="always empty", parameters={"type": "object"})(
         always_empty
     )
-    router = TierRouter([_ScriptedProvider([])])
+    router = TierRouter([make_scripted([])])
     return Executor(router=router, harness=harness, settings=Settings())
 
 
@@ -803,11 +771,11 @@ async def test_tool_shape_check_uses_configured_tool_tier() -> None:
         description="produce a value",
         parameters={"type": "object"},
     )(produce_value)
-    tier0 = _ScriptedProvider(
+    tier0 = make_scripted(
         [json.dumps({"matches_expectation": False, "issue": "tier 0 should be skipped"})],
         tier=0,
     )
-    tier1 = _ScriptedProvider([_SHAPE_OK], tier=1)
+    tier1 = make_scripted([_SHAPE_OK], tier=1)
     executor = Executor(
         router=TierRouter([tier0, tier1]),
         harness=harness,
@@ -934,9 +902,7 @@ async def test_llm_node_retry_recovers_same_tier() -> None:
 
 async def test_llm_node_retry_escalates_tier() -> None:
     low = _FailsAfterFirstChunkProvider(tier=0)
-    high = _ScriptedProvider(
-        [json.dumps({"output": "recovered answer", "confidence": 0.95})], tier=1
-    )
+    high = make_scripted([json.dumps({"output": "recovered answer", "confidence": 0.95})], tier=1)
     executor = Executor(
         router=TierRouter([low, high]),
         harness=ToolHarness(),
@@ -1009,7 +975,7 @@ async def test_tool_node_is_not_retried() -> None:
         raise RuntimeError("boom")
 
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([])]),
+        router=TierRouter([make_scripted([])]),
         harness=harness,
         settings=Settings(),
     )
@@ -1043,7 +1009,7 @@ async def test_subplan_emits_nested_events_with_node_path() -> None:
     nested_payload = json.dumps({"output": "nested answer", "confidence": 0.95})
     bus = EventBus()
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([nested_payload])]),
+        router=TierRouter([make_scripted([nested_payload])]),
         harness=ToolHarness(),
         settings=Settings(),
         event_bus=bus,
@@ -1075,7 +1041,7 @@ async def test_subplan_emits_nested_events_with_node_path() -> None:
 
 async def test_subplan_request_preserves_parent_task_instructions() -> None:
     nested_payload = json.dumps({"output": "DuckDB summary", "confidence": 0.95})
-    provider = _CapturingProvider([nested_payload])
+    provider = make_capturing_scripted([nested_payload])
     executor = Executor(
         router=TierRouter([provider]),
         harness=ToolHarness(),
@@ -1127,43 +1093,10 @@ async def test_empty_tool_result_bypasses_shape_check(empty_tool_executor: Execu
     assert result.results[1].status is NodeStatus.EMPTY
 
 
-class _CapturingProvider:
-    """Fake provider that records the ``max_tokens`` of each call."""
-
-    def __init__(self, responses: _Sequence[str], *, tier: int = 0) -> None:
-        self._responses: list[str] = list(responses)
-        self._tier = tier
-        self.max_tokens_seen: list[int] = []
-        self.system_seen: list[str] = []
-        self.user_seen: list[str] = []
-
-    @property
-    def name(self) -> str:
-        return "capturing"
-
-    @property
-    def tier(self) -> int:
-        return self._tier
-
-    async def complete(
-        self,
-        messages: list[Message],
-        *,
-        json_mode: bool = False,
-        max_tokens: int = 1024,
-        timeout_s: float | None = None,
-    ) -> AsyncIterator[Chunk]:
-        del json_mode, timeout_s
-        self.max_tokens_seen.append(max_tokens)
-        self.system_seen.append(next(m["content"] for m in messages if m["role"] == "system"))
-        self.user_seen.append(next(m["content"] for m in messages if m["role"] == "user"))
-        yield Chunk(text=self._responses.pop(0), tokens_used=1)
-
-
 async def test_content_node_uses_its_configured_budget() -> None:
     """A SUMMARY node's LLM call is capped at the configured summary budget."""
     settings = Settings(budgets=NodeBudgets(summary=7777))
-    provider = _CapturingProvider([json.dumps({"summary": "x", "confidence": 0.9})])
+    provider = make_capturing_scripted([json.dumps({"summary": "x", "confidence": 0.9})])
     executor = Executor(
         router=TierRouter([provider]),
         harness=ToolHarness(),
@@ -1178,7 +1111,7 @@ async def test_content_node_uses_its_configured_budget() -> None:
 async def test_decision_node_uses_its_configured_budget() -> None:
     """The decision micro-call is capped at the configured decision budget."""
     settings = Settings(budgets=NodeBudgets(decision=42))
-    provider = _CapturingProvider([json.dumps({"branch": "no", "confidence": 0.9})])
+    provider = make_capturing_scripted([json.dumps({"branch": "no", "confidence": 0.9})])
     executor = Executor(
         router=TierRouter([provider]),
         harness=ToolHarness(),
@@ -1203,7 +1136,7 @@ async def test_decision_node_uses_its_configured_budget() -> None:
 async def test_content_node_uses_configured_prompt() -> None:
     """A custom summary prompt is sent as the SUMMARY node's system message."""
     settings = Settings(prompts=NodePrompts(summary="CUSTOM SUMMARY PROMPT"))
-    provider = _CapturingProvider([json.dumps({"summary": "x", "confidence": 0.9})])
+    provider = make_capturing_scripted([json.dumps({"summary": "x", "confidence": 0.9})])
     executor = Executor(
         router=TierRouter([provider]),
         harness=ToolHarness(),
@@ -1217,7 +1150,7 @@ async def test_content_node_uses_configured_prompt() -> None:
 
 async def test_summary_format_uses_configured_variant_prompts() -> None:
     """Concise and verbose summary nodes use their configured system prompts."""
-    provider = _CapturingProvider(
+    provider = make_capturing_scripted(
         [
             json.dumps({"summary": "short", "confidence": 0.9}),
             json.dumps({"summary": "long", "confidence": 0.9}),
@@ -1262,7 +1195,7 @@ async def test_summary_format_uses_configured_variant_prompts() -> None:
 
 async def test_extract_args_uses_configured_prompt() -> None:
     """Tool-args extraction uses the configured extract_args system prompt."""
-    provider = _CapturingProvider(
+    provider = make_capturing_scripted(
         [
             json.dumps({"path": "/tmp/value.txt"}),
             _SHAPE_OK,
@@ -1314,7 +1247,7 @@ async def test_extract_args_uses_configured_prompt() -> None:
 
 async def test_decision_context_includes_direct_dependents() -> None:
     """Decision prompts include downstream descriptions without leaking extra results."""
-    provider = _CapturingProvider(
+    provider = make_capturing_scripted(
         [
             json.dumps({"branch": "yes", "confidence": 0.9}),
             json.dumps({"output": "yes", "confidence": 0.9}),

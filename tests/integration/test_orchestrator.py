@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
-from collections.abc import Sequence as _Sequence
 
 from glassrail.config import NodeBudgets, Settings
 from glassrail.core import ExecutionState, TaskStatus, new_task_id
@@ -22,68 +21,20 @@ from glassrail.planner import Planner
 from glassrail.providers import Chunk, Message, TierRouter
 from glassrail.state import InMemoryStateStore
 from glassrail.validator import PlanValidator
+from tests.conftest import ScriptedProvider, make_capturing_scripted, make_scripted
 
 _REJECTION_PAYLOAD = json.dumps({"rejection": "I don't have a send_email tool"})
-
-
-class _Scripted:
-    def __init__(self, responses: _Sequence[str]) -> None:
-        self._responses: list[str] = list(responses)
-
-    @property
-    def name(self) -> str:
-        return "scripted"
-
-    @property
-    def tier(self) -> int:
-        return 0
-
-    async def complete(
-        self,
-        messages: list[Message],
-        *,
-        json_mode: bool = False,
-        max_tokens: int = 1024,
-        timeout_s: float | None = None,
-    ) -> AsyncIterator[Chunk]:
-        del messages, json_mode, max_tokens, timeout_s
-        if not self._responses:
-            raise RuntimeError("scripted exhausted")
-        yield Chunk(text=self._responses.pop(0), tokens_used=1)
-
-
-class _CapturingScripted(_Scripted):
-    """Like _Scripted but records every user message it receives."""
-
-    def __init__(self, responses: _Sequence[str]) -> None:
-        super().__init__(responses)
-        self.user_messages: list[str] = []
-
-    async def complete(
-        self,
-        messages: list[Message],
-        *,
-        json_mode: bool = False,
-        max_tokens: int = 1024,
-        timeout_s: float | None = None,
-    ) -> AsyncIterator[Chunk]:
-        user_msg = next((m["content"] for m in messages if m["role"] == "user"), "")
-        self.user_messages.append(user_msg)
-        async for chunk in super().complete(
-            messages, json_mode=json_mode, max_tokens=max_tokens, timeout_s=timeout_s
-        ):
-            yield chunk
 
 
 def _build_capturing(
     responses: list[str],
     *,
     settings: Settings | None = None,
-) -> tuple[Orchestrator, InMemoryStateStore, _CapturingScripted]:
+) -> tuple[Orchestrator, InMemoryStateStore, ScriptedProvider]:
     settings = settings or Settings()
     harness = ToolHarness()
     register_builtins(harness)
-    provider = _CapturingScripted(responses)
+    provider = make_capturing_scripted(responses)
     router = TierRouter([provider])
     validator = PlanValidator(harness=harness, settings=settings)
     planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
@@ -106,7 +57,7 @@ def _build(
     settings = settings or Settings()
     harness = ToolHarness()
     register_builtins(harness)
-    router = TierRouter([_Scripted(responses)])
+    router = TierRouter([make_scripted(responses)])
     validator = PlanValidator(harness=harness, settings=settings)
     planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
     executor = Executor(router=router, harness=harness, settings=settings)
@@ -321,7 +272,7 @@ def _build_with_bus(
     settings = settings or Settings()
     harness = ToolHarness()
     register_builtins(harness)
-    router = TierRouter([_Scripted(responses)])
+    router = TierRouter([make_scripted(responses)])
     validator = PlanValidator(harness=harness, settings=settings)
     planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
     executor = Executor(router=router, harness=harness, settings=settings)

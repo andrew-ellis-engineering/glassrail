@@ -9,8 +9,6 @@ gets the synthesised terminal snapshot and then a clean close.
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
-from collections.abc import Sequence as _Sequence
 
 import pytest
 from fastapi import WebSocketDisconnect
@@ -23,36 +21,10 @@ from glassrail.executor import Executor, Orchestrator
 from glassrail.gateways.rest import create_app
 from glassrail.harness import ToolHarness, register_builtins
 from glassrail.planner import Planner
-from glassrail.providers import Chunk, Message, TierRouter
+from glassrail.providers import TierRouter
 from glassrail.state import InMemoryStateStore
 from glassrail.validator import PlanValidator
-
-
-class _Scripted:
-    def __init__(self, responses: _Sequence[str]) -> None:
-        self._responses: list[str] = list(responses)
-
-    @property
-    def name(self) -> str:
-        return "scripted"
-
-    @property
-    def tier(self) -> int:
-        return 0
-
-    async def complete(
-        self,
-        messages: list[Message],
-        *,
-        json_mode: bool = False,
-        max_tokens: int = 1024,
-        timeout_s: float | None = None,
-    ) -> AsyncIterator[Chunk]:
-        del messages, json_mode, max_tokens, timeout_s
-        if not self._responses:
-            raise RuntimeError("scripted exhausted")
-        yield Chunk(text=self._responses.pop(0), tokens_used=1)
-
+from tests.conftest import make_scripted
 
 _PLAN_PAYLOAD = json.dumps(
     {
@@ -80,7 +52,7 @@ def _wired(
     bus = EventBus() if with_bus else None
     harness = ToolHarness()
     register_builtins(harness)
-    router = TierRouter([_Scripted(responses)])
+    router = TierRouter([make_scripted(responses)])
     validator = PlanValidator(harness=harness, settings=settings)
     planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
     executor = Executor(router=router, harness=harness, settings=settings, event_bus=bus)

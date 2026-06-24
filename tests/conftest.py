@@ -6,7 +6,103 @@ by more than one subtree (event bus, ULID seeding, etc.) belongs here.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Sequence
+
 import pytest
+
+from glassrail.providers import Chunk, Message
+
+
+class ScriptedProvider:
+    """Fake provider that pops scripted responses in order."""
+
+    def __init__(
+        self,
+        responses: Sequence[str | Exception],
+        *,
+        tier: int = 0,
+        name: str = "scripted",
+        model: str = "scripted-model",
+        tokens_used: int = 1,
+    ) -> None:
+        self._responses: list[str | Exception] = list(responses)
+        self._tier = tier
+        self._name = name
+        self._model = model
+        self._tokens_used = tokens_used
+        self.max_tokens_seen: list[int] = []
+        self.system_seen: list[str] = []
+        self.user_seen: list[str] = []
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def tier(self) -> int:
+        return self._tier
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
+    def user_messages(self) -> list[str]:
+        """Compatibility alias for older integration assertions."""
+        return self.user_seen
+
+    async def complete(
+        self,
+        messages: list[Message],
+        *,
+        json_mode: bool = False,
+        max_tokens: int = 1024,
+        timeout_s: float | None = None,
+    ) -> AsyncIterator[Chunk]:
+        del json_mode, timeout_s
+        self.max_tokens_seen.append(max_tokens)
+        self.system_seen.append(next((m["content"] for m in messages if m["role"] == "system"), ""))
+        self.user_seen.append(next((m["content"] for m in messages if m["role"] == "user"), ""))
+        if not self._responses:
+            raise RuntimeError("scripted exhausted")
+        response = self._responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        yield Chunk(text=response, tokens_used=self._tokens_used)
+
+
+def make_scripted(
+    responses: Sequence[str | Exception],
+    *,
+    tier: int = 0,
+    name: str = "scripted",
+    model: str = "scripted-model",
+    tokens_used: int = 1,
+) -> ScriptedProvider:
+    return ScriptedProvider(
+        responses,
+        tier=tier,
+        name=name,
+        model=model,
+        tokens_used=tokens_used,
+    )
+
+
+def make_capturing_scripted(
+    responses: Sequence[str | Exception],
+    *,
+    tier: int = 0,
+    name: str = "capturing",
+    model: str = "scripted-model",
+    tokens_used: int = 1,
+) -> ScriptedProvider:
+    return make_scripted(
+        responses,
+        tier=tier,
+        name=name,
+        model=model,
+        tokens_used=tokens_used,
+    )
 
 
 @pytest.fixture(autouse=True)
