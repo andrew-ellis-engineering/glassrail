@@ -255,14 +255,15 @@ running continuously alongside. Done since the Phase 1 baseline:
 - **Executor prompt config cleanup** ✓ — extract-args plus concise/verbose
   summary prompts now live under `NodePrompts`, keeping all executor LLM prompt
   roles configurable from `[prompts]`.
+- **Small fixes / API cleanup** ✓ — the
+  [small-fixes spec](specs/small-fixes.md) is complete, including planner API
+  cleanup, subplan state/confidence fixes, shared scripted-provider tests, and
+  direct provider postprocess coverage.
 
 ### Track 2a — Engine reliability core (in order)
 
-1. **Small fixes / API cleanup** — remaining items of
-   specs/small-fixes.md (postprocess tests).
-2. **Prompt caching for planner and node prompts** *(independent of the items
-   above; low-risk, land early)* — cache the static planner system prefix
-   (~3.8k tokens) and the per-node executor system prompts, and reorder the
+1. **Prompt caching for planner and node prompts** — cache the static planner
+   system prefix (~3.8k tokens) and the per-node executor system prompts, and reorder the
    planner prompt so the request-selected cookbook and the request itself trail
    the static prefix that becomes the cache key. No caching exists today; the
    prompt bytes are unchanged, so it is quality-neutral and cuts cost, not raw

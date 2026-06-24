@@ -1,6 +1,6 @@
 # Spec: Small fixes and API cleanup
 
-Status: Proposed
+Status: Implemented
 Priority: mixed — **item 1 and item 9 land before the 0.1.0 tag** (public API
 name; eval-contract coverage). Everything else is independent and any-time.
 One item (or a small coherent batch) per PR. For each: full check sweep,
@@ -119,7 +119,7 @@ silently. Add `tests/unit/test_cli.py` using `typer.testing.CliRunner`:
   plan + responses file.
 - `tui --help` / `acp --help` render (no execution).
 
-## 10. Tests for `strip_model_output`
+## 10. Tests for `strip_model_output` — implemented 2026-06-24
 
 `src/glassrail/providers/postprocess.py` cleans every raw LLM string before
 JSON parsing and has zero direct tests — a regression here fails every node

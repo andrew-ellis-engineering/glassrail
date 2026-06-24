@@ -44,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inversion while preserving the `glassrail.harness` re-export.
 - Test suites now share the scripted LLM provider fake from `tests/conftest.py`
   instead of carrying per-file copies.
+- Provider output post-processing now has direct unit coverage for reasoning
+  block stripping, code fence unwrapping, passthrough, and empty outputs.
 - `Planner.plan()` and the legacy `PLANNER_SYSTEM` alias have been removed as a
   pre-1.0 API cleanup; `Planner.plan_attempt()` remains the supported low-level
   planner API, with retries owned by the orchestrator.
