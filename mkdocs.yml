@@ -2,6 +2,12 @@ site_name: Glassrail
 site_description: A DAG-planning agent with deterministic tier routing and fresh context per node.
 site_url: https://www.andrewellisengineering.com/glassrail/
 
+# Internal engineering specs and release-planning notes live in the repo for
+# contributors, but are not part of the published documentation site.
+exclude_docs: |
+  specs/
+  release/
+
 theme:
   name: material
   features:
@@ -62,18 +68,3 @@ nav:
   - Deployment: deployment.md
   - Terminal UI: tui.md
   - Roadmap: roadmap.md
-  - Specs:
-      - Overview: specs/index.md
-      - Eval integrity: specs/eval-integrity.md
-      - Parallel execution: specs/parallel-execution.md
-      - Node resilience: specs/node-resilience.md
-      - Routing table: specs/routing-table.md
-      - Security baseline: specs/security-baseline.md
-      - Serving hardening: specs/serving-hardening.md
-      - Small fixes: specs/small-fixes.md
-      - Comparative baselines: specs/comparative-baselines.md
-  - Release:
-      - Pre-release hygiene: release/pre-release-hygiene.md
-      - PyPI release: release/pypi-release.md
-      - Product website: release/product-website.md
-      - Grassroots marketing: release/grassroots-marketing.md

@@ -7,7 +7,7 @@ eval-gated, auditable agent runtime* — engine reliability, security posture,
 and eval integrity come before assistant-platform features (memory, channels,
 Telegram). Phase 2 below is sliced into ordered tracks to encode that.
 Engineering specs from the June 2026 architecture audit live in
-[docs/specs/](specs/index.md) — the specs own *how*, this file owns *when*.
+docs/specs/ — the specs own *how*, this file owns *when*.
 
 ## Phase 0 — Prototype (done)
 
@@ -110,7 +110,7 @@ This table is the **single operative gate definition** — it supersedes the
 original exit-gate sketch in `eval-framework/suites/glassrail/EVAL_PLAN.md`
 (which proposed a promoted-regression set at `pass^5 = 1.0`; that remains the
 *aspirational* shape the ratchet works toward). `PHASE1_REMAINING.md` has been
-absorbed into [specs/eval-integrity.md](specs/eval-integrity.md) and deleted.
+absorbed into specs/eval-integrity.md and deleted.
 Stated honestly, the gate as met has three caveats, now reconciled for the
 0.1.0 release decision:
 
@@ -155,36 +155,36 @@ Items originally deferred to Phase 2 (do not block the gate):
 ## Release 0.1.0 — blocking workstream
 
 The release process itself is specced in `docs/release/`
-([pre-release hygiene](release/pre-release-hygiene.md) →
-[PyPI release](release/pypi-release.md) →
-[product website](release/product-website.md) →
-[grassroots marketing](release/grassroots-marketing.md)). From the June 2026
+(pre-release hygiene →
+PyPI release →
+product website →
+grassroots marketing). From the June 2026
 audit, these additionally gate the work:
 
 **Before the `v0.1.0` tag:**
 
-- [Eval integrity](specs/eval-integrity.md) — de-overfit engine heuristics and
+- Eval integrity — de-overfit engine heuristics and
   cookbook keywords, held-out suite, harness-mechanics in CI, and gate
   reconciliation are complete for 0.1.0. Ratchet promotions continue after the
   tag.
-- [Security baseline](specs/security-baseline.md) items 1, 2, 5 — `fs_roots`
+- Security baseline items 1, 2, 5 — `fs_roots`
   confinement, risk-honouring approval defaults, truthful README security
   notes are complete for the tag.
-- [Small fixes](specs/small-fixes.md) items 1 and 9 are done: the public root
+- Small fixes items 1 and 9 are done: the public root
   exception is `GlassrailError`, and `glassrail run --json` / `exec-plan
   --json` have direct CLI coverage.
 - The concrete-findings checklist appended to
-  [pre-release hygiene](release/pre-release-hygiene.md).
+  pre-release hygiene.
 
 **Before broad marketing (release window):**
 
-- [Security baseline](specs/security-baseline.md) items 3–4 ✓ — `web_fetch`
+- Security baseline items 3–4 ✓ — `web_fetch`
   SSRF/size hardening and optional REST bearer auth are implemented for the
   launch narrative's "auditable tool use" claim.
-- [Comparative baselines](specs/comparative-baselines.md) — harness token
+- Comparative baselines — harness token
   reporting plus raw-model and ReAct-loop suites are implemented; the paid
   three-way OpenRouter run and evidence table remain.
-- [Serving hardening](specs/serving-hardening.md) items 5–6 ✓ — `run` /
+- Serving hardening items 5–6 ✓ — `run` /
   `exec-plan` failure exit codes and `glassrail serve` are implemented for
   first-contact polish.
 
@@ -220,7 +220,7 @@ running continuously alongside. Done since the Phase 1 baseline:
   `auto` execution mode, surfaced over ACP `session/request_permission` with
   "always allow" promotion. *(was "Per-tool HITL configuration", deferred from
   Phase 1; the remaining gap — risk-derived defaults so `write`/`execute`
-  tools ask by default — is [specs/security-baseline.md](specs/security-baseline.md)
+  tools ask by default — is specs/security-baseline.md
   item 2.)*
 
 ### Track 2a — Engine reliability core (in order)
@@ -228,22 +228,22 @@ running continuously alongside. Done since the Phase 1 baseline:
 1. **Parallel node execution** — ready-set scheduler with bounded concurrency
    (`max_concurrent_nodes`), formalised transitive-skip semantics, and subplan
    event visibility. Prerequisite for `foreach`. Spec:
-   [specs/parallel-execution.md](specs/parallel-execution.md).
+   specs/parallel-execution.md.
 2. **Node resilience** — LLM-node retry with tier escalation
    (`[resilience]`), scripted-provider error directives, provider connection
-   reuse + clean shutdown. Spec: [specs/node-resilience.md](specs/node-resilience.md).
+   reuse + clean shutdown. Spec: specs/node-resilience.md.
 3. **Configurable routing table** — `[routing]` node-type → tier map replacing
    the hardcoded `_select_tier` policy; prerequisite for the Phase 2.5 tier-ROI
    selector. Also the lever for large-task economics — route planner and
    synthesis nodes to capable tiers and the bulk of leaf nodes to cheap tiers,
    concentrating spend where the hard reasoning is. Spec:
-   [specs/routing-table.md](specs/routing-table.md).
+   specs/routing-table.md.
 4. **Serving hardening** — lifespan runtime build, EventBus drop visibility +
    per-task subscriptions, SSE keepalive, resume idempotency. Spec:
-   [specs/serving-hardening.md](specs/serving-hardening.md) (items 1–4; 5–6
+   specs/serving-hardening.md (items 1–4; 5–6
    land in the release window).
 5. **Small fixes / API cleanup** — remaining items of
-   [specs/small-fixes.md](specs/small-fixes.md) (stray prompts into
+   specs/small-fixes.md (stray prompts into
    `NodePrompts`, dead validator check, `ToolRisk` layer fix, `_Scripted`
    consolidation, `Planner.plan()` removal, subplan id/confidence,
    postprocess tests, image-tool docs).
@@ -259,7 +259,7 @@ running continuously alongside. Done since the Phase 1 baseline:
 
 ### Track 2b — Capability layer
 
-- **File editing tools** *(unblocks TUI coding harness)* — `file_edit(path, old_str, new_str)` with exact-once match semantics (fails closed if old_str matches zero or multiple times), `file_create` (new files only), `file_write` (full overwrite). Requires: path-root confinement (`tools.fs_roots` — provided by [specs/security-baseline.md](specs/security-baseline.md) item 1), git-repo guard (configurable), risk-derived HITL defaults (provided by security-baseline item 2), diff-in-approval payload so humans approve a *change* not raw args. `obsidian_write` is a thin specialisation of this (vault root as `fs_roots`), not a parallel implementation. See `vault/Spec - File Editing Tools.md`.
+- **File editing tools** *(unblocks TUI coding harness)* — `file_edit(path, old_str, new_str)` with exact-once match semantics (fails closed if old_str matches zero or multiple times), `file_create` (new files only), `file_write` (full overwrite). Requires: path-root confinement (`tools.fs_roots` — provided by specs/security-baseline.md item 1), git-repo guard (configurable), risk-derived HITL defaults (provided by security-baseline item 2), diff-in-approval payload so humans approve a *change* not raw args. `obsidian_write` is a thin specialisation of this (vault root as `fs_roots`), not a parallel implementation. See `vault/Spec - File Editing Tools.md`.
 - **Tool registry output schemas** *(ships alongside file editing)* — tools declare their output shape at `@harness.tool` registration time. The validator checks `args_template` references against the producing tool's registered schema at plan-validation time, catching tool→tool key mismatches before execution. No burden on the LLM planner — schemas are author-supplied, not LLM-generated. Retroactively add schemas to existing built-in tools. See `vault/Spec - Node Contracts and Context Flow.md`.
 - **TUI: file viewer panel** *(ships with file editing tools — they are a unit)*
   — a dedicated tab in the Rust TUI for browsing the local file tree and
@@ -365,7 +365,7 @@ running continuously alongside. Done since the Phase 1 baseline:
   trade-off nuance. Measure against `suites/glassrail-openrouter`, targeting at
   least 22/23 full-pass without weakening deterministic checks.
 - **Held-out suite ratchet** — keep `suites/glassrail-heldout` (from
-  [specs/eval-integrity.md](specs/eval-integrity.md)) growing alongside the
+  specs/eval-integrity.md) growing alongside the
   main suite; publish both numbers; treat a widening main-vs-held-out gap as a
   P1 overfitting regression.
 - **Promotion ratchet in use** — promote d1–d2 tasks (and controls) to
@@ -373,7 +373,7 @@ running continuously alongside. Done since the Phase 1 baseline:
   the harness exit code.
 - **Comparative baselines** — raw model vs ReAct loop vs glassrail on answer
   quality and tokens/task. Spec:
-  [specs/comparative-baselines.md](specs/comparative-baselines.md). First
+  specs/comparative-baselines.md. First
   three-way run (2026-06-17, qwen3-8b, trials=3): glassrail leads reliability
   (pass@k 1.00 vs 0.92, and never hard-fails a task where both baselines whiff on
   two each) but spends ~3–4x the tokens; held-out is clean (12/12). Follow-ups
@@ -407,7 +407,7 @@ Memory consolidation cron, audit trail, user-curation workflow, cloud tier routi
 
 - **`glassrail routing recompute` — one-shot tier-ROI model selector** *(prerequisites:
   cloud tiers 2–3 wired to real OpenRouter endpoints, **and** the configurable
-  routing table from [specs/routing-table.md](specs/routing-table.md) — the
+  routing table from specs/routing-table.md — the
   selector writes into that surface)* — a CLI command that
   deterministically selects the highest-ROI OpenRouter model for each cloud tier
   (2–3; local tiers 0–1 are out of scope) and writes `routing_table.json` for
