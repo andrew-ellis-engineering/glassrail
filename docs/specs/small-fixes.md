@@ -79,7 +79,7 @@ tests to `plan_attempt()`/orchestrator-level equivalents, and delete the
 legacy `PLANNER_SYSTEM` re-export alias in `planner/__init__.py`. CHANGELOG
 under `[Unreleased]` (pre-1.0 breaking change, called out plainly).
 
-## 7. Subplan child task-id isolation
+## 7. Subplan child task-id isolation — implemented 2026-06-24
 
 `_execute_subplan` in `executor.py` builds the child `ExecutionState` with
 the **parent's** `task_id` (a code comment acknowledges the collision risk;

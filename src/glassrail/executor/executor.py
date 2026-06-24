@@ -14,7 +14,7 @@ import math
 import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import ClassVar, NamedTuple, cast
+from typing import ClassVar, NamedTuple, Protocol, cast
 
 from opentelemetry.trace import Status, StatusCode
 
@@ -28,6 +28,7 @@ from glassrail.core import (
     NodeType,
     Plan,
     SummaryFormat,
+    TaskId,
     TaskStatus,
     ToolExecutionError,
 )
@@ -63,6 +64,21 @@ from glassrail.telemetry import (
 )
 
 log = logging.getLogger(__name__)
+
+
+class _EventPublisher(Protocol):
+    async def publish(self, event: Event) -> None: ...
+
+
+class _TaskScopedPublisher:
+    """Publish nested events on the parent task stream."""
+
+    def __init__(self, bus: _EventPublisher, task_id: TaskId) -> None:
+        self._bus = bus
+        self._task_id = task_id
+
+    async def publish(self, event: Event) -> None:
+        await self._bus.publish(event.model_copy(update={"task_id": self._task_id}))
 
 
 class _EmptyLLMOutputError(Exception):
@@ -259,15 +275,16 @@ class Executor:
         semaphore: asyncio.Semaphore | None = None,
         path_prefix: str = "",
         emit_task_completed: bool = True,
+        bus_override: _EventPublisher | None = None,
     ) -> ExecutionState:
         plan = state.plan
         if plan is None:
             raise RuntimeError("Cannot execute: state has no plan")
 
-        # Nested subplan runs reuse this method with emit=False so their
-        # internal nodes (whose ids may collide with the parent's) don't
-        # leak onto the parent task's event stream.
-        bus = self._bus if emit else None
+        # Nested subplan runs may use an override publisher: the child state has
+        # its own task id, while external node events stay on the parent stream.
+        event_bus = bus_override if bus_override is not None else self._bus
+        bus = event_bus if emit else None
         node_map = {n.id: n for n in plan.nodes}
         deps = self._dependency_map(plan)
         max_concurrent = max(1, self._settings.max_concurrent_nodes)
@@ -356,7 +373,7 @@ class Executor:
         plan: Plan,
         node_map: dict[int, Node],
         semaphore: asyncio.Semaphore,
-        bus: EventBus | None,
+        bus: _EventPublisher | None,
         path_prefix: str,
     ) -> None:
         if node.type is NodeType.SUBPLAN:
@@ -390,7 +407,7 @@ class Executor:
         plan: Plan,
         node_map: dict[int, Node],
         semaphore: asyncio.Semaphore,
-        bus: EventBus | None,
+        bus: _EventPublisher | None,
         path_prefix: str,
     ) -> None:
         node_id = node.id
@@ -482,7 +499,7 @@ class Executor:
         semaphore: asyncio.Semaphore,
         path_prefix: str,
         node_path: str | None,
-        bus: EventBus | None = None,
+        bus: _EventPublisher | None = None,
     ) -> NodeResult:
         if node.type is NodeType.TOOL:
             return await self._execute_tool(node, state, tier)
@@ -508,7 +525,7 @@ class Executor:
         )
 
     @staticmethod
-    async def _emit(bus: EventBus | None, event: Event) -> None:
+    async def _emit(bus: _EventPublisher | None, event: Event) -> None:
         if bus is not None:
             await bus.publish(event)
 
@@ -535,7 +552,7 @@ class Executor:
         state: ExecutionState,
         *,
         node_id: int,
-        bus: EventBus | None,
+        bus: _EventPublisher | None,
         reason: str,
         node_path: str | None = None,
     ) -> None:
@@ -712,7 +729,7 @@ class Executor:
         tier: int,
         *,
         spec: _LLMNodeSpec,
-        bus: EventBus | None = None,
+        bus: _EventPublisher | None = None,
         node_path: str | None = None,
     ) -> NodeResult:
         """Run a single-LLM-call node (synthesis / think / summary / result).
@@ -791,7 +808,7 @@ class Executor:
         tier: int,
         *,
         spec: _LLMNodeSpec,
-        bus: EventBus | None = None,
+        bus: _EventPublisher | None = None,
         node_path: str | None = None,
     ) -> NodeResult:
         dependents = self._direct_dependents(node, state)
@@ -921,7 +938,7 @@ class Executor:
         state: ExecutionState,
         stream: AsyncIterator[Chunk],
         spec: _LLMNodeSpec,
-        bus: EventBus,
+        bus: _EventPublisher,
         *,
         node_path: str | None = None,
     ) -> tuple[str, int]:
@@ -981,8 +998,14 @@ class Executor:
         sub_request = f"Subplan task: {node.description}\n\nParent task:\n{state.user_request}"
         if ctx:
             sub_request += f"\n\nContext from parent plan:\n{ctx}"
+        sub_task_id = TaskId(f"{state.task_id}-sub{node.id}")
+        nested_bus = (
+            _TaskScopedPublisher(self._bus, state.task_id)
+            if emit_nested and self._bus is not None
+            else None
+        )
         sub_state = ExecutionState(
-            task_id=state.task_id,
+            task_id=sub_task_id,
             user_request=sub_request,
             plan=node.subplan,
         )
@@ -993,6 +1016,7 @@ class Executor:
                 semaphore=semaphore,
                 path_prefix=self._child_path(path_prefix, node.id),
                 emit_task_completed=False,
+                bus_override=nested_bus,
             )
         except Exception as exc:
             return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))

@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Planner.plan()` and the legacy `PLANNER_SYSTEM` alias have been removed as a
   pre-1.0 API cleanup; `Planner.plan_attempt()` remains the supported low-level
   planner API, with retries owned by the orchestrator.
+- Nested subplans now execute with a derived child task id internally while
+  preserving parent-scoped nested node events for streaming consumers.
 - Branch skip propagation now auto-skips downstream nodes whose declared
   non-decision inputs were all skipped, while preserving shared join nodes that
   consume at least one completed input.

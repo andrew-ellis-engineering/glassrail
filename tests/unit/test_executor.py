@@ -1005,6 +1005,58 @@ async def test_subplan_bubbles_nested_final_output() -> None:
     assert out.results[1].output == "nested answer"
 
 
+async def test_subplan_child_state_uses_derived_task_id() -> None:
+    class CapturingExecutor(Executor):
+        def __init__(self) -> None:
+            super().__init__(
+                router=TierRouter([make_scripted([])]),
+                harness=ToolHarness(),
+                settings=Settings(),
+            )
+            self.sub_task_ids: list[str] = []
+
+        async def _run(
+            self,
+            state: ExecutionState,
+            *,
+            emit: bool,
+            semaphore: asyncio.Semaphore | None = None,
+            path_prefix: str = "",
+            emit_task_completed: bool = True,
+            bus_override: object | None = None,
+        ) -> ExecutionState:
+            del emit, semaphore, path_prefix, emit_task_completed, bus_override
+            self.sub_task_ids.append(str(state.task_id))
+            state.results[1] = NodeResult(
+                node_id=1,
+                status=NodeStatus.COMPLETED,
+                output="nested answer",
+            )
+            state.completed_nodes.append(1)
+            state.status = TaskStatus.COMPLETED
+            state.final_output = "nested answer"
+            return state
+
+    nested = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="nested final")])
+    nested.sorted_node_ids = [1]
+    node = Node(id=7, type=NodeType.SUBPLAN, description="delegate", subplan=nested)
+    state = _state(Plan(nodes=[node]))
+    executor = CapturingExecutor()
+
+    execute_subplan = getattr(executor, "_execute_subplan")
+    result = await execute_subplan(
+        node,
+        state,
+        semaphore=asyncio.Semaphore(1),
+        emit_nested=False,
+        path_prefix="",
+    )
+
+    assert result.status is NodeStatus.COMPLETED
+    assert result.output == "nested answer"
+    assert executor.sub_task_ids == [f"{state.task_id}-sub7"]
+
+
 async def test_subplan_emits_nested_events_with_node_path() -> None:
     nested_payload = json.dumps({"output": "nested answer", "confidence": 0.95})
     bus = EventBus()
@@ -1021,7 +1073,7 @@ async def test_subplan_emits_nested_events_with_node_path() -> None:
     )
     state = _state(plan)
 
-    async with bus.subscribe() as sub:
+    async with bus.subscribe(task_id=state.task_id) as sub:
         await executor.execute(state)
         events: list[Event] = []
         while True:
@@ -1037,6 +1089,7 @@ async def test_subplan_emits_nested_events_with_node_path() -> None:
     assert [(e.node_id, e.node_path) for e in started] == [(4, None), (2, "4/2")]
     assert [(e.node_id, e.node_path) for e in finished] == [(2, "4/2"), (4, None)]
     assert len(completed) == 1
+    assert all(e.task_id == state.task_id for e in events)
 
 
 async def test_subplan_request_preserves_parent_task_instructions() -> None:

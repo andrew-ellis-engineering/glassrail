@@ -259,7 +259,7 @@ running continuously alongside. Done since the Phase 1 baseline:
 ### Track 2a — Engine reliability core (in order)
 
 1. **Small fixes / API cleanup** — remaining items of
-   specs/small-fixes.md (subplan id/confidence, postprocess tests).
+   specs/small-fixes.md (subplan confidence, postprocess tests).
 2. **Prompt caching for planner and node prompts** *(independent of the items
    above; low-risk, land early)* — cache the static planner system prefix
    (~3.8k tokens) and the per-node executor system prompts, and reorder the
