@@ -69,7 +69,7 @@ existing copy (raises `RuntimeError("scripted exhausted")` on over-call).
 Migrate all six files; behaviour-identical, assertion changes only where
 attribute names differ.
 
-## 6. Delete the unused `Planner.plan()`
+## 6. Delete the unused `Planner.plan()` — implemented 2026-06-24
 
 `Planner.plan()` in `src/glassrail/planner/planner.py` implements a fixed
 two-attempt strategy that **production never calls** — the orchestrator drives
