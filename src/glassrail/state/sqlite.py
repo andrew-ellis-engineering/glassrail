@@ -12,6 +12,7 @@ Install the optional dependency to use this backend::
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -89,6 +90,45 @@ class SqliteStateStore:
         if row is None:
             return None
         return ExecutionState.model_validate_json(row[0])
+
+    async def transition_task_status(
+        self,
+        task_id: TaskId,
+        *,
+        from_statuses: Collection[TaskStatus],
+        to_status: TaskStatus,
+    ) -> ExecutionState | None:
+        allowed = tuple(from_statuses)
+        if not allowed:
+            return None
+
+        conn = await self._connect()
+        async with conn.execute("SELECT data FROM tasks WHERE task_id = ?", (task_id,)) as cursor:
+            row = await cursor.fetchone()
+        if row is None:
+            return None
+
+        state = ExecutionState.model_validate_json(row[0])
+        if state.status not in allowed:
+            return None
+        state.status = to_status
+        state.touch()
+
+        placeholders = ", ".join("?" for _ in allowed)
+        query = (
+            "UPDATE tasks SET status = ?, data = ? "
+            f"WHERE task_id = ? AND status IN ({placeholders})"
+        )
+        params = (
+            to_status.value,
+            state.model_dump_json(),
+            task_id,
+            *(status.value for status in allowed),
+        )
+        async with conn.execute(query, params) as cursor:
+            transitioned = cursor.rowcount > 0
+        await conn.commit()
+        return state if transitioned else None
 
     async def list_tasks(
         self,

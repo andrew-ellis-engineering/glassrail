@@ -192,15 +192,14 @@ class AcpServer:
         # the turn is driven entirely by the events these emit, never by the
         # task's completion, so a pause at the gate doesn't look like an ending.
         current = asyncio.create_task(self._rt.orchestrator.run(task_id))
-        async with self._rt.event_bus.subscribe() as sub:
+        async with self._rt.event_bus.subscribe(task_id=task_id) as sub:
             try:
                 while True:
                     event = await self._next_event(sub, cancel)
                     if event is None:
                         stop_reason = "cancelled"
                         break
-                    if event.task_id != task_id:
-                        continue
+                    assert event.task_id == task_id
                     if isinstance(event, AwaitingConfirmation):
                         outcome = await self._handle_gate(session, tracker, task_id)
                         if isinstance(outcome, str):
@@ -324,6 +323,8 @@ class AcpServer:
 
     async def _translate(self, session: Session, tracker: PlanTracker, event: Event) -> str | None:
         """Emit session/update(s) for one event; return a stop reason if terminal."""
+        if _is_nested_node_event(event):
+            return None
         if isinstance(event, NodeOutputChunk):
             await self._message(
                 session,
@@ -550,6 +551,11 @@ def _parse_permission(outcome: Any) -> tuple[str, str | None]:
 
 def _tool_call_id(node_id: int) -> str:
     return f"node-{node_id}"
+
+
+def _is_nested_node_event(event: Event) -> bool:
+    path = getattr(event, "node_path", None)
+    return isinstance(path, str) and "/" in path
 
 
 def _as_text(value: Any) -> str:

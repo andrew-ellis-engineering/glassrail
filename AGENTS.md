@@ -105,11 +105,11 @@ rather than duplicating across files.
   `result`, `subplan`. The four single-LLM-call types (synthesis/think/summary/
   result) share `Executor._execute_llm_node` via `_LLM_NODE_SPECS` — add a new
   one by extending that table, not by copying a method.
-- **Node execution is currently sequential.** `Executor._run` awaits one node
-  at a time in topological order; independent nodes do not run concurrently
-  yet. Don't write docs or code that assume concurrency until
-  `docs/specs/parallel-execution.md` lands — and update this bullet when it
-  does.
+- **Node execution uses a bounded ready-set scheduler.** `Executor._run`
+  dispatches independent ready nodes concurrently up to
+  `max_concurrent_nodes`; setting it to `1` preserves sequential execution.
+  Dependency ordering and branch-control edges remain deterministic. See
+  `docs/specs/parallel-execution.md`.
 - **DAG acyclicity is a permanent, load-bearing invariant.** Plans are directed
   *acyclic* graphs; the validator enforces topological sort and cycle detection.
   Iteration is expressed *within* a node (a future `foreach` node fans out over
@@ -178,6 +178,15 @@ Model-quality **evals** (planner/executor behaviour, multi-trial pass@k vs
 pass^k) are not pytest — they live in the standalone `eval-framework/` and run
 the real agent over its tier routing via `glassrail run --json`. See
 `docs/evals.md` and `eval-framework/CLAUDE.md`.
+
+## Pull requests
+
+- One coherent feature, bug fix, or infrastructure workstream per PR.
+- Keep its implementation, required refactors, tests, docs, and changelog entry
+  together. Move unrelated cleanup or follow-up work to a separate branch.
+- When work depends on an unmerged change, wait for the prerequisite or open a
+  clearly identified stacked PR based on that prerequisite branch.
+- Every PR must be independently reviewable and green before merge.
 
 ## Commits
 

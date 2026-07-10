@@ -1,6 +1,6 @@
 # Spec: Configurable tier routing table
 
-Status: Proposed
+Status: Implemented (2026-06-19)
 Priority: P1 — small (about a day). Prerequisite for the Phase 2.5
 `glassrail routing recompute` tier-ROI selector, which needs a routing surface
 to write into.

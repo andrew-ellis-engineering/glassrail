@@ -5,13 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
-from collections.abc import Sequence as _Sequence
 
 import pytest
 
 from glassrail.config import (
     NodeBudgets,
     NodePrompts,
+    RoutingConfig,
     Settings,
     ToolApprovalMode,
     ToolApprovalPolicy,
@@ -20,6 +20,7 @@ from glassrail.config import (
 from glassrail.core import (
     ExecutionState,
     Node,
+    NodeResult,
     NodeStatus,
     NodeType,
     Plan,
@@ -27,24 +28,31 @@ from glassrail.core import (
     TaskStatus,
     new_task_id,
 )
-from glassrail.events import EventBus, NodeOutputChunk, TaskCompleted
+from glassrail.events import (
+    Event,
+    EventBus,
+    NodeFinished,
+    NodeOutputChunk,
+    NodeStarted,
+    TaskCompleted,
+)
 from glassrail.executor import Executor
 from glassrail.executor.executor import JsonFieldStreamer
 from glassrail.executor.tool_approval import ToolApprovalBroker
 from glassrail.harness import ToolHarness, register_builtins
-from glassrail.providers import Chunk, Message, TierRouter
+from glassrail.providers import Chunk, Message, ProviderError, ProviderUnavailableError, TierRouter
+from tests.conftest import make_capturing_scripted, make_scripted
 
 
-class _ScriptedProvider:
-    """Fake provider that pops scripted responses in order."""
+class _FailsAfterFirstChunkProvider:
+    """Fake provider that commits to a stream, then dies."""
 
-    def __init__(self, responses: _Sequence[str], *, tier: int = 0) -> None:
-        self._responses: list[str] = list(responses)
+    def __init__(self, *, tier: int) -> None:
         self._tier = tier
 
     @property
     def name(self) -> str:
-        return "scripted"
+        return "midstream-failure"
 
     @property
     def tier(self) -> int:
@@ -59,16 +67,20 @@ class _ScriptedProvider:
         timeout_s: float | None = None,
     ) -> AsyncIterator[Chunk]:
         del messages, json_mode, max_tokens, timeout_s
-        if not self._responses:
-            raise RuntimeError("Scripted provider exhausted")
-        yield Chunk(text=self._responses.pop(0), tokens_used=1)
+        yield Chunk(text='{"output": "', tokens_used=1)
+        raise ProviderUnavailableError("stream died")
 
 
-def _executor(responses: list[str], *, tier: int = 0) -> tuple[Executor, ToolHarness]:
+def _executor(
+    responses: list[str | Exception],
+    *,
+    tier: int = 0,
+    settings: Settings | None = None,
+) -> tuple[Executor, ToolHarness]:
     harness = ToolHarness()
     register_builtins(harness)
-    router = TierRouter([_ScriptedProvider(responses, tier=tier)])
-    return Executor(router=router, harness=harness, settings=Settings()), harness
+    router = TierRouter([make_scripted(responses, tier=tier)])
+    return Executor(router=router, harness=harness, settings=settings or Settings()), harness
 
 
 def _state(plan: Plan) -> ExecutionState:
@@ -114,6 +126,89 @@ async def test_single_tool_completes() -> None:
     assert node_result.execution_time_s >= 0
 
 
+async def test_independent_ready_nodes_run_concurrently() -> None:
+    waiting = 0
+    both_waiting = asyncio.Event()
+    release = asyncio.Event()
+    harness = ToolHarness()
+
+    @harness.tool(name="root", description="root", parameters={"type": "object"})
+    async def _root(**_: object) -> dict[str, str]:
+        return {"root": "done"}
+
+    async def _barrier(label: str) -> dict[str, str]:
+        nonlocal waiting
+        waiting += 1
+        if waiting == 2:
+            both_waiting.set()
+            release.set()
+        await asyncio.wait_for(release.wait(), timeout=1)
+        return {"branch": label}
+
+    @harness.tool(name="left", description="left", parameters={"type": "object"})
+    async def _left(**_: object) -> dict[str, str]:
+        return await _barrier("left")
+
+    @harness.tool(name="right", description="right", parameters={"type": "object"})
+    async def _right(**_: object) -> dict[str, str]:
+        return await _barrier("right")
+
+    result_payload = json.dumps({"output": "done", "confidence": 1.0})
+    executor = Executor(
+        router=TierRouter([make_scripted([_SHAPE_OK] * 6 + [result_payload])]),
+        harness=harness,
+        settings=Settings(max_concurrent_nodes=2),
+    )
+    plan = Plan(
+        nodes=[
+            Node(id=1, type=NodeType.TOOL, description="root", tool="root"),
+            Node(id=2, type=NodeType.TOOL, description="left", tool="left", context_needed=[1]),
+            Node(id=3, type=NodeType.TOOL, description="right", tool="right", context_needed=[1]),
+            Node(id=4, type=NodeType.RESULT, description="final", context_needed=[2, 3]),
+        ]
+    )
+
+    result = await executor.execute(_state(plan))
+
+    assert both_waiting.is_set()
+    assert result.results[2].status is NodeStatus.COMPLETED
+    assert result.results[3].status is NodeStatus.COMPLETED
+    assert result.final_output == "done"
+
+
+async def test_max_concurrent_nodes_one_preserves_sequential_order() -> None:
+    order: list[str] = []
+    harness = ToolHarness()
+
+    def _register_tool(name: str) -> None:
+        @harness.tool(name=name, description=name, parameters={"type": "object"})
+        async def _tool(**_: object) -> dict[str, str]:
+            order.append(name)
+            return {"tool": name}
+
+    _register_tool("root")
+    _register_tool("left")
+    _register_tool("right")
+    result_payload = json.dumps({"output": "done", "confidence": 1.0})
+    executor = Executor(
+        router=TierRouter([make_scripted([_SHAPE_OK] * 6 + [result_payload])]),
+        harness=harness,
+        settings=Settings(max_concurrent_nodes=1),
+    )
+    plan = Plan(
+        nodes=[
+            Node(id=1, type=NodeType.TOOL, description="root", tool="root"),
+            Node(id=2, type=NodeType.TOOL, description="left", tool="left", context_needed=[1]),
+            Node(id=3, type=NodeType.TOOL, description="right", tool="right", context_needed=[1]),
+            Node(id=4, type=NodeType.RESULT, description="final", context_needed=[2, 3]),
+        ]
+    )
+
+    await executor.execute(_state(plan))
+
+    assert order == ["root", "left", "right"]
+
+
 async def test_tool_approval_deny_blocks_execution() -> None:
     calls = 0
     harness = ToolHarness()
@@ -125,7 +220,7 @@ async def test_tool_approval_deny_blocks_execution() -> None:
         return {"ok": "yes"}
 
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([])]),
+        router=TierRouter([make_scripted([])]),
         harness=harness,
         settings=Settings(
             tool_approval=ToolApprovalSettings(overrides={"danger": ToolApprovalPolicy.DENY})
@@ -156,7 +251,7 @@ async def test_tool_approval_ask_uses_broker() -> None:
         return {"written": "yes"}
 
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        router=TierRouter([make_scripted([_SHAPE_OK])]),
         harness=harness,
         settings=Settings(
             tool_approval=ToolApprovalSettings(overrides={"writer": ToolApprovalPolicy.ASK})
@@ -188,7 +283,7 @@ async def test_write_risk_tool_asks_by_default_in_interactive_mode() -> None:
         return {"written": "yes"}
 
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        router=TierRouter([make_scripted([_SHAPE_OK])]),
         harness=harness,
         settings=Settings(),
         event_bus=bus,
@@ -220,7 +315,7 @@ async def test_write_risk_tool_runs_without_prompt_in_auto_mode() -> None:
         return {"written": "yes"}
 
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        router=TierRouter([make_scripted([_SHAPE_OK])]),
         harness=harness,
         settings=Settings(
             tool_approval=ToolApprovalSettings(
@@ -247,7 +342,7 @@ async def test_explicit_allow_override_bypasses_write_risk_prompt() -> None:
         return {"written": "yes"}
 
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        router=TierRouter([make_scripted([_SHAPE_OK])]),
         harness=harness,
         settings=Settings(
             tool_approval=ToolApprovalSettings(
@@ -273,7 +368,7 @@ async def test_read_risk_tool_follows_default_policy() -> None:
         return {"read": "yes"}
 
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        router=TierRouter([make_scripted([_SHAPE_OK])]),
         harness=harness,
         settings=Settings(
             tool_approval=ToolApprovalSettings(
@@ -315,7 +410,7 @@ async def test_tool_approval_auto_mode_allows_ask_but_not_deny() -> None:
         )
     )
     executor = Executor(
-        router=TierRouter([_ScriptedProvider([_SHAPE_OK])]),
+        router=TierRouter([make_scripted([_SHAPE_OK])]),
         harness=harness,
         settings=ask_settings,
     )
@@ -332,7 +427,7 @@ async def test_tool_approval_auto_mode_allows_ask_but_not_deny() -> None:
         )
     )
     deny_executor = Executor(
-        router=TierRouter([_ScriptedProvider([])]),
+        router=TierRouter([make_scripted([])]),
         harness=harness,
         settings=deny_settings,
     )
@@ -390,9 +485,8 @@ async def test_final_output_ignores_result_with_only_skipped_content() -> None:
     decision_payload = json.dumps({"branch": "yes", "confidence": 0.9})
     yes_payload = json.dumps({"reasoning": "half is 123", "confidence": 1.0})
     result_payload = json.dumps({"output": "123", "confidence": 1.0})
-    stale_result_payload = json.dumps({"output": "248", "confidence": 1.0})
     executor, _ = _executor(
-        [decision_payload, yes_payload, result_payload, stale_result_payload],
+        [decision_payload, yes_payload, result_payload],
         tier=2,
     )
     plan = Plan(
@@ -418,7 +512,7 @@ async def test_final_output_ignores_result_with_only_skipped_content() -> None:
     assert result.results[2].status is NodeStatus.COMPLETED
     assert result.results[3].status is NodeStatus.SKIPPED
     assert result.results[4].status is NodeStatus.COMPLETED
-    assert result.results[5].status is NodeStatus.COMPLETED
+    assert result.results[5].status is NodeStatus.SKIPPED
     assert result.final_output == "123"
 
 
@@ -451,6 +545,33 @@ async def test_decision_preserves_shared_join_after_branch_skip() -> None:
     assert result.final_output == "final from yes-path"
 
 
+async def test_decision_skips_downstream_node_that_only_uses_skipped_content() -> None:
+    decision_payload = json.dumps({"branch": "yes", "confidence": 0.9})
+    yes_payload = json.dumps({"output": "yes-path", "confidence": 1.0})
+    executor, _ = _executor([decision_payload, yes_payload])
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.DECISION,
+                description="branch",
+                condition="is it yes?",
+                branches={"yes": [2], "no": [3]},
+                default_branch="yes",
+            ),
+            Node(id=2, type=NodeType.SYNTHESIS, description="yes path"),
+            Node(id=3, type=NodeType.SYNTHESIS, description="no path"),
+            Node(id=4, type=NodeType.RESULT, description="depends only on no", context_needed=[3]),
+        ]
+    )
+
+    result = await executor.execute(_state(plan))
+
+    assert result.results[3].status is NodeStatus.SKIPPED
+    assert result.results[4].status is NodeStatus.SKIPPED
+    assert 4 in result.skipped_nodes
+
+
 async def test_decision_default_branch_used_on_llm_failure() -> None:
     """If the decision call returns garbage, the default_branch is taken."""
     no_synth = json.dumps({"output": "no-path", "confidence": 1.0})
@@ -478,6 +599,34 @@ async def test_decision_default_branch_used_on_llm_failure() -> None:
     assert result.results[3].status is NodeStatus.COMPLETED
 
 
+async def test_decision_retries_provider_unavailable_before_defaulting() -> None:
+    yes_decision = json.dumps({"branch": "yes", "confidence": 0.9})
+    yes_synth = json.dumps({"output": "yes-path", "confidence": 1.0})
+    executor, _ = _executor([ProviderUnavailableError("down"), yes_decision, yes_synth])
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.DECISION,
+                description="branch",
+                condition="?",
+                branches={"yes": [2], "no": [3]},
+                default_branch="no",
+            ),
+            Node(id=2, type=NodeType.SYNTHESIS, description="yes path"),
+            Node(id=3, type=NodeType.SYNTHESIS, description="no path"),
+        ]
+    )
+    state = _state(plan)
+
+    result = await executor.execute(state)
+
+    assert result.results[1].branch_taken == "yes"
+    assert result.results[1].retries == 1
+    assert result.results[2].status is NodeStatus.COMPLETED
+    assert result.results[3].status is NodeStatus.SKIPPED
+
+
 async def test_low_confidence_flagged() -> None:
     """Completed nodes below the confidence threshold get flagged."""
     low_conf = json.dumps({"output": "shaky", "confidence": 0.1})
@@ -500,7 +649,7 @@ def empty_tool_executor() -> Executor:
     harness.tool(name="empty_tool", description="always empty", parameters={"type": "object"})(
         always_empty
     )
-    router = TierRouter([_ScriptedProvider([])])
+    router = TierRouter([make_scripted([])])
     return Executor(router=router, harness=harness, settings=Settings())
 
 
@@ -554,6 +703,100 @@ async def test_summary_condenses_upstream_context() -> None:
     assert node_result.status is NodeStatus.COMPLETED
     assert node_result.output == "two facts: A and B"
     assert node_result.tier_used == 0
+
+
+async def test_summary_uses_configured_routing_tier() -> None:
+    summary_payload = json.dumps({"summary": "two facts: A and B", "confidence": 0.95})
+    settings = Settings(routing=RoutingConfig(summary=1))
+    executor, _ = _executor([summary_payload], tier=1, settings=settings)
+    plan = Plan(nodes=[Node(id=1, type=NodeType.SUMMARY, description="condense")])
+    state = _state(plan)
+
+    result = await executor.execute(state)
+
+    assert result.results[1].tier_used == 1
+
+
+async def test_reasoning_required_uses_configured_floor() -> None:
+    synth_payload = json.dumps({"output": "synthesis", "confidence": 0.9})
+    settings = Settings(routing=RoutingConfig(synthesis=0, reasoning_required=3))
+    executor, _ = _executor([synth_payload], tier=3, settings=settings)
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.SYNTHESIS,
+                description="combine the evidence",
+                reasoning_required=True,
+            )
+        ]
+    )
+    state = _state(plan)
+
+    result = await executor.execute(state)
+
+    assert result.results[1].tier_used == 3
+
+
+async def test_forced_tier_overrides_routing_table() -> None:
+    result_payload = json.dumps({"output": "answer", "confidence": 0.9})
+    settings = Settings(routing=RoutingConfig(result=0, reasoning_required=2))
+    executor, _ = _executor([result_payload], tier=3, settings=settings)
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.RESULT,
+                description="answer directly",
+                reasoning_required=True,
+                forced_tier=3,
+            )
+        ]
+    )
+    state = _state(plan)
+
+    result = await executor.execute(state)
+
+    assert result.results[1].tier_used == 3
+
+
+async def test_tool_shape_check_uses_configured_tool_tier() -> None:
+    harness = ToolHarness()
+
+    async def produce_value() -> dict[str, str]:
+        return {"value": "ok"}
+
+    harness.tool(
+        name="produce_value",
+        description="produce a value",
+        parameters={"type": "object"},
+    )(produce_value)
+    tier0 = make_scripted(
+        [json.dumps({"matches_expectation": False, "issue": "tier 0 should be skipped"})],
+        tier=0,
+    )
+    tier1 = make_scripted([_SHAPE_OK], tier=1)
+    executor = Executor(
+        router=TierRouter([tier0, tier1]),
+        harness=harness,
+        settings=Settings(routing=RoutingConfig(tool=1)),
+    )
+    plan = Plan(
+        nodes=[
+            Node(
+                id=1,
+                type=NodeType.TOOL,
+                description="produce a value",
+                tool="produce_value",
+            )
+        ]
+    )
+    state = _state(plan)
+
+    result = await executor.execute(state)
+
+    assert result.results[1].tier_used == 1
+    assert result.results[1].flagged is False
 
 
 async def test_summary_failure_marks_node_failed() -> None:
@@ -642,11 +885,24 @@ async def test_result_failure_marks_node_failed() -> None:
     assert out.results[1].status is NodeStatus.FAILED
 
 
-async def test_result_failure_retries_next_configured_tier() -> None:
-    low = _ScriptedProvider(["not json"], tier=0)
-    high = _ScriptedProvider(
-        [json.dumps({"output": "recovered answer", "confidence": 0.95})], tier=1
-    )
+async def test_llm_node_retry_recovers_same_tier() -> None:
+    payload = json.dumps({"output": "recovered answer", "confidence": 0.95})
+    executor, _ = _executor([ProviderUnavailableError("down"), payload])
+    plan = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="x")])
+    state = _state(plan)
+
+    out = await executor.execute(state)
+
+    result = out.results[1]
+    assert result.status is NodeStatus.COMPLETED
+    assert result.retries == 1
+    assert result.tier_used == 0
+    assert out.final_output == "recovered answer"
+
+
+async def test_llm_node_retry_escalates_tier() -> None:
+    low = _FailsAfterFirstChunkProvider(tier=0)
+    high = make_scripted([json.dumps({"output": "recovered answer", "confidence": 0.95})], tier=1)
     executor = Executor(
         router=TierRouter([low, high]),
         harness=ToolHarness(),
@@ -659,7 +915,78 @@ async def test_result_failure_retries_next_configured_tier() -> None:
 
     assert out.results[1].status is NodeStatus.COMPLETED
     assert out.results[1].tier_used == 1
+    assert out.results[1].retries == 1
     assert out.final_output == "recovered answer"
+
+
+async def test_llm_node_retry_exhaustion_fails_node() -> None:
+    executor, _ = _executor(
+        [ProviderUnavailableError("first down"), ProviderUnavailableError("still down")]
+    )
+    plan = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="x")])
+    state = _state(plan)
+
+    out = await executor.execute(state)
+
+    result = out.results[1]
+    assert result.status is NodeStatus.FAILED
+    assert result.retries == 1
+    assert out.final_output is None
+
+
+async def test_empty_llm_output_is_retryable() -> None:
+    payload = json.dumps({"output": "after blank", "confidence": 0.95})
+    executor, _ = _executor(["", payload])
+    plan = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="x")])
+    state = _state(plan)
+
+    out = await executor.execute(state)
+
+    result = out.results[1]
+    assert result.status is NodeStatus.COMPLETED
+    assert result.retries == 1
+    assert result.tokens_used == 2
+    assert out.final_output == "after blank"
+
+
+async def test_provider_error_does_not_retry_llm_node() -> None:
+    executor, _ = _executor(
+        [ProviderError("bad request"), json.dumps({"output": "should not run", "confidence": 1.0})]
+    )
+    plan = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="x")])
+    state = _state(plan)
+
+    out = await executor.execute(state)
+
+    result = out.results[1]
+    assert result.status is NodeStatus.FAILED
+    assert result.retries == 0
+    assert out.final_output is None
+
+
+async def test_tool_node_is_not_retried() -> None:
+    calls = 0
+    harness = ToolHarness()
+
+    @harness.tool(name="unstable", description="unstable", parameters={"type": "object"})
+    async def _unstable() -> dict[str, str]:
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("boom")
+
+    executor = Executor(
+        router=TierRouter([make_scripted([])]),
+        harness=harness,
+        settings=Settings(),
+    )
+    plan = Plan(nodes=[Node(id=1, type=NodeType.TOOL, description="try tool", tool="unstable")])
+    state = _state(plan)
+
+    out = await executor.execute(state)
+
+    assert calls == 1
+    assert out.results[1].status is NodeStatus.FAILED
+    assert out.results[1].retries == 0
 
 
 async def test_subplan_bubbles_nested_final_output() -> None:
@@ -678,9 +1005,156 @@ async def test_subplan_bubbles_nested_final_output() -> None:
     assert out.results[1].output == "nested answer"
 
 
+async def test_subplan_uses_nested_final_output_confidence() -> None:
+    nested_payload = json.dumps({"output": "low confidence answer", "confidence": 0.4})
+    executor, _ = _executor([nested_payload])
+    nested = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="nested final")])
+    nested.sorted_node_ids = [1]
+    plan = Plan(
+        nodes=[Node(id=1, type=NodeType.SUBPLAN, description="delegate", subplan=nested)],
+    )
+    state = _state(plan)
+
+    out = await executor.execute(state)
+
+    result = out.results[1]
+    assert result.status is NodeStatus.COMPLETED
+    assert result.output == "low confidence answer"
+    assert result.confidence == 0.4
+    assert result.flagged is True
+
+
+async def test_subplan_defaults_confidence_when_source_result_unavailable() -> None:
+    class FinalOnlyExecutor(Executor):
+        async def _run(
+            self,
+            state: ExecutionState,
+            *,
+            emit: bool,
+            semaphore: asyncio.Semaphore | None = None,
+            path_prefix: str = "",
+            emit_task_completed: bool = True,
+            bus_override: object | None = None,
+        ) -> ExecutionState:
+            del emit, semaphore, path_prefix, emit_task_completed, bus_override
+            state.status = TaskStatus.COMPLETED
+            state.final_output = "nested answer"
+            return state
+
+    nested = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="nested final")])
+    nested.sorted_node_ids = [1]
+    node = Node(id=7, type=NodeType.SUBPLAN, description="delegate", subplan=nested)
+    state = _state(Plan(nodes=[node]))
+    executor = FinalOnlyExecutor(
+        router=TierRouter([make_scripted([])]),
+        harness=ToolHarness(),
+        settings=Settings(),
+    )
+
+    execute_subplan = getattr(executor, "_execute_subplan")
+    result = await execute_subplan(
+        node,
+        state,
+        semaphore=asyncio.Semaphore(1),
+        emit_nested=False,
+        path_prefix="",
+    )
+
+    assert result.status is NodeStatus.COMPLETED
+    assert result.output == "nested answer"
+    assert result.confidence == 1.0
+
+
+async def test_subplan_child_state_uses_derived_task_id() -> None:
+    class CapturingExecutor(Executor):
+        def __init__(self) -> None:
+            super().__init__(
+                router=TierRouter([make_scripted([])]),
+                harness=ToolHarness(),
+                settings=Settings(),
+            )
+            self.sub_task_ids: list[str] = []
+
+        async def _run(
+            self,
+            state: ExecutionState,
+            *,
+            emit: bool,
+            semaphore: asyncio.Semaphore | None = None,
+            path_prefix: str = "",
+            emit_task_completed: bool = True,
+            bus_override: object | None = None,
+        ) -> ExecutionState:
+            del emit, semaphore, path_prefix, emit_task_completed, bus_override
+            self.sub_task_ids.append(str(state.task_id))
+            state.results[1] = NodeResult(
+                node_id=1,
+                status=NodeStatus.COMPLETED,
+                output="nested answer",
+            )
+            state.completed_nodes.append(1)
+            state.status = TaskStatus.COMPLETED
+            state.final_output = "nested answer"
+            return state
+
+    nested = Plan(nodes=[Node(id=1, type=NodeType.RESULT, description="nested final")])
+    nested.sorted_node_ids = [1]
+    node = Node(id=7, type=NodeType.SUBPLAN, description="delegate", subplan=nested)
+    state = _state(Plan(nodes=[node]))
+    executor = CapturingExecutor()
+
+    execute_subplan = getattr(executor, "_execute_subplan")
+    result = await execute_subplan(
+        node,
+        state,
+        semaphore=asyncio.Semaphore(1),
+        emit_nested=False,
+        path_prefix="",
+    )
+
+    assert result.status is NodeStatus.COMPLETED
+    assert result.output == "nested answer"
+    assert executor.sub_task_ids == [f"{state.task_id}-sub7"]
+
+
+async def test_subplan_emits_nested_events_with_node_path() -> None:
+    nested_payload = json.dumps({"output": "nested answer", "confidence": 0.95})
+    bus = EventBus()
+    executor = Executor(
+        router=TierRouter([make_scripted([nested_payload])]),
+        harness=ToolHarness(),
+        settings=Settings(),
+        event_bus=bus,
+    )
+    nested = Plan(nodes=[Node(id=2, type=NodeType.RESULT, description="nested final")])
+    nested.sorted_node_ids = [2]
+    plan = Plan(
+        nodes=[Node(id=4, type=NodeType.SUBPLAN, description="delegate", subplan=nested)],
+    )
+    state = _state(plan)
+
+    async with bus.subscribe(task_id=state.task_id) as sub:
+        await executor.execute(state)
+        events: list[Event] = []
+        while True:
+            event = await asyncio.wait_for(anext(sub), timeout=1)
+            events.append(event)
+            if isinstance(event, TaskCompleted):
+                break
+
+    started = [e for e in events if isinstance(e, NodeStarted)]
+    finished = [e for e in events if isinstance(e, NodeFinished)]
+    completed = [e for e in events if isinstance(e, TaskCompleted)]
+
+    assert [(e.node_id, e.node_path) for e in started] == [(4, None), (2, "4/2")]
+    assert [(e.node_id, e.node_path) for e in finished] == [(2, "4/2"), (4, None)]
+    assert len(completed) == 1
+    assert all(e.task_id == state.task_id for e in events)
+
+
 async def test_subplan_request_preserves_parent_task_instructions() -> None:
     nested_payload = json.dumps({"output": "DuckDB summary", "confidence": 0.95})
-    provider = _CapturingProvider([nested_payload])
+    provider = make_capturing_scripted([nested_payload])
     executor = Executor(
         router=TierRouter([provider]),
         harness=ToolHarness(),
@@ -732,43 +1206,10 @@ async def test_empty_tool_result_bypasses_shape_check(empty_tool_executor: Execu
     assert result.results[1].status is NodeStatus.EMPTY
 
 
-class _CapturingProvider:
-    """Fake provider that records the ``max_tokens`` of each call."""
-
-    def __init__(self, responses: _Sequence[str], *, tier: int = 0) -> None:
-        self._responses: list[str] = list(responses)
-        self._tier = tier
-        self.max_tokens_seen: list[int] = []
-        self.system_seen: list[str] = []
-        self.user_seen: list[str] = []
-
-    @property
-    def name(self) -> str:
-        return "capturing"
-
-    @property
-    def tier(self) -> int:
-        return self._tier
-
-    async def complete(
-        self,
-        messages: list[Message],
-        *,
-        json_mode: bool = False,
-        max_tokens: int = 1024,
-        timeout_s: float | None = None,
-    ) -> AsyncIterator[Chunk]:
-        del json_mode, timeout_s
-        self.max_tokens_seen.append(max_tokens)
-        self.system_seen.append(next(m["content"] for m in messages if m["role"] == "system"))
-        self.user_seen.append(next(m["content"] for m in messages if m["role"] == "user"))
-        yield Chunk(text=self._responses.pop(0), tokens_used=1)
-
-
 async def test_content_node_uses_its_configured_budget() -> None:
     """A SUMMARY node's LLM call is capped at the configured summary budget."""
     settings = Settings(budgets=NodeBudgets(summary=7777))
-    provider = _CapturingProvider([json.dumps({"summary": "x", "confidence": 0.9})])
+    provider = make_capturing_scripted([json.dumps({"summary": "x", "confidence": 0.9})])
     executor = Executor(
         router=TierRouter([provider]),
         harness=ToolHarness(),
@@ -783,7 +1224,7 @@ async def test_content_node_uses_its_configured_budget() -> None:
 async def test_decision_node_uses_its_configured_budget() -> None:
     """The decision micro-call is capped at the configured decision budget."""
     settings = Settings(budgets=NodeBudgets(decision=42))
-    provider = _CapturingProvider([json.dumps({"branch": "no", "confidence": 0.9})])
+    provider = make_capturing_scripted([json.dumps({"branch": "no", "confidence": 0.9})])
     executor = Executor(
         router=TierRouter([provider]),
         harness=ToolHarness(),
@@ -808,7 +1249,7 @@ async def test_decision_node_uses_its_configured_budget() -> None:
 async def test_content_node_uses_configured_prompt() -> None:
     """A custom summary prompt is sent as the SUMMARY node's system message."""
     settings = Settings(prompts=NodePrompts(summary="CUSTOM SUMMARY PROMPT"))
-    provider = _CapturingProvider([json.dumps({"summary": "x", "confidence": 0.9})])
+    provider = make_capturing_scripted([json.dumps({"summary": "x", "confidence": 0.9})])
     executor = Executor(
         router=TierRouter([provider]),
         harness=ToolHarness(),
@@ -820,9 +1261,9 @@ async def test_content_node_uses_configured_prompt() -> None:
     assert provider.system_seen == ["CUSTOM SUMMARY PROMPT"]
 
 
-async def test_summary_format_selects_variant_prompts() -> None:
-    """Concise and verbose summary nodes use distinct system prompts."""
-    provider = _CapturingProvider(
+async def test_summary_format_uses_configured_variant_prompts() -> None:
+    """Concise and verbose summary nodes use their configured system prompts."""
+    provider = make_capturing_scripted(
         [
             json.dumps({"summary": "short", "confidence": 0.9}),
             json.dumps({"summary": "long", "confidence": 0.9}),
@@ -831,7 +1272,12 @@ async def test_summary_format_selects_variant_prompts() -> None:
     executor = Executor(
         router=TierRouter([provider]),
         harness=ToolHarness(),
-        settings=Settings(),
+        settings=Settings(
+            prompts=NodePrompts(
+                summary_concise="CUSTOM CONCISE SUMMARY PROMPT",
+                summary_verbose="CUSTOM VERBOSE SUMMARY PROMPT",
+            )
+        ),
     )
     state = _state(
         Plan(
@@ -854,15 +1300,67 @@ async def test_summary_format_selects_variant_prompts() -> None:
 
     await executor.execute(state)
 
-    assert len(provider.system_seen) == 2
-    assert "concise 1-3 sentence summary" in provider.system_seen[0]
-    assert "thorough summary preserving all key facts" in provider.system_seen[1]
-    assert provider.system_seen[0] != provider.system_seen[1]
+    assert provider.system_seen == [
+        "CUSTOM CONCISE SUMMARY PROMPT",
+        "CUSTOM VERBOSE SUMMARY PROMPT",
+    ]
+
+
+async def test_extract_args_uses_configured_prompt() -> None:
+    """Tool-args extraction uses the configured extract_args system prompt."""
+    provider = make_capturing_scripted(
+        [
+            json.dumps({"path": "/tmp/value.txt"}),
+            _SHAPE_OK,
+        ]
+    )
+    harness = ToolHarness()
+
+    async def read_path(path: str) -> dict[str, str]:
+        return {"path": path}
+
+    harness.tool(
+        name="read_path",
+        description="read a path",
+        parameters={
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+    )(read_path)
+    executor = Executor(
+        router=TierRouter([provider]),
+        harness=harness,
+        settings=Settings(prompts=NodePrompts(extract_args="CUSTOM EXTRACT ARGS PROMPT")),
+    )
+    plan = Plan(
+        nodes=[
+            Node(
+                id=2,
+                type=NodeType.TOOL,
+                description="read the path from context",
+                tool="read_path",
+                context_needed=[1],
+            )
+        ]
+    )
+    state = _state(plan)
+    state.results[1] = NodeResult(
+        node_id=1,
+        status=NodeStatus.COMPLETED,
+        output={"path": "/tmp/value.txt"},
+    )
+
+    await executor.execute(state)
+
+    assert provider.system_seen[0] == "CUSTOM EXTRACT ARGS PROMPT"
+    assert "Tool schema:" in provider.user_seen[0]
+    assert state.results[2].args_used == {"path": "/tmp/value.txt"}
 
 
 async def test_decision_context_includes_direct_dependents() -> None:
     """Decision prompts include downstream descriptions without leaking extra results."""
-    provider = _CapturingProvider(
+    provider = make_capturing_scripted(
         [
             json.dumps({"branch": "yes", "confidence": 0.9}),
             json.dumps({"output": "yes", "confidence": 0.9}),

@@ -47,6 +47,8 @@ class NodeResult(BaseModel):
     flagged: bool = False
     """True when ``confidence`` fell below the configured threshold."""
     tokens_used: int = 0
+    retries: int = 0
+    """Retry attempts used before this result was recorded."""
     execution_time_s: float = 0.0
     error: str | None = None
     tier_used: int | None = None
@@ -88,6 +90,8 @@ class TaskStatus(StrEnum):
     PLANNING = "planning"
     AWAITING_CONFIRMATION = "awaiting_confirmation"
     """HITL gate — orchestrator paused, awaiting user resume."""
+    RESUMING = "resuming"
+    """A resume request has claimed the task but execution has not started."""
     EXECUTING = "executing"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -124,3 +128,10 @@ class ExecutionState(BaseModel):
     def touch(self) -> None:
         """Stamp ``updated_at`` with the current UTC time."""
         self.updated_at = _utcnow()
+
+    @property
+    def total_tokens(self) -> int:
+        """Model tokens consumed across planning and node execution."""
+        planning = sum(attempt.tokens_used for attempt in self.planning_attempts)
+        execution = sum(result.tokens_used for result in self.results.values())
+        return planning + execution

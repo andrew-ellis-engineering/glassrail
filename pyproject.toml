@@ -49,9 +49,10 @@ web = ["trafilatura>=1.8"]
 glassrail = "glassrail.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/andrew-ellis-engineering/glassrail"
+Homepage = "https://www.andrewellisengineering.com/glassrail-website/"
 Repository = "https://github.com/andrew-ellis-engineering/glassrail"
-Documentation = "https://andrew-ellis-engineering.github.io/glassrail/"
+Documentation = "https://www.andrewellisengineering.com/glassrail/"
+Changelog = "https://github.com/andrew-ellis-engineering/glassrail/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [

@@ -6,6 +6,7 @@ exercised against the full contract automatically.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 
@@ -58,6 +59,90 @@ async def test_save_and_load_round_trip(store: StateStore) -> None:
 
 async def test_load_missing_returns_none(store: StateStore) -> None:
     assert await store.load_task(new_task_id()) is None
+
+
+async def test_status_transition_updates_only_allowed_state(store: StateStore) -> None:
+    state = _make_state()
+    state.status = TaskStatus.PAUSED
+    await store.save_task(state)
+
+    transitioned = await store.transition_task_status(
+        state.task_id,
+        from_statuses=(TaskStatus.PAUSED,),
+        to_status=TaskStatus.RESUMING,
+    )
+
+    assert transitioned is not None
+    assert transitioned.status is TaskStatus.RESUMING
+    assert transitioned.updated_at > state.updated_at
+    stored = await store.load_task(state.task_id)
+    assert stored is not None
+    assert stored.status is TaskStatus.RESUMING
+
+
+async def test_status_transition_rejects_disallowed_state(store: StateStore) -> None:
+    state = _make_state()
+    await store.save_task(state)
+
+    transitioned = await store.transition_task_status(
+        state.task_id,
+        from_statuses=(TaskStatus.PAUSED,),
+        to_status=TaskStatus.RESUMING,
+    )
+
+    assert transitioned is None
+    stored = await store.load_task(state.task_id)
+    assert stored is not None
+    assert stored.status is TaskStatus.PLANNING
+
+
+async def test_status_transition_has_single_winner(store: StateStore) -> None:
+    state = _make_state()
+    state.status = TaskStatus.PAUSED
+    await store.save_task(state)
+
+    results = await asyncio.gather(
+        *(
+            store.transition_task_status(
+                state.task_id,
+                from_statuses=(TaskStatus.PAUSED,),
+                to_status=TaskStatus.RESUMING,
+            )
+            for _ in range(8)
+        )
+    )
+
+    assert sum(result is not None for result in results) == 1
+
+
+async def test_sqlite_status_transition_has_single_cross_connection_winner(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "shared.sqlite"
+    first = SqliteStateStore(path)
+    second = SqliteStateStore(path)
+    state = _make_state()
+    state.status = TaskStatus.PAUSED
+    try:
+        await first.save_task(state)
+        assert await second.load_task(state.task_id) is not None
+        results = await asyncio.gather(
+            first.transition_task_status(
+                state.task_id,
+                from_statuses=(TaskStatus.PAUSED,),
+                to_status=TaskStatus.RESUMING,
+            ),
+            second.transition_task_status(
+                state.task_id,
+                from_statuses=(TaskStatus.PAUSED,),
+                to_status=TaskStatus.RESUMING,
+            ),
+        )
+    finally:
+        await first.close()
+        await second.close()
+
+    assert sum(result is not None for result in results) == 1
 
 
 async def test_save_replaces_existing(store: StateStore) -> None:

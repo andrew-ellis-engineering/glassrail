@@ -23,7 +23,7 @@ changing anything.
   pydantic, not pytest, not requests, not tomli (use stdlib `tomllib`). The
   data model is plain `dataclasses`. Adding a dependency is a design change,
   not a convenience.
-- **The 10 principles are non-negotiable** and are enforced by architecture,
+- **The 11 principles are non-negotiable** and are enforced by architecture,
   not convention (see `README.md`). In particular: deterministic graders
   first; multi-trial mandatory; the agent never sees grading criteria
   (temporal firewall); trajectory is first-class evidence; trials are
@@ -36,12 +36,14 @@ changing anything.
 
 ## Run & validate
 
-There is no unit-test suite or lint/type config here; validate by running.
+There is no third-party test runner or lint/type config here. The focused
+offline integrity tests use stdlib ``unittest``; validate by running.
 
 ```bash
 python3 run.py list suites/glassrail                      # loads + summarizes
 python3 run.py suite suites/glassrail --dry-run           # zero-cost wiring check
 python3 -c "from evalkit.stats import pass_at_k; assert pass_at_k(3,1,3)==1.0"
+python3 -m unittest discover -s tests -v                 # offline integrity checks
 python3 -m compileall -q evalkit run.py                  # syntax check
 ```
 
@@ -88,8 +90,9 @@ is the authoritative control.
   providers (OpenRouter, etc.) return an HTML 200, not JSON. The provider
   handles this gracefully (treats non-JSON 200 as available), but local-only
   servers return `{"status":"healthy"}` as expected.
-- `total_tokens` in the run envelope counts execution-node tokens only.
-  Planner token counts live in `planning_attempts[*].tokens_used`.
+- `total_tokens` in Glassrail run envelopes includes every planning attempt and
+  execution-node call. The gateway subject reconstructs the same full-run total
+  from `planning_attempts[*].tokens_used` and `results[*].tokens_used`.
 
 ## Cost discipline
 

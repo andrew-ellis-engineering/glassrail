@@ -47,6 +47,7 @@ class GlassrailExecPlanSubject:
                 result_text="",
                 success=False,
                 error="exec-plan: no plan path provided",
+                infra_error=True,
             )
 
         cmd = [*self._command, plan_path, "--json", *self._extra_args]
@@ -70,11 +71,13 @@ class GlassrailExecPlanSubject:
                 error="timed out",
                 raw_stdout=_as_text(exc.stdout),
                 raw_stderr=_as_text(exc.stderr) + "\n[timed out]",
+                infra_error=True,
             )
         except FileNotFoundError:
             return RunResult(
                 result_text="",
                 success=False,
                 error=f"glassrail CLI not found: {self._command[0]!r}",
+                infra_error=True,
             )
         return _result_from_proc(proc.returncode, proc.stdout, proc.stderr)

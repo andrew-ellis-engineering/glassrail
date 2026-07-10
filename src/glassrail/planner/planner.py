@@ -16,7 +16,7 @@ from typing import Any, cast
 from urllib.parse import urlparse
 
 from glassrail.config import Settings
-from glassrail.core import Plan, PlanningAttempt, PlanRejectedError, PlanValidationError
+from glassrail.core import Plan, PlanningAttempt, PlanValidationError
 from glassrail.harness import ToolHarness
 from glassrail.planner.cookbook import PlannerCookbook
 from glassrail.planner.tool_digest import render_tool_capability_digest
@@ -52,74 +52,6 @@ class Planner:
         # an arbitrary directory).
         self._failed_plan_dir = Path.home() / ".glassrail" / "failed_plans"
 
-    async def plan(
-        self, request: str, *, min_tier: int | None = None, feedback: str | None = None
-    ) -> Plan:
-        """Generate and validate a plan for ``request``.
-
-        ``feedback`` (set on a guided replan after a user rejects a plan) is
-        woven into the planning prompt so the next plan addresses it.
-
-        Strategy: first attempt suppresses thinking (``/no_think``) for speed.
-        If that attempt fails with a rejection or validation error — problems
-        that may benefit from extended reasoning — a second attempt is made with
-        thinking re-enabled. Timeout/stall/JSON failures don't improve with
-        thinking and are surfaced immediately.
-        """
-        effective_min_tier = self._settings.planner_min_tier if min_tier is None else min_tier
-        attempt = await self.plan_attempt(
-            request,
-            attempt=0,
-            min_tier=effective_min_tier,
-            feedback=feedback,
-            thinking=False,
-        )
-
-        if attempt.plan is not None:
-            return attempt.plan
-
-        # Retry with thinking on errors that extended reasoning might fix.
-        if attempt.error_type in ("rejection", "validation"):
-            if attempt.filepath:
-                log.warning(
-                    "Plan attempt 0 failed (%s), retrying with thinking; written to %s",
-                    attempt.error_type,
-                    attempt.filepath,
-                )
-            else:
-                log.info(
-                    "Plan attempt 0 failed (%s), retrying with thinking",
-                    attempt.error_type,
-                )
-            retry = await self.plan_attempt(
-                request,
-                attempt=1,
-                min_tier=effective_min_tier,
-                feedback=feedback,
-                thinking=True,
-                rejection_feedback=rejection_retry_feedback(attempt.error)
-                if attempt.error_type == "rejection"
-                else None,
-                validation_feedback=attempt.error if attempt.error_type == "validation" else None,
-            )
-            if retry.filepath:
-                log.warning("Retry plan failed, written to %s", retry.filepath)
-            if retry.plan is not None:
-                return retry.plan
-            if retry.error_type == "rejection":
-                raise PlanRejectedError(retry.error or "Task rejected by planner")
-            if retry.error_type == "validation":
-                raise PlanValidationError(retry.error or "Plan failed validation")
-            raise ValueError(retry.error or "Planner failed")
-
-        if attempt.filepath:
-            log.warning("Plan failed, written to %s", attempt.filepath)
-        if attempt.error_type == "rejection":
-            raise PlanRejectedError(attempt.error or "Task rejected by planner")
-        if attempt.error_type == "validation":
-            raise PlanValidationError(attempt.error or "Plan failed validation")
-        raise ValueError(attempt.error or "Planner failed")
-
     def _limits_block(self) -> str:
         """The structural budget the validator enforces, stated for the model.
 
@@ -153,13 +85,17 @@ class Planner:
         for index, tier in enumerate(self._settings.tiers):
             status = self._tier_status(index=index, min_tier=min_tier)
             lines.append(f"- tier {index}: model={tier.model}, endpoint={tier.base_url}, {status}")
+        routing = self._settings.routing
         lines.extend(
             [
-                "- Default routing: tool, decision, summary, synthesis, and result "
-                "nodes start at tier 0.",
-                "- Think nodes and reasoning_required=true nodes start at tier 2. "
+                "- Node routing table: "
+                f"tool={routing.tool}, decision={routing.decision}, "
+                f"summary={routing.summary}, synthesis={routing.synthesis}, "
+                f"think={routing.think}, result={routing.result}.",
+                "- Nodes with reasoning_required=true start at least at "
+                f"tier {routing.reasoning_required}. "
                 "Use them only for real multi-step reasoning, and prefer ordinary "
-                "summary/synthesis/result nodes when tier 2+ are not configured.",
+                "summary/synthesis/result nodes when higher tiers are not configured.",
                 "- If you set forced_tier, choose only an eligible configured tier "
                 "from the list above.",
             ]

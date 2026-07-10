@@ -17,7 +17,7 @@ from glassrail.executor.tool_approval import ToolApprovalBroker
 from glassrail.harness import ToolHarness, register_builtins
 from glassrail.harness.integrations import register_integrations
 from glassrail.planner import Planner
-from glassrail.providers import router_from_settings
+from glassrail.providers import TierRouter, router_from_settings
 from glassrail.state import InMemoryStateStore, StateStore
 from glassrail.telemetry import configure_tracing
 from glassrail.validator import PlanValidator
@@ -35,6 +35,12 @@ class Runtime:
     event_bus: EventBus
     settings: Settings
     tool_approval: ToolApprovalBroker | None = None
+    router: TierRouter | None = None
+
+    async def aclose(self) -> None:
+        """Release runtime-owned network resources."""
+        if self.router is not None:
+            await self.router.aclose()
 
 
 def build_runtime(
@@ -80,4 +86,5 @@ def build_runtime(
         event_bus=bus,
         settings=settings,
         tool_approval=tool_approval,
+        router=router,
     )

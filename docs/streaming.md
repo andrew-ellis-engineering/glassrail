@@ -16,6 +16,15 @@ Planning and node events carry the debugging payload needed to inspect bad
 runs: `plan_ready` includes the accepted plan, `plan_failed` / `task_failed`
 include `planning_attempts` when planning never produced a valid plan, and
 `node_finished` includes an `error` field for failed or flagged nodes.
+When a subplan runs, REST streams include its child node events too:
+`node_started`, `node_finished`, `node_output_chunk`, and `branch_decided`
+carry `node_path` for nested nodes. Top-level node events use `null`; a child
+node `2` inside subplan node `4` uses `"4/2"`. Nested subplan node events do
+not emit their own terminal `task_completed`; the outer task still owns the
+stream lifecycle.
+If a streaming LLM node is retried after a mid-stream provider failure, already
+emitted `node_output_chunk` fragments remain in the stream and the retry emits
+fresh chunks; v1 does not send a retraction marker.
 
 If you connect *after* the task already finished, you don't miss out: the
 server synthesises a single snapshot event for the terminal state and closes.
@@ -32,8 +41,10 @@ data: {"type": "node_finished", "task_id": "01K...", "node_id": 1, "status": "co
 data: {"type": "task_completed", "task_id": "01K...", "final_output": "..."}
 ```
 
-Each event is one `data:` frame. The response closes after the terminal event.
-Unknown task → `404`; no event bus configured → `503`.
+Each event is one `data:` frame. During idle periods the SSE response emits a
+comment keepalive (`: keepalive`) about every 15 seconds; JSON consumers should
+continue reading only `data:` frames. The response closes after the terminal
+event. Unknown task → `404`; no event bus configured → `503`.
 
 ## WebSocket
 
@@ -46,9 +57,11 @@ with connect(f"ws://localhost:8000/task/{task_id}/events") as ws:
 ```
 
 Each event arrives as one text message (the same JSON as SSE). The server
-closes the socket once a terminal event has been sent. Connections are
-rejected *before* the handshake completes when the request is invalid, so the
-client sees a close code rather than a silently dropped stream:
+closes the socket once a terminal event has been sent. WebSocket liveness uses
+uvicorn's protocol-level ping interval (20 seconds by default) rather than
+Glassrail-level comment frames. Connections are rejected *before* the handshake
+completes when the request is invalid, so the client sees a close code rather
+than a silently dropped stream:
 
 | Condition | Close code |
 |-----------|-----------|
@@ -57,8 +70,7 @@ client sees a close code rather than a silently dropped stream:
 
 ## One source, two transports
 
-Both endpoints consume a single transport-agnostic generator
-(`_event_source`) that owns the subscribe-then-snapshot-or-stream logic. SSE
-wraps each event in a `data:` frame; the WebSocket sends it as a text message.
-Adding another transport later means consuming that same generator — the
-producers don't change.
+Both endpoints share the same snapshot-or-stream semantics. SSE wraps each
+event in a `data:` frame and adds comment keepalives while idle; the WebSocket
+sends each event as a text message. Adding another transport later means
+consuming the same typed EventBus events — the producers don't change.

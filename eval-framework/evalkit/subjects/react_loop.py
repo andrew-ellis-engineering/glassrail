@@ -85,6 +85,7 @@ class ReactLoopSubject:
                         envelopes,
                         trajectory,
                         total_tokens,
+                        infra_error=True,
                     )
 
                 tool_calls = message.get("tool_calls")
@@ -113,15 +114,22 @@ class ReactLoopSubject:
                     error=None if text else "empty completion",
                     raw_envelope={"turns": envelopes},
                     raw_stdout=json.dumps({"turns": envelopes}),
+                    infra_error=not bool(text),
                 )
         except (urllib.error.URLError, TimeoutError) as exc:
             return RunResult(
                 result_text="",
                 success=False,
                 error=f"endpoint error: {format_endpoint_error(exc)}",
+                infra_error=True,
             )
         except (json.JSONDecodeError, ValueError) as exc:
-            return RunResult(result_text="", success=False, error=f"{type(exc).__name__}: {exc}")
+            return RunResult(
+                result_text="",
+                success=False,
+                error=f"{type(exc).__name__}: {exc}",
+                infra_error=True,
+            )
 
         return _failed("max turns exhausted", envelopes, trajectory, total_tokens)
 
@@ -197,6 +205,8 @@ def _failed(
     envelopes: list[dict[str, Any]],
     trajectory: list[dict[str, Any]],
     total_tokens: int,
+    *,
+    infra_error: bool = False,
 ) -> RunResult:
     return RunResult(
         result_text="",
@@ -207,4 +217,5 @@ def _failed(
         error=error,
         raw_envelope={"turns": envelopes},
         raw_stdout=json.dumps({"turns": envelopes}),
+        infra_error=infra_error,
     )

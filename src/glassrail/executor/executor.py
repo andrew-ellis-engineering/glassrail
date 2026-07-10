@@ -7,18 +7,18 @@ node runs at, the model never does.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import math
 import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import ClassVar, NamedTuple, cast
+from typing import ClassVar, NamedTuple, Protocol, cast
 
 from opentelemetry.trace import Status, StatusCode
 
 from glassrail.config import Settings, ToolApprovalMode, ToolApprovalPolicy
-from glassrail.config import prompts as default_prompts
 from glassrail.core import (
     BranchLogEntry,
     ExecutionState,
@@ -28,6 +28,7 @@ from glassrail.core import (
     NodeType,
     Plan,
     SummaryFormat,
+    TaskId,
     TaskStatus,
     ToolExecutionError,
 )
@@ -43,10 +44,18 @@ from glassrail.events import (
 from glassrail.executor.context import assemble_context
 from glassrail.executor.tool_approval import ToolApprovalBroker
 from glassrail.harness import ToolHarness
-from glassrail.providers import Chunk, Message, TierRouter, collect, strip_model_output
+from glassrail.providers import (
+    Chunk,
+    Message,
+    ProviderUnavailableError,
+    TierRouter,
+    collect,
+    strip_model_output,
+)
 from glassrail.telemetry import (
     ATTR_NODE_CONFIDENCE,
     ATTR_NODE_ID,
+    ATTR_NODE_RETRIES,
     ATTR_NODE_STATUS,
     ATTR_NODE_TYPE,
     ATTR_TIER,
@@ -55,6 +64,29 @@ from glassrail.telemetry import (
 )
 
 log = logging.getLogger(__name__)
+
+
+class _EventPublisher(Protocol):
+    async def publish(self, event: Event) -> None: ...
+
+
+class _TaskScopedPublisher:
+    """Publish nested events on the parent task stream."""
+
+    def __init__(self, bus: _EventPublisher, task_id: TaskId) -> None:
+        self._bus = bus
+        self._task_id = task_id
+
+    async def publish(self, event: Event) -> None:
+        await self._bus.publish(event.model_copy(update={"task_id": self._task_id}))
+
+
+class _EmptyLLMOutputError(Exception):
+    """Retryable model-node failure: the provider returned only blank text."""
+
+    def __init__(self, *, tokens_used: int) -> None:
+        super().__init__("empty model output")
+        self.tokens_used = tokens_used
 
 
 def _clamp_confidence(value: float, default: float, node_id: int) -> float:
@@ -235,110 +267,257 @@ class Executor:
         """Execute the plan, emitting lifecycle events to the bus."""
         return await self._run(state, emit=True)
 
-    async def _run(self, state: ExecutionState, *, emit: bool) -> ExecutionState:
+    async def _run(
+        self,
+        state: ExecutionState,
+        *,
+        emit: bool,
+        semaphore: asyncio.Semaphore | None = None,
+        path_prefix: str = "",
+        emit_task_completed: bool = True,
+        bus_override: _EventPublisher | None = None,
+    ) -> ExecutionState:
         plan = state.plan
         if plan is None:
             raise RuntimeError("Cannot execute: state has no plan")
 
-        # Nested subplan runs reuse this method with emit=False so their
-        # internal nodes (whose ids may collide with the parent's) don't
-        # leak onto the parent task's event stream.
-        bus = self._bus if emit else None
-        skipped: set[int] = set()
+        # Nested subplan runs may use an override publisher: the child state has
+        # its own task id, while external node events stay on the parent stream.
+        event_bus = bus_override if bus_override is not None else self._bus
+        bus = event_bus if emit else None
         node_map = {n.id: n for n in plan.nodes}
+        deps = self._dependency_map(plan)
+        max_concurrent = max(1, self._settings.max_concurrent_nodes)
+        semaphore = semaphore or asyncio.Semaphore(max_concurrent)
+        pending: set[int] = set(plan.sorted_node_ids)
+        in_flight: dict[asyncio.Task[None], int] = {}
 
         state.status = TaskStatus.EXECUTING
         state.touch()
 
-        for node_id in plan.sorted_node_ids:
-            node = node_map[node_id]
+        while pending or in_flight:
+            dispatched = False
+            for node_id in plan.sorted_node_ids:
+                if node_id not in pending:
+                    continue
+                node = node_map[node_id]
+                if node_id in state.results:
+                    pending.remove(node_id)
+                    continue
+                if not deps[node_id].issubset(state.results):
+                    continue
 
-            if node_id in skipped:
-                result = NodeResult(node_id=node_id, status=NodeStatus.SKIPPED)
-                state.results[node_id] = result
-                state.skipped_nodes.append(node_id)
-                log.info("Node %d skipped (excluded branch)", node_id)
-                await self._emit(bus, self._finished_event(state, result))
+                pending.remove(node_id)
+                if self._only_uses_skipped_content(
+                    node, state, plan, missing_counts_as_skipped=False
+                ):
+                    await self._record_skipped_node(
+                        state,
+                        node_id=node_id,
+                        bus=bus,
+                        reason="all content dependencies were skipped",
+                        node_path=self._node_path(path_prefix, node_id),
+                    )
+                    dispatched = True
+                    continue
+
+                if len(in_flight) >= max_concurrent:
+                    pending.add(node_id)
+                    break
+
+                task = asyncio.create_task(
+                    self._run_node(
+                        node,
+                        state,
+                        plan=plan,
+                        node_map=node_map,
+                        semaphore=semaphore,
+                        bus=bus,
+                        path_prefix=path_prefix,
+                    )
+                )
+                in_flight[task] = node_id
+                dispatched = True
+
+            if not in_flight:
+                if pending and not dispatched:
+                    blocked = {
+                        node_id: sorted(deps[node_id] - state.results.keys())
+                        for node_id in sorted(pending)
+                    }
+                    raise RuntimeError(f"Cannot execute plan: no ready nodes remain: {blocked}")
                 continue
 
-            tier = self._select_tier(node)
-            with get_tracer().start_as_current_span(SPAN_NODE) as span:
-                span.set_attribute(ATTR_NODE_ID, node_id)
-                span.set_attribute(ATTR_NODE_TYPE, node.type.value)
-                span.set_attribute(ATTR_TIER, tier)
+            if dispatched and len(in_flight) < max_concurrent:
+                continue
 
-                await self._emit(
-                    bus,
-                    NodeStarted(
-                        task_id=state.task_id,
-                        node_id=node_id,
-                        node_type=node.type,
-                        tier=tier,
-                    ),
-                )
-                t0 = time.monotonic()
-                result = await self._dispatch_node(node, state, tier, skipped, bus=bus)
-                result.execution_time_s = time.monotonic() - t0
-                if result.tier_used is None:
-                    result.tier_used = tier
-
-                if (
-                    result.status is NodeStatus.COMPLETED
-                    and result.confidence < self._settings.confidence_threshold
-                ):
-                    result.flagged = True
-                    log.warning(
-                        "Node %d flagged: confidence %.2f below threshold",
-                        node_id,
-                        result.confidence,
-                    )
-
-                span.set_attribute(ATTR_NODE_STATUS, result.status.value)
-                span.set_attribute(ATTR_NODE_CONFIDENCE, result.confidence)
-                if result.status is NodeStatus.FAILED:
-                    span.set_status(Status(StatusCode.ERROR, result.error or "node failed"))
-
-                state.results[node_id] = result
-                state.completed_nodes.append(node_id)
-                state.touch()
-
-                if node.type is NodeType.DECISION:
-                    await self._emit(
-                        bus,
-                        BranchDecided(
-                            task_id=state.task_id,
-                            node_id=node_id,
-                            branch_taken=result.branch_taken,
-                            confidence=result.confidence,
-                        ),
-                    )
-                await self._emit(bus, self._finished_event(state, result))
+            done, _ = await asyncio.wait(in_flight, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                in_flight.pop(task)
+                await task
 
         state.final_output = self._extract_final_output(state, plan)
         state.status = TaskStatus.COMPLETED
         state.touch()
-        await self._emit(bus, TaskCompleted(task_id=state.task_id, final_output=state.final_output))
+        await self._emit(
+            bus if emit_task_completed else None,
+            TaskCompleted(task_id=state.task_id, final_output=state.final_output),
+        )
         return state
+
+    async def _run_node(
+        self,
+        node: Node,
+        state: ExecutionState,
+        *,
+        plan: Plan,
+        node_map: dict[int, Node],
+        semaphore: asyncio.Semaphore,
+        bus: _EventPublisher | None,
+        path_prefix: str,
+    ) -> None:
+        if node.type is NodeType.SUBPLAN:
+            await self._execute_and_record_node(
+                node,
+                state,
+                plan=plan,
+                node_map=node_map,
+                semaphore=semaphore,
+                bus=bus,
+                path_prefix=path_prefix,
+            )
+            return
+
+        async with semaphore:
+            await self._execute_and_record_node(
+                node,
+                state,
+                plan=plan,
+                node_map=node_map,
+                semaphore=semaphore,
+                bus=bus,
+                path_prefix=path_prefix,
+            )
+
+    async def _execute_and_record_node(
+        self,
+        node: Node,
+        state: ExecutionState,
+        *,
+        plan: Plan,
+        node_map: dict[int, Node],
+        semaphore: asyncio.Semaphore,
+        bus: _EventPublisher | None,
+        path_prefix: str,
+    ) -> None:
+        node_id = node.id
+        node_path = self._node_path(path_prefix, node_id)
+        tier = self._select_tier(node)
+        with get_tracer().start_as_current_span(SPAN_NODE) as span:
+            span.set_attribute(ATTR_NODE_ID, node_id)
+            span.set_attribute(ATTR_NODE_TYPE, node.type.value)
+            span.set_attribute(ATTR_TIER, tier)
+
+            await self._emit(
+                bus,
+                NodeStarted(
+                    task_id=state.task_id,
+                    node_id=node_id,
+                    node_type=node.type,
+                    tier=tier,
+                    node_path=node_path,
+                ),
+            )
+            t0 = time.monotonic()
+            result = await self._dispatch_node(
+                node,
+                state,
+                tier,
+                semaphore=semaphore,
+                bus=bus,
+                path_prefix=path_prefix,
+                node_path=node_path,
+            )
+            result.execution_time_s = time.monotonic() - t0
+            if result.tier_used is None:
+                result.tier_used = tier
+
+            if (
+                result.status is NodeStatus.COMPLETED
+                and result.confidence < self._settings.confidence_threshold
+            ):
+                result.flagged = True
+                log.warning(
+                    "Node %d flagged: confidence %.2f below threshold",
+                    node_id,
+                    result.confidence,
+                )
+
+            span.set_attribute(ATTR_NODE_STATUS, result.status.value)
+            span.set_attribute(ATTR_NODE_CONFIDENCE, result.confidence)
+            span.set_attribute(ATTR_NODE_RETRIES, result.retries)
+            if result.status is NodeStatus.FAILED:
+                span.set_status(Status(StatusCode.ERROR, result.error or "node failed"))
+
+            state.results[node_id] = result
+            state.completed_nodes.append(node_id)
+            state.touch()
+
+            if node.type is NodeType.DECISION:
+                skipped = self._record_branch_decision(state, node, result)
+                await self._emit(
+                    bus,
+                    BranchDecided(
+                        task_id=state.task_id,
+                        node_id=node_id,
+                        branch_taken=result.branch_taken,
+                        confidence=result.confidence,
+                        node_path=node_path,
+                    ),
+                )
+            else:
+                skipped: set[int] = set()
+
+            await self._emit(bus, self._finished_event(state, result, node_path=node_path))
+
+        for skipped_id in sorted(skipped):
+            if skipped_id in node_map and skipped_id not in state.results:
+                await self._record_skipped_node(
+                    state,
+                    node_id=skipped_id,
+                    bus=bus,
+                    reason="excluded branch",
+                    node_path=self._node_path(path_prefix, skipped_id),
+                )
 
     async def _dispatch_node(
         self,
         node: Node,
         state: ExecutionState,
         tier: int,
-        skipped: set[int],
-        bus: EventBus | None = None,
+        *,
+        semaphore: asyncio.Semaphore,
+        path_prefix: str,
+        node_path: str | None,
+        bus: _EventPublisher | None = None,
     ) -> NodeResult:
         if node.type is NodeType.TOOL:
             return await self._execute_tool(node, state, tier)
         if node.type is NodeType.DECISION:
-            result = await self._execute_decision(node, state, tier)
-            self._record_branch_decision(state, node, result, skipped)
-            return result
+            return await self._execute_decision(node, state, tier)
         if node.type is NodeType.SUBPLAN:
-            return await self._execute_subplan(node, state)
+            return await self._execute_subplan(
+                node,
+                state,
+                semaphore=semaphore,
+                emit_nested=bus is not None,
+                path_prefix=path_prefix,
+            )
         spec = _LLM_NODE_SPECS.get(node.type)
         if spec is not None:
-            return await self._execute_llm_node(node, state, tier, spec=spec, bus=bus)
+            return await self._execute_llm_node(
+                node, state, tier, spec=spec, bus=bus, node_path=node_path
+            )
         return NodeResult(
             node_id=node.id,
             status=NodeStatus.FAILED,
@@ -346,12 +525,17 @@ class Executor:
         )
 
     @staticmethod
-    async def _emit(bus: EventBus | None, event: Event) -> None:
+    async def _emit(bus: _EventPublisher | None, event: Event) -> None:
         if bus is not None:
             await bus.publish(event)
 
     @staticmethod
-    def _finished_event(state: ExecutionState, result: NodeResult) -> NodeFinished:
+    def _finished_event(
+        state: ExecutionState,
+        result: NodeResult,
+        *,
+        node_path: str | None = None,
+    ) -> NodeFinished:
         return NodeFinished(
             task_id=state.task_id,
             node_id=result.node_id,
@@ -360,7 +544,25 @@ class Executor:
             flagged=result.flagged,
             tier_used=result.tier_used,
             error=result.error,
+            node_path=node_path,
         )
+
+    @staticmethod
+    async def _record_skipped_node(
+        state: ExecutionState,
+        *,
+        node_id: int,
+        bus: _EventPublisher | None,
+        reason: str,
+        node_path: str | None = None,
+    ) -> None:
+        result = NodeResult(node_id=node_id, status=NodeStatus.SKIPPED)
+        state.results[node_id] = result
+        if node_id not in state.skipped_nodes:
+            state.skipped_nodes.append(node_id)
+        state.touch()
+        log.info("Node %d skipped (%s)", node_id, reason)
+        await Executor._emit(bus, Executor._finished_event(state, result, node_path=node_path))
 
     # ── Per-node executors ────────────────────────────────────────────────
 
@@ -406,7 +608,7 @@ class Executor:
                 node_id=node.id, status=NodeStatus.EMPTY, output=raw_output, args_used=args
             )
 
-        ok, issue = await self._check_output_shape(node, raw_output)
+        ok, issue = await self._check_output_shape(node, raw_output, tier)
         if not ok:
             log.warning("Node %d unexpected result shape: %s", node.id, issue)
             return NodeResult(
@@ -452,30 +654,63 @@ class Executor:
         ]
 
         tokens = 0
-        try:
-            raw, tokens = await collect(
-                self._router.complete(
-                    messages,
-                    min_tier=tier,
-                    json_mode=True,
-                    max_tokens=self._settings.budgets.decision,
+        attempt_tier = tier
+        max_retries = self._max_llm_node_retries()
+        attempt = 0
+        for attempt in range(max_retries + 1):
+            try:
+                raw, attempt_tokens = await self._collect_retryable_output(
+                    self._router.complete(
+                        messages,
+                        min_tier=attempt_tier,
+                        json_mode=True,
+                        max_tokens=self._settings.budgets.decision,
+                    )
                 )
-            )
-            data = json.loads(strip_model_output(raw))
-            branch = data.get("branch", node.default_branch or "yes")
-            confidence = _clamp_confidence(float(data.get("confidence", 0.5)), 0.5, node.id)
-            if node.branches and branch not in node.branches:
-                log.warning(
-                    "Node %d returned unknown branch '%s', falling back to default '%s'",
-                    node.id,
-                    branch,
-                    node.default_branch,
+                tokens += attempt_tokens
+                data = json.loads(strip_model_output(raw))
+                branch = data.get("branch", node.default_branch or "yes")
+                confidence = _clamp_confidence(float(data.get("confidence", 0.5)), 0.5, node.id)
+                if node.branches and branch not in node.branches:
+                    log.warning(
+                        "Node %d returned unknown branch '%s', falling back to default '%s'",
+                        node.id,
+                        branch,
+                        node.default_branch,
+                    )
+                    branch = node.default_branch or next(iter(node.branches))
+                return NodeResult(
+                    node_id=node.id,
+                    status=NodeStatus.COMPLETED,
+                    branch_taken=branch,
+                    confidence=confidence,
+                    tokens_used=tokens,
+                    retries=attempt,
+                    tier_used=attempt_tier,
                 )
-                branch = node.default_branch or next(iter(node.branches))
-        except Exception as exc:
-            log.warning("Decision node %d failed (%s), using default branch", node.id, exc)
-            branch = node.default_branch or (next(iter(node.branches)) if node.branches else "yes")
-            confidence = 0.0
+            except _EmptyLLMOutputError as exc:
+                tokens += exc.tokens_used
+                if attempt < max_retries:
+                    next_tier = self._retry_tier(attempt_tier)
+                    self._log_llm_retry(node, attempt, attempt_tier, next_tier, exc)
+                    attempt_tier = next_tier
+                    continue
+                log.warning("Decision node %d failed (%s), using default branch", node.id, exc)
+                break
+            except ProviderUnavailableError as exc:
+                if attempt < max_retries:
+                    next_tier = self._retry_tier(attempt_tier)
+                    self._log_llm_retry(node, attempt, attempt_tier, next_tier, exc)
+                    attempt_tier = next_tier
+                    continue
+                log.warning("Decision node %d failed (%s), using default branch", node.id, exc)
+                break
+            except Exception as exc:
+                log.warning("Decision node %d failed (%s), using default branch", node.id, exc)
+                break
+
+        branch = node.default_branch or (next(iter(node.branches)) if node.branches else "yes")
+        confidence = 0.0
 
         return NodeResult(
             node_id=node.id,
@@ -483,6 +718,8 @@ class Executor:
             branch_taken=branch,
             confidence=confidence,
             tokens_used=tokens,
+            retries=min(attempt, max_retries),
+            tier_used=attempt_tier,
         )
 
     async def _execute_llm_node(
@@ -492,7 +729,8 @@ class Executor:
         tier: int,
         *,
         spec: _LLMNodeSpec,
-        bus: EventBus | None = None,
+        bus: _EventPublisher | None = None,
+        node_path: str | None = None,
     ) -> NodeResult:
         """Run a single-LLM-call node (synthesis / think / summary / result).
 
@@ -505,36 +743,62 @@ class Executor:
         subscribers (e.g. the ACP adapter) can forward it to the client in
         real time.
         """
-        attempt_tiers = [tier]
-        if node.type is NodeType.RESULT:
-            retry_tier = self._next_configured_tier(tier)
-            if retry_tier is not None:
-                attempt_tiers.append(retry_tier)
-
         result = NodeResult(
             node_id=node.id,
             status=NodeStatus.FAILED,
             error="LLM node did not run",
         )
-        for attempt_tier in attempt_tiers:
-            result = await self._execute_llm_node_once(
-                node,
-                state,
-                attempt_tier,
-                spec=spec,
-                bus=bus,
-            )
+        tokens = 0
+        attempt_tier = tier
+        max_retries = self._max_llm_node_retries()
+        for attempt in range(max_retries + 1):
+            try:
+                result = await self._execute_llm_node_once(
+                    node,
+                    state,
+                    attempt_tier,
+                    spec=spec,
+                    bus=bus,
+                    node_path=node_path,
+                )
+            except _EmptyLLMOutputError as exc:
+                tokens += exc.tokens_used
+                result = NodeResult(
+                    node_id=node.id,
+                    status=NodeStatus.FAILED,
+                    tokens_used=tokens,
+                    retries=attempt,
+                    tier_used=attempt_tier,
+                    error=str(exc),
+                )
+                if attempt < max_retries:
+                    next_tier = self._retry_tier(attempt_tier)
+                    self._log_llm_retry(node, attempt, attempt_tier, next_tier, exc)
+                    attempt_tier = next_tier
+                    continue
+                return result
+            except ProviderUnavailableError as exc:
+                result = NodeResult(
+                    node_id=node.id,
+                    status=NodeStatus.FAILED,
+                    tokens_used=tokens,
+                    retries=attempt,
+                    tier_used=attempt_tier,
+                    error=str(exc),
+                )
+                if attempt < max_retries:
+                    next_tier = self._retry_tier(attempt_tier)
+                    self._log_llm_retry(node, attempt, attempt_tier, next_tier, exc)
+                    attempt_tier = next_tier
+                    continue
+                return result
+
+            result.tokens_used += tokens
+            result.retries = attempt
             result.tier_used = attempt_tier
             if result.status is NodeStatus.COMPLETED:
                 return result
-            if node.type is NodeType.RESULT and attempt_tier != attempt_tiers[-1]:
-                log.warning(
-                    "Result node %d failed at tier %d (%s); retrying at tier %d",
-                    node.id,
-                    attempt_tier,
-                    result.error or "unknown error",
-                    attempt_tiers[-1],
-                )
+            return result
         return result
 
     async def _execute_llm_node_once(
@@ -544,7 +808,8 @@ class Executor:
         tier: int,
         *,
         spec: _LLMNodeSpec,
-        bus: EventBus | None = None,
+        bus: _EventPublisher | None = None,
+        node_path: str | None = None,
     ) -> NodeResult:
         dependents = self._direct_dependents(node, state)
         ctx = assemble_context(node, state.results, dependent_nodes=dependents or None)
@@ -571,9 +836,13 @@ class Executor:
         )
         try:
             if node.type in _STREAMING_NODE_TYPES and bus is not None:
-                raw, tokens = await self._stream_llm_node(node, state, stream, spec, bus)
+                raw, tokens = await self._stream_llm_node(
+                    node, state, stream, spec, bus, node_path=node_path
+                )
             else:
-                raw, tokens = await collect(stream)
+                raw, tokens = await self._collect_retryable_output(stream)
+            if not raw.strip():
+                raise _EmptyLLMOutputError(tokens_used=tokens)
             try:
                 data = json.loads(strip_model_output(raw))
             except json.JSONDecodeError:
@@ -608,6 +877,8 @@ class Executor:
             output = raw_output if raw_output is not None else raw
             raw_confidence = float(data.get("confidence", spec.default_confidence))
             confidence = _clamp_confidence(raw_confidence, spec.default_confidence, node.id)
+        except (ProviderUnavailableError, _EmptyLLMOutputError):
+            raise
         except Exception as exc:
             return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
 
@@ -619,11 +890,47 @@ class Executor:
             tokens_used=tokens,
         )
 
-    def _next_configured_tier(self, tier: int) -> int | None:
-        higher = sorted(
-            {provider.tier for provider in self._router.providers if provider.tier > tier}
+    @staticmethod
+    async def _collect_retryable_output(stream: AsyncIterator[Chunk]) -> tuple[str, int]:
+        raw, tokens = await collect(stream)
+        if not raw.strip():
+            raise _EmptyLLMOutputError(tokens_used=tokens)
+        return raw, tokens
+
+    def _max_llm_node_retries(self) -> int:
+        return max(0, self._settings.resilience.max_llm_node_retries)
+
+    def _retry_tier(self, previous_tier: int) -> int:
+        if not self._settings.resilience.escalate_tier_on_retry:
+            return previous_tier
+        return min(previous_tier + 1, self._highest_configured_tier())
+
+    def _highest_configured_tier(self) -> int:
+        return max(provider.tier for provider in self._router.providers)
+
+    @staticmethod
+    def _log_llm_retry(
+        node: Node,
+        attempt: int,
+        prior_tier: int,
+        next_tier: int,
+        exc: Exception,
+    ) -> None:
+        log.warning(
+            "Node %d LLM attempt %d failed at tier %d (%s); retrying at tier %d",
+            node.id,
+            attempt + 1,
+            prior_tier,
+            exc,
+            next_tier,
+            extra={
+                "node_id": node.id,
+                "attempt": attempt + 1,
+                "prior_tier": prior_tier,
+                "next_tier": next_tier,
+                "error": str(exc),
+            },
         )
-        return higher[0] if higher else None
 
     async def _stream_llm_node(
         self,
@@ -631,7 +938,9 @@ class Executor:
         state: ExecutionState,
         stream: AsyncIterator[Chunk],
         spec: _LLMNodeSpec,
-        bus: EventBus,
+        bus: _EventPublisher,
+        *,
+        node_path: str | None = None,
     ) -> tuple[str, int]:
         """Collect a streaming LLM response, publishing NodeOutputChunk events.
 
@@ -654,6 +963,7 @@ class Executor:
                             node_id=node.id,
                             node_type=node.type,
                             text=new_text,
+                            node_path=node_path,
                         ),
                     )
             if chunk.tokens_used is not None:
@@ -664,6 +974,10 @@ class Executor:
         self,
         node: Node,
         state: ExecutionState,
+        *,
+        semaphore: asyncio.Semaphore,
+        emit_nested: bool,
+        path_prefix: str,
     ) -> NodeResult:
         """Run the nested plan in a fresh ExecutionState and bubble up its
         final_output as this node's output. The subplan does not see the
@@ -684,16 +998,30 @@ class Executor:
         sub_request = f"Subplan task: {node.description}\n\nParent task:\n{state.user_request}"
         if ctx:
             sub_request += f"\n\nContext from parent plan:\n{ctx}"
+        sub_task_id = TaskId(f"{state.task_id}-sub{node.id}")
+        nested_bus = (
+            _TaskScopedPublisher(self._bus, state.task_id)
+            if emit_nested and self._bus is not None
+            else None
+        )
         sub_state = ExecutionState(
-            task_id=state.task_id,
+            task_id=sub_task_id,
             user_request=sub_request,
             plan=node.subplan,
         )
         try:
-            completed = await self._run(sub_state, emit=False)
+            completed = await self._run(
+                sub_state,
+                emit=emit_nested,
+                semaphore=semaphore,
+                path_prefix=self._child_path(path_prefix, node.id),
+                emit_task_completed=False,
+                bus_override=nested_bus,
+            )
         except Exception as exc:
             return NodeResult(node_id=node.id, status=NodeStatus.FAILED, error=str(exc))
 
+        final_result = self._final_output_result(completed, node.subplan)
         if completed.final_output is None:
             return NodeResult(
                 node_id=node.id,
@@ -705,10 +1033,20 @@ class Executor:
             node_id=node.id,
             status=NodeStatus.COMPLETED,
             output=completed.final_output,
-            confidence=1.0,
+            confidence=final_result.confidence if final_result is not None else 1.0,
         )
 
     # ── Helpers ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _node_path(path_prefix: str, node_id: int) -> str | None:
+        """External event path for a node, or None for top-level nodes."""
+        return f"{path_prefix}/{node_id}" if path_prefix else None
+
+    @staticmethod
+    def _child_path(path_prefix: str, node_id: int) -> str:
+        """Prefix to pass into a nested plan rooted at ``node_id``."""
+        return f"{path_prefix}/{node_id}" if path_prefix else str(node_id)
 
     async def _approve_tool_call(
         self,
@@ -786,9 +1124,9 @@ class Executor:
         prompts = self._settings.prompts
         if node.type is NodeType.SUMMARY:
             if node.format is SummaryFormat.CONCISE:
-                return default_prompts.SUMMARY_CONCISE_SYSTEM
+                return prompts.summary_concise
             if node.format is SummaryFormat.VERBOSE:
-                return default_prompts.SUMMARY_VERBOSE_SYSTEM
+                return prompts.summary_verbose
             return prompts.summary
         return {
             NodeType.THINK: prompts.think,
@@ -800,15 +1138,19 @@ class Executor:
         """Pick a tier for ``node``. Deterministic — the model never decides."""
         if node.forced_tier is not None:
             return node.forced_tier
-        if node.type is NodeType.DECISION:
-            return 0
-        if node.type is NodeType.TOOL:
-            return 0
-        if node.type is NodeType.THINK:
-            return 2
+
+        routing = self._settings.routing
+        base = {
+            NodeType.DECISION: routing.decision,
+            NodeType.TOOL: routing.tool,
+            NodeType.SYNTHESIS: routing.synthesis,
+            NodeType.THINK: routing.think,
+            NodeType.SUMMARY: routing.summary,
+            NodeType.RESULT: routing.result,
+        }.get(node.type, 0)
         if node.reasoning_required:
-            return 2
-        return 0
+            base = max(base, routing.reasoning_required)
+        return base
 
     async def _extract_args(
         self,
@@ -817,16 +1159,14 @@ class Executor:
         tier: int,
     ) -> dict[str, object]:
         schema = self._harness.schema_for(node.tool or "")
-        prompt = (
-            f"Extract the arguments for tool '{node.tool}' from the context below.\n"
-            f"Tool schema: {json.dumps(schema)}\n\n"
-            f"Context:\n{ctx}\n\n"
-            "Respond ONLY with a JSON object of the arguments."
-        )
+        prompt = f"Tool: {node.tool}\nTool schema: {json.dumps(schema)}\n\nContext:\n{ctx}"
         try:
             raw, _ = await collect(
                 self._router.complete(
-                    [{"role": "user", "content": prompt}],
+                    [
+                        {"role": "system", "content": self._settings.prompts.extract_args},
+                        {"role": "user", "content": prompt},
+                    ],
                     min_tier=tier,
                     json_mode=True,
                     max_tokens=self._settings.budgets.extract_args,
@@ -843,6 +1183,7 @@ class Executor:
         self,
         node: Node,
         output: object,
+        tier: int,
     ) -> tuple[bool, str | None]:
         """Lightweight gate: does the tool output look like what the node asked for?"""
         try:
@@ -860,7 +1201,7 @@ class Executor:
                         {"role": "system", "content": self._settings.prompts.shape_check},
                         {"role": "user", "content": prompt},
                     ],
-                    min_tier=0,
+                    min_tier=tier,
                     json_mode=True,
                     max_tokens=self._settings.budgets.shape_check,
                 )
@@ -878,8 +1219,8 @@ class Executor:
         state: ExecutionState,
         node: Node,
         result: NodeResult,
-        skipped: set[int],
-    ) -> None:
+    ) -> set[int]:
+        skipped: set[int] = set()
         if result.branch_taken and node.branches:
             for branch_name, branch_nodes in node.branches.items():
                 if branch_name != result.branch_taken:
@@ -900,12 +1241,18 @@ class Executor:
             result.branch_taken,
             result.confidence,
         )
+        return skipped
 
     def _extract_final_output(self, state: ExecutionState, plan: Plan) -> str | None:
         """The last completed RESULT node's output is the final answer; if
         the plan declared no RESULT node, fall back to the last completed
         synthesis/summary node so older or imperfect plans keep producing the
         best completed answer they have."""
+        result = self._final_output_result(state, plan)
+        return str(result.output) if result is not None else None
+
+    def _final_output_result(self, state: ExecutionState, plan: Plan) -> NodeResult | None:
+        """Return the node result that supplies this plan's final output."""
         for target in (NodeType.RESULT, NodeType.SYNTHESIS, NodeType.SUMMARY):
             for node_id in reversed(plan.sorted_node_ids):
                 node = next((n for n in plan.nodes if n.id == node_id), None)
@@ -915,11 +1262,39 @@ class Executor:
                     continue
                 result = state.results.get(node_id)
                 if result and result.status is NodeStatus.COMPLETED:
-                    return str(result.output)
+                    return result
         return None
 
     @staticmethod
-    def _only_uses_skipped_content(node: Node, state: ExecutionState, plan: Plan) -> bool:
+    def _dependency_map(plan: Plan) -> dict[int, set[int]]:
+        """All data and decision-control dependencies for scheduler readiness."""
+        deps = {node.id: set(node.context_needed) for node in plan.nodes}
+        for node in plan.nodes:
+            if node.type is not NodeType.DECISION or not node.branches:
+                continue
+            for branch_nodes in node.branches.values():
+                for target_id in branch_nodes:
+                    if target_id in deps:
+                        deps[target_id].add(node.id)
+        return deps
+
+    @staticmethod
+    def _content_dependencies(node: Node, plan: Plan) -> list[int]:
+        node_map = {n.id: n for n in plan.nodes}
+        return [
+            dep
+            for dep in node.context_needed
+            if node_map.get(dep, node).type is not NodeType.DECISION
+        ]
+
+    @staticmethod
+    def _only_uses_skipped_content(
+        node: Node,
+        state: ExecutionState,
+        plan: Plan,
+        *,
+        missing_counts_as_skipped: bool = True,
+    ) -> bool:
         """True when all non-decision inputs to a final candidate were skipped.
 
         This keeps an untaken branch's downstream result node from winning the
@@ -928,15 +1303,15 @@ class Executor:
         """
         if not node.context_needed:
             return False
-        node_map = {n.id: n for n in plan.nodes}
-        content_deps = [
-            dep
-            for dep in node.context_needed
-            if node_map.get(dep, node).type is not NodeType.DECISION
-        ]
+        content_deps = Executor._content_dependencies(node, plan)
         if not content_deps:
             return False
-        return all(
-            (result := state.results.get(dep)) is None or result.status is NodeStatus.SKIPPED
-            for dep in content_deps
-        )
+        for dep in content_deps:
+            result = state.results.get(dep)
+            if result is None:
+                if missing_counts_as_skipped:
+                    continue
+                return False
+            if result.status is not NodeStatus.SKIPPED:
+                return False
+        return True

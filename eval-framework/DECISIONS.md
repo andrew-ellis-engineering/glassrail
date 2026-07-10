@@ -28,10 +28,12 @@ prompt said to make reasonable choices and record them here rather than ask.
    so LLM judges are skipped (recorded as failed with an explicit reason).
    Pass `cost_optimize=False` to the dispatcher to force judging.
 
-5. **`pass@k` is reported with k = trials run.** Since we run exactly k=n
-   trials, the Chen estimator yields 0 or 1 (capability: did any trial pass?).
-   The fractional reliability signal lives in `pass^k`, and the Wilson CI is
-   computed on the pass^k proportion (perfect trials / trials).
+5. **`pass@k` is reported with k = trustworthy graded trials.** Infrastructure
+   failures and `--skip-grading` placeholders are excluded. Since we evaluate
+   exactly k=n eligible trials, the Chen estimator yields 0 or 1 (capability:
+   did any valid trial pass?). The fractional reliability signal lives in
+   `pass^k`, and the Wilson CI is computed on eligible perfect trials / eligible
+   trials. Metrics are unavailable when no eligible trials remain.
 
 6. **No third-party deps for stats.** Wilson CI needs a normal critical value;
    with no SciPy, `z` is found by bisection on `math.erf` (exact to ~1e-9).
@@ -42,7 +44,8 @@ prompt said to make reasonable choices and record them here rather than ask.
    and records `demotion_reason` + `demoted_at`.
 
 8. **LLM judge fails closed.** Only a leading `PASS` passes; `FAIL`, `UNKNOWN`,
-   unparseable output, or an invocation error all count as not-passed.
+   or unparseable judge output count as model-quality not-passed. A judge
+   invocation failure is infrastructure-invalid and is excluded from metrics.
 
 9. **Subject abstraction (v0.2.0) — the framework no longer assumes `claude -p`.**
    The system under test is now a pluggable *subject* behind one normalized
@@ -77,3 +80,11 @@ prompt said to make reasonable choices and record them here rather than ask.
     plain OpenAI-compatible tool loop with only a local `file_read` tool, so
     raw-model, ReAct-loop, and Glassrail runs can be compared on the same
     answer-quality criteria without importing Glassrail into the harness.
+
+13. **Infrastructure failures are not model outcomes.** From harness v0.5.0,
+    subjects explicitly distinguish invocation failures from parseable model
+    failure envelopes. Infrastructure-error trials are archived and reported
+    but excluded from quality metrics and regression gates. The invalid-run
+    tripwire is inclusive (`rate >= INVALID_RUN_INFRA_RATE`). Suite re-grading
+    is staged in memory: an invalid re-grade writes nothing, while a valid one
+    replaces score/task metadata and refreshes run scoring metadata together.

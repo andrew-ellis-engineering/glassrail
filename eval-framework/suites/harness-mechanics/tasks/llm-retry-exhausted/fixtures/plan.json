@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "result",
+      "description": "Try to produce the final answer, but every model attempt fails",
+      "context_needed": []
+    }
+  ]
+}

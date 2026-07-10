@@ -80,7 +80,7 @@ broker logs and denies.
   approval requested; same in auto mode → runs; explicit `allow` override on a
   write-risk tool → runs without asking; read-risk tool unaffected.
 - **Docs:** README Tool Approval section documents the risk-derived default;
-  fix the `ToolRisk` docstring in `src/glassrail/harness/registry.py` so the
+  fix the `ToolRisk` docstring in `src/glassrail/core/plan.py` so the
   claim matches reality (it now does).
 
 ## Item 3 — `web_fetch` hardening (release window) — implemented 2026-06-11

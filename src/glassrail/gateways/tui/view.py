@@ -63,6 +63,9 @@ class TaskView:
 
     def ingest(self, event: dict[str, Any]) -> None:
         """Update state from one decoded event dict (unknown types ignored)."""
+        path = event.get("node_path")
+        if isinstance(path, str) and "/" in path:
+            return
         etype = str(event.get("type", ""))
         if etype == "planning_started":
             self.status = "planning"

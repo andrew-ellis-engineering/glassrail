@@ -1,6 +1,6 @@
 # Spec: Small fixes and API cleanup
 
-Status: Proposed
+Status: Implemented
 Priority: mixed — **item 1 and item 9 land before the 0.1.0 tag** (public API
 name; eval-contract coverage). Everything else is independent and any-time.
 One item (or a small coherent batch) per PR. For each: full check sweep,
@@ -15,7 +15,7 @@ tests/` — includes `providers/base.py`'s `ProviderError` parentage). No
 deprecation alias: there are zero external users before the first release.
 The eval framework never imports glassrail, so it is unaffected.
 
-## 2. Fold the stray prompts into `NodePrompts`
+## 2. Fold the stray prompts into `NodePrompts` — implemented 2026-06-19
 
 Every node role's system prompt is configurable via `settings.prompts` —
 except three:
@@ -36,7 +36,7 @@ Add `extract_args`, `summary_concise`, and `summary_verbose` fields to the
 executor prompt-dispatch tests (custom prompt for each of the three is
 honoured). README "Node prompts" section: note all roles are now overridable.
 
-## 3. Remove the dead validator check
+## 3. Remove the dead validator check — implemented 2026-06-19
 
 `PlanValidator._check_branch_references` in
 `src/glassrail/validator/validator.py` re-validates branch-target existence
@@ -45,7 +45,7 @@ the same message — the second check is unreachable for that case. Write a
 test proving `topo_sort` raises on a missing branch target (if one doesn't
 already exist), then delete `_check_branch_references` and its call site.
 
-## 4. Move `ToolRisk` to `core` (fixes a layer inversion)
+## 4. Move `ToolRisk` to `core` (fixes a layer inversion) — implemented 2026-06-19
 
 `src/glassrail/events/types.py` imports `ToolRisk` from
 `glassrail.harness` — the events package importing *upward* into harness,
@@ -59,7 +59,7 @@ re-exported from `core/__init__.py`); `harness/registry.py` and
 re-export `ToolSchema` from `glassrail.harness.__init__` and import from the
 package, removing the submodule reach-in.
 
-## 5. Consolidate the `_Scripted` test fake
+## 5. Consolidate the `_Scripted` test fake — implemented 2026-06-19
 
 The scripted-provider fake is copy-pasted into six test files (grep
 `class _Scripted` under `tests/`). Add factories to `tests/conftest.py` —
@@ -69,7 +69,7 @@ existing copy (raises `RuntimeError("scripted exhausted")` on over-call).
 Migrate all six files; behaviour-identical, assertion changes only where
 attribute names differ.
 
-## 6. Delete the unused `Planner.plan()`
+## 6. Delete the unused `Planner.plan()` — implemented 2026-06-24
 
 `Planner.plan()` in `src/glassrail/planner/planner.py` implements a fixed
 two-attempt strategy that **production never calls** — the orchestrator drives
@@ -79,7 +79,7 @@ tests to `plan_attempt()`/orchestrator-level equivalents, and delete the
 legacy `PLANNER_SYSTEM` re-export alias in `planner/__init__.py`. CHANGELOG
 under `[Unreleased]` (pre-1.0 breaking change, called out plainly).
 
-## 7. Subplan child task-id isolation
+## 7. Subplan child task-id isolation — implemented 2026-06-24
 
 `_execute_subplan` in `executor.py` builds the child `ExecutionState` with
 the **parent's** `task_id` (a code comment acknowledges the collision risk;
@@ -90,7 +90,7 @@ suppressed; after [parallel-execution](parallel-execution.md) Part B they
 carry `node_path`, and a distinct task-id prefix keeps any future persistence
 collision-free). Test: child state's task_id is distinct and prefixed.
 
-## 8. Subplan confidence from the inner plan
+## 8. Subplan confidence from the inner plan — implemented 2026-06-24
 
 `_execute_subplan` hardcodes `confidence=1.0` on success, masking low-quality
 nested output from the flag check. Set the subplan node's confidence to the
@@ -119,7 +119,7 @@ silently. Add `tests/unit/test_cli.py` using `typer.testing.CliRunner`:
   plan + responses file.
 - `tui --help` / `acp --help` render (no execution).
 
-## 10. Tests for `strip_model_output`
+## 10. Tests for `strip_model_output` — implemented 2026-06-24
 
 `src/glassrail/providers/postprocess.py` cleans every raw LLM string before
 JSON parsing and has zero direct tests — a regression here fails every node

@@ -154,6 +154,8 @@ def test_decision_think_and_shape_check_prompts_have_tight_roles() -> None:
     # are passed in the user message, not hard-coded in the system prompt).
     assert "do not invent missing facts" in prompts.DEFAULT_DECISION_SYSTEM
     assert "allowed branch labels" in prompts.DEFAULT_DECISION_SYSTEM
+    assert "tool's JSON Schema" in prompts.DEFAULT_EXTRACT_ARGS_SYSTEM
+    assert "Respond ONLY with a JSON object" in prompts.DEFAULT_EXTRACT_ARGS_SYSTEM
     assert "externally useful reasoning" in prompts.DEFAULT_THINK_SYSTEM
     assert "private scratchpad filler" in prompts.DEFAULT_THINK_SYSTEM
     assert "stable general knowledge" in prompts.DEFAULT_THINK_SYSTEM
@@ -172,6 +174,7 @@ def test_runtime_prompts_avoid_visible_eval_task_vocabulary() -> None:
             prompts.SUMMARY_CONCISE_SYSTEM,
             prompts.SUMMARY_VERBOSE_SYSTEM,
             prompts.DEFAULT_RESULT_SYSTEM,
+            prompts.DEFAULT_EXTRACT_ARGS_SYSTEM,
         )
     ).lower()
 

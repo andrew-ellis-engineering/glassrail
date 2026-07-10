@@ -8,45 +8,14 @@ node's LLM prompt includes the result node's description under the
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Sequence
 
 from glassrail.config import Settings
 from glassrail.core import ExecutionState, Plan, new_task_id
 from glassrail.executor import Executor
 from glassrail.harness import ToolHarness, register_builtins
-from glassrail.providers import Chunk, Message, TierRouter
+from glassrail.providers import TierRouter
 from glassrail.validator import PlanValidator
-
-
-class _CapturingScripted:
-    """Scripted provider that records every user-role message it receives."""
-
-    def __init__(self, responses: Sequence[str]) -> None:
-        self._responses: list[str] = list(responses)
-        self.user_messages: list[str] = []
-
-    @property
-    def name(self) -> str:
-        return "scripted"
-
-    @property
-    def tier(self) -> int:
-        return 0
-
-    async def complete(
-        self,
-        messages: list[Message],
-        *,
-        json_mode: bool = False,
-        max_tokens: int = 1024,
-        timeout_s: float | None = None,
-    ) -> AsyncIterator[Chunk]:
-        del json_mode, max_tokens, timeout_s
-        user_msg = next((m["content"] for m in messages if m["role"] == "user"), "")
-        self.user_messages.append(user_msg)
-        if not self._responses:
-            raise RuntimeError("scripted exhausted")
-        yield Chunk(text=self._responses.pop(0), tokens_used=1)
+from tests.conftest import make_capturing_scripted
 
 
 async def test_synthesis_prompt_includes_downstream_description() -> None:
@@ -57,7 +26,7 @@ async def test_synthesis_prompt_includes_downstream_description() -> None:
 
     synthesis_response = json.dumps({"output": "combined finding", "confidence": 0.9})
     result_response = json.dumps({"output": "final answer", "confidence": 1.0})
-    provider = _CapturingScripted([synthesis_response, result_response])
+    provider = make_capturing_scripted([synthesis_response, result_response])
     router = TierRouter([provider])
     executor = Executor(router=router, harness=harness, settings=settings)
 

@@ -1,21 +1,18 @@
 name = "skip-transitive"
-tags = ["execution-model", "harness-mechanics", "branch-propagation", "open-question"]
+tags = ["execution-model", "harness-mechanics", "branch-propagation"]
 type = "regression"
 difficulty = 2
 
 expected_behavior = """
-Open question (HARNESS_NODE_EVAL_SPEC.md §8.2): a node that is downstream of a
-skipped branch node but is NOT itself listed in the branch is currently not
-automatically skipped by _record_branch_decision — it will attempt to run with
-missing context_needed outputs.
+When a node becomes ready and all of its non-decision context dependencies are
+SKIPPED, it is auto-skipped instead of running with only skipped content.
 
-This task pins the current observable behaviour so any change to skip
-propagation is detected.  Plan shape: DECISION(yes→[2], no→[3]) → node 4
+Plan shape: DECISION(yes→[2], no→[3]) → node 4
 depends on node 3 but is not listed in any branch.
 
 When 'yes' branch is taken: node 3 is SKIPPED, node 4 has context_needed=[3].
-Current expected behavior: node 4 still runs (with absent context from node 3).
-This test pins that behavior; update expected_behavior if the spec changes.
+Expected behavior: node 4 is also SKIPPED because every content dependency it
+declares is skipped.
 """
 
 [fixtures]
@@ -36,7 +33,7 @@ node_id = 3
 expect_status = "skipped"
 
 [[criteria]]
-text = "Node 4 (downstream of skipped node, not in branch list) still ran"
+text = "Node 4 (downstream of only skipped content) is also skipped"
 grader = "trajectory"
 node_id = 4
-expect_status = "completed"
+expect_status = "skipped"

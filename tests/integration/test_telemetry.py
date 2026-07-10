@@ -11,7 +11,6 @@ only test that asserts on spans; others tolerate the provider being present.
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
 from collections.abc import Sequence as _Sequence
 
 from opentelemetry.sdk.trace import ReadableSpan
@@ -22,7 +21,7 @@ from glassrail.core import ExecutionState, TaskStatus, new_task_id
 from glassrail.executor import Executor, Orchestrator
 from glassrail.harness import ToolHarness, register_builtins
 from glassrail.planner import Planner
-from glassrail.providers import Chunk, Message, TierRouter
+from glassrail.providers import TierRouter
 from glassrail.state import InMemoryStateStore
 from glassrail.telemetry import (
     ATTR_GEN_AI_USAGE_TOTAL_TOKENS,
@@ -36,35 +35,7 @@ from glassrail.telemetry import (
     configure_tracing,
 )
 from glassrail.validator import PlanValidator
-
-
-class _Scripted:
-    def __init__(self, responses: _Sequence[str]) -> None:
-        self._responses: list[str] = list(responses)
-
-    @property
-    def name(self) -> str:
-        return "scripted"
-
-    @property
-    def tier(self) -> int:
-        return 0
-
-    @property
-    def model(self) -> str:
-        return "scripted-model"
-
-    async def complete(
-        self,
-        messages: list[Message],
-        *,
-        json_mode: bool = False,
-        max_tokens: int = 1024,
-        timeout_s: float | None = None,
-    ) -> AsyncIterator[Chunk]:
-        del messages, json_mode, max_tokens, timeout_s
-        yield Chunk(text=self._responses.pop(0), tokens_used=1)
-
+from tests.conftest import make_scripted
 
 _PLAN = json.dumps(
     {
@@ -89,7 +60,7 @@ def _build(responses: list[str]) -> tuple[Orchestrator, InMemoryStateStore]:
     settings = Settings()
     harness = ToolHarness()
     register_builtins(harness)
-    router = TierRouter([_Scripted(responses)])
+    router = TierRouter([make_scripted(responses)])
     validator = PlanValidator(harness=harness, settings=settings)
     planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
     executor = Executor(router=router, harness=harness, settings=settings)

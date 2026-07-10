@@ -33,6 +33,7 @@ class _Provider:
         self._chunks = chunks or []
         self._raise_on_open = raise_on_open
         self._raise_mid_stream_after = raise_mid_stream_after
+        self.closed = False
 
     @property
     def name(self) -> str:
@@ -56,6 +57,9 @@ class _Provider:
             if self._raise_mid_stream_after is not None and i >= self._raise_mid_stream_after:
                 raise RuntimeError("mid-stream boom")
             yield c
+
+    async def aclose(self) -> None:
+        self.closed = True
 
 
 _MSG: list[Message] = [{"role": "user", "content": "hi"}]
@@ -180,3 +184,14 @@ async def test_empty_stream_falls_through() -> None:
     )
     text, _ = await collect(router.complete(_MSG))
     assert text == "from-1"
+
+
+async def test_aclose_closes_all_providers() -> None:
+    first = _Provider(name="t0", tier=0)
+    second = _Provider(name="t1", tier=1)
+    router = TierRouter([first, second])
+
+    await router.aclose()
+
+    assert first.closed is True
+    assert second.closed is True

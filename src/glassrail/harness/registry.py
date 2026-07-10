@@ -12,9 +12,9 @@ import importlib.metadata
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, Literal
+from typing import Any
 
-from glassrail.core import ToolExecutionError, ToolRegistrationError
+from glassrail.core import ToolExecutionError, ToolRegistrationError, ToolRisk
 
 log = logging.getLogger(__name__)
 
@@ -23,20 +23,6 @@ ToolFunc = Callable[..., Awaitable[Any] | Any]
 
 ToolSchema = dict[str, Any]
 """OpenAI-style tool schema: ``{"type": "function", "function": {...}}``."""
-
-ToolRisk = Literal["read", "network", "write", "execute"]
-"""Declared side-effect risk for a tool.
-
-- ``read``    — no side effects; reads local data only (default).
-- ``network`` — reads from external sources; may leak information or incur cost.
-- ``write``   — modifies local state (files, database, etc.).
-- ``execute`` — runs arbitrary code or shell commands; highest risk.
-
-The executor uses this risk as part of its approval policy: explicit
-``tool_approval.overrides`` win, otherwise ``write`` and ``execute`` tools
-default to ``ask`` while ``read`` and ``network`` tools follow the configured
-default policy.
-"""
 
 
 class ToolHarness:

@@ -23,7 +23,14 @@ merge it. For maintainer-authored work, the same PR-and-CI path applies; the
 maintainer may merge their own PR once checks pass and any open discussion is
 resolved.
 
-Keep PRs focused. The description should cover:
+Each PR must contain one coherent feature, bug fix, or infrastructure
+workstream. The implementation, required refactors, tests, documentation, and
+changelog entry for that work belong in the same PR; unrelated cleanup does
+not. Put independent work in a separate branch and PR. When one change depends
+on another, merge the prerequisite first or use a clearly identified stacked
+PR whose base is the prerequisite branch.
+
+Keep PR descriptions focused. They should cover:
 
 - What changed and why.
 - How you validated it.

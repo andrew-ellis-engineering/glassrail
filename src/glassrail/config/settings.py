@@ -116,12 +116,18 @@ class NodePrompts(BaseModel):
     """Plan generation — must request the plan JSON schema."""
     decision: str = _prompts.DEFAULT_DECISION_SYSTEM
     """Binary branch evaluation — must request {branch, confidence}."""
+    extract_args: str = _prompts.DEFAULT_EXTRACT_ARGS_SYSTEM
+    """Tool argument extraction — must request a JSON object."""
     think: str = _prompts.DEFAULT_THINK_SYSTEM
     """Multi-step reasoning — must request {reasoning, confidence}."""
     synthesis: str = _prompts.DEFAULT_SYNTHESIS_SYSTEM
     """Combine prior outputs — must request {output, confidence}."""
     summary: str = _prompts.DEFAULT_SUMMARY_SYSTEM
     """Condense upstream context — must request {summary, confidence}."""
+    summary_concise: str = _prompts.SUMMARY_CONCISE_SYSTEM
+    """Concise summary variant — must request {summary, confidence}."""
+    summary_verbose: str = _prompts.SUMMARY_VERBOSE_SYSTEM
+    """Verbose summary variant — must request {summary, confidence}."""
     result: str = _prompts.DEFAULT_RESULT_SYSTEM
     """The final answer — must request {output, confidence}."""
     shape_check: str = _prompts.DEFAULT_SHAPE_CHECK_SYSTEM
@@ -219,6 +225,52 @@ class ToolApprovalSettings(BaseModel):
 
     def policy_for(self, tool_name: str) -> ToolApprovalPolicy:
         return self.overrides.get(tool_name, self.default)
+
+
+class ResilienceConfig(BaseModel):
+    """Retry policy for retry-safe model-node failures."""
+
+    max_llm_node_retries: int = Field(default=1, ge=0)
+    """Extra attempts after the first for main LLM node calls."""
+    escalate_tier_on_retry: bool = True
+    """Raise the minimum tier by one for each retry attempt."""
+
+
+class RoutingConfig(BaseModel):
+    """Deterministic node-type to tier routing policy."""
+
+    decision: int = 0
+    """Tier for decision nodes."""
+    tool: int = 0
+    """Tier for tool-adjacent LLM micro-calls such as arg extraction."""
+    synthesis: int = 0
+    """Tier for synthesis nodes."""
+    think: int = 2
+    """Tier for think nodes."""
+    summary: int = 0
+    """Tier for summary nodes."""
+    result: int = 0
+    """Tier for result nodes."""
+    reasoning_required: int = 2
+    """Minimum tier applied when a node sets reasoning_required."""
+
+    @model_validator(mode="after")
+    def _check_tier_range(self) -> RoutingConfig:
+        # Tier count is fixed at four in Settings today. If tiers become
+        # dynamic, validate these fields against len(settings.tiers) instead.
+        for field in (
+            "decision",
+            "tool",
+            "synthesis",
+            "think",
+            "summary",
+            "result",
+            "reasoning_required",
+        ):
+            value = getattr(self, field)
+            if value < 0 or value > 3:
+                raise ValueError(f"routing.{field} must be between 0 and 3")
+        return self
 
 
 _OPENROUTER_QWEN_EXTRA_BODY: dict[str, Any] = {
@@ -337,6 +389,16 @@ class Settings(BaseSettings):
     max_plan_nodes: int = 24
     max_decision_nesting_depth: int = 2
     max_replan_attempts: int = 1
+    max_concurrent_nodes: int = 4
+    """Maximum number of ready DAG nodes that may execute at once.
+
+    Set to 1 to force the previous sequential execution model; values above 1
+    let independent nodes in the same dependency layer run concurrently.
+    """
+    resilience: ResilienceConfig = ResilienceConfig()
+    """Retry policy for main LLM node calls. Configure under ``[resilience]``."""
+    routing: RoutingConfig = RoutingConfig()
+    """Deterministic node-type to tier map. Configure under ``[routing]``."""
     planner_stall_char_multiplier: int = 4
     """Classify invalid planner output longer than planner max_tokens times
     this multiplier as a stall and feed the raw output into the retry prompt."""

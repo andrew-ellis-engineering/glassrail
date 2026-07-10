@@ -129,6 +129,25 @@ def test_view_records_branch_and_failure() -> None:
     assert view.done is True
 
 
+def test_view_ignores_nested_subplan_node_events() -> None:
+    view = TaskView(request="x")
+    view.ingest(
+        {"type": "node_started", "task_id": "t", "node_id": 1, "node_type": "subplan", "tier": 0}
+    )
+    view.ingest(
+        {
+            "type": "node_started",
+            "task_id": "t",
+            "node_id": 2,
+            "node_type": "result",
+            "tier": 0,
+            "node_path": "1/2",
+        }
+    )
+
+    assert set(view.nodes) == {1}
+
+
 def test_view_records_failed_planning_attempts() -> None:
     view = TaskView(request="x")
     view.ingest(

@@ -60,7 +60,9 @@ class GlassrailCliSubject:
         env = self._build_env()
         missing_key_error = _missing_openrouter_api_key_error(env)
         if missing_key_error is not None:
-            return RunResult(result_text="", success=False, error=missing_key_error)
+            return RunResult(
+                result_text="", success=False, error=missing_key_error, infra_error=True
+            )
         try:
             proc = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=timeout_s, check=False, env=env
@@ -75,12 +77,14 @@ class GlassrailCliSubject:
                 error="timed out",
                 raw_stdout=_as_text(exc.stdout),
                 raw_stderr=_as_text(exc.stderr) + "\n[timed out]",
+                infra_error=True,
             )
         except FileNotFoundError:
             return RunResult(
                 result_text="",
                 success=False,
                 error=f"glassrail CLI not found: {self._command[0]!r}",
+                infra_error=True,
             )
         return _result_from_proc(proc.returncode, proc.stdout, proc.stderr)
 
@@ -119,6 +123,7 @@ def _missing_openrouter_api_key_error(env: dict[str, str] | None) -> str | None:
 
 def _result_from_proc(returncode: int, stdout: str, stderr: str) -> RunResult:
     envelope = _parse_envelope(stdout)
+    infra_error = envelope is None
     error: str | None = None
     if envelope is None:
         envelope = {}
@@ -159,6 +164,7 @@ def _result_from_proc(returncode: int, stdout: str, stderr: str) -> RunResult:
         raw_envelope=envelope,
         raw_stdout=stdout,
         raw_stderr=stderr,
+        infra_error=infra_error,
     )
 
 

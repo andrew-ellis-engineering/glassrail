@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import cast
 
-from glassrail.harness.registry import ToolSchema
+from glassrail.harness import ToolSchema
 
 
 @dataclass(frozen=True)

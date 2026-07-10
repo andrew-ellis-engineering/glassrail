@@ -152,15 +152,24 @@ class Orchestrator:
         """Resume a task paused at confirmation or mid-execution."""
         with get_tracer().start_as_current_span(SPAN_TASK) as span:
             span.set_attribute(ATTR_TASK_ID, str(task_id))
-            state = await self._store.load_task(task_id)
+            state = await self._store.transition_task_status(
+                task_id,
+                from_statuses=(
+                    TaskStatus.AWAITING_CONFIRMATION,
+                    TaskStatus.PAUSED,
+                    TaskStatus.RESUMING,
+                ),
+                to_status=TaskStatus.EXECUTING,
+            )
             if state is None:
-                log.warning("Orchestrator.resume: task %s not found", task_id)
-                return
-            if state.status not in (TaskStatus.AWAITING_CONFIRMATION, TaskStatus.PAUSED):
+                current = await self._store.load_task(task_id)
+                if current is None:
+                    log.warning("Orchestrator.resume: task %s not found", task_id)
+                    return
                 log.warning(
                     "Orchestrator.resume: task %s is in status %s, not resumable",
                     task_id,
-                    state.status,
+                    current.status,
                 )
                 return
 

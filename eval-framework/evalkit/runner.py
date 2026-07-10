@@ -167,6 +167,7 @@ def run_trial(task: Task, run_number: int, *, subject: Subject, model: str, time
     stderr = ""
     cost: float | None = None
     total_tokens: int | None = None
+    infra_error = False
 
     # Recover from any crash that left backups behind, then take fresh ones.
     for raw in managed:
@@ -195,10 +196,12 @@ def run_trial(task: Task, run_number: int, *, subject: Subject, model: str, time
         total_tokens = result.total_tokens
         success = result.success
         error = result.error
+        infra_error = result.infra_error
 
         side_effects = {raw: _read_content(_expand(raw)) for raw in task.fixtures.capture}
     except Exception as exc:  # noqa: BLE001 - record any failure into the trial record
         error = f"{type(exc).__name__}: {exc}"
+        infra_error = True
     finally:
         for raw in managed:
             _restore(_expand(raw))
@@ -223,4 +226,5 @@ def run_trial(task: Task, run_number: int, *, subject: Subject, model: str, time
         model=model,
         harness_version=config.HARNESS_VERSION,
         baseline=baseline,
+        infra_error=infra_error,
     )

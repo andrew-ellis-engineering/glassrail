@@ -12,6 +12,11 @@ from collections.abc import Sequence
 from evalkit.models import Score
 
 
+def model_quality_scores(scores: Sequence[Score]) -> list[Score]:
+    """Return only trustworthy, actually graded model-quality outcomes."""
+    return [score for score in scores if score.graded and not score.infra_error]
+
+
 def pass_at_k(n: int, c: int, k: int) -> float:
     """Chen 2021 unbiased estimator: ``1 - C(n-c, k) / C(n, k)``.
 
@@ -35,10 +40,11 @@ def pass_at_k(n: int, c: int, k: int) -> float:
 
 def pass_pow_k(scores: Sequence[Score]) -> float:
     """Fraction of trials where ALL criteria passed (pass^k)."""
-    if not scores:
+    eligible = model_quality_scores(scores)
+    if not eligible:
         return 0.0
-    perfect = sum(1 for s in scores if s.pass_rate == 1.0)
-    return perfect / len(scores)
+    perfect = sum(1 for score in eligible if score.pass_rate == 1.0)
+    return perfect / len(eligible)
 
 
 def wilson_ci(successes: int, trials: int, alpha: float = 0.05) -> tuple[float, float]:
@@ -56,9 +62,10 @@ def wilson_ci(successes: int, trials: int, alpha: float = 0.05) -> tuple[float, 
 
 def mean_pass_rate(scores: Sequence[Score]) -> float:
     """Average criterion pass rate across trials."""
-    if not scores:
+    eligible = model_quality_scores(scores)
+    if not eligible:
         return 0.0
-    return sum(s.pass_rate for s in scores) / len(scores)
+    return sum(score.pass_rate for score in eligible) / len(eligible)
 
 
 def _z_for_alpha(alpha: float) -> float:

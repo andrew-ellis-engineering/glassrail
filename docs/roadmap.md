@@ -222,40 +222,55 @@ running continuously alongside. Done since the Phase 1 baseline:
   Phase 1; the remaining gap — risk-derived defaults so `write`/`execute`
   tools ask by default — is specs/security-baseline.md
   item 2.)*
+- **Parallel node ready-set scheduler** ✓ — independent nodes now execute
+  concurrently up to `max_concurrent_nodes`, with `1` preserving sequential
+  execution. Branch skip propagation now records skipped branch targets
+  immediately and auto-skips downstream nodes whose declared content inputs were
+  all skipped, while preserving shared joins with at least one completed input.
+   Spec: specs/parallel-execution.md Part A.
+- **Subplan event visibility** ✓ — nested subplan node events now carry
+   `node_path` on the REST event stream, while ACP and the Python TUI filter
+   nested child events to preserve their current top-level rendering.
+- **LLM-node retry resilience** ✓ — main model calls for decision, think,
+  summary, synthesis, and result nodes now retry retry-safe provider failures
+  under `[resilience]`, with retry counts recorded on `NodeResult` and scripted
+  provider error directives for deterministic eval coverage.
+- **Provider connection reuse and shutdown** ✓ — OpenAI-compatible providers
+  reuse a persistent `httpx.AsyncClient`, and router/runtime shutdown now
+  closes provider resources from CLI, ACP, and REST app lifespans.
+- **Configurable routing table** ✓ — `[routing]` now controls the deterministic
+  node-type → tier map while preserving the shipped defaults; this is the
+  config surface the Phase 2.5 tier-ROI selector can later write into.
+- **REST runtime lifespan wiring** ✓ — the module-level FastAPI app now defers
+  default runtime construction to ASGI lifespan startup and closes it on
+  shutdown; explicit injected apps still pre-populate their runtime.
+- **EventBus drop visibility and task-scoped subscriptions** ✓ — slow
+  subscribers now expose drop counts and warnings, and REST/ACP event consumers
+  subscribe per task so unrelated task events cannot evict active streams.
+- **SSE keepalive** ✓ — task event streams emit idle comment frames while
+  waiting for long-running nodes, with WebSocket liveness left to uvicorn pings.
+- **Resume idempotency** ✓ — state stores expose an atomic status transition;
+  REST claims paused tasks as resuming before queueing work, and the
+  orchestrator separately claims execution so duplicate submissions or workers
+  cannot execute a task twice.
+- **Executor prompt config cleanup** ✓ — extract-args plus concise/verbose
+  summary prompts now live under `NodePrompts`, keeping all executor LLM prompt
+  roles configurable from `[prompts]`.
+- **Small fixes / API cleanup** ✓ — the small-fixes spec is complete, including
+  planner API cleanup, subplan state/confidence fixes, shared scripted-provider
+  tests, and direct provider postprocess coverage.
+- **Planner-token accounting** ✓ — CLI run envelopes now include every
+  planning attempt and execution-node call in `total_tokens`, keeping failed
+  attempts and retry costs visible to eval reports and comparative baselines.
 
 ### Track 2a — Engine reliability core (in order)
 
-1. **Parallel node execution** — ready-set scheduler with bounded concurrency
-   (`max_concurrent_nodes`), formalised transitive-skip semantics, and subplan
-   event visibility. Prerequisite for `foreach`. Spec:
-   specs/parallel-execution.md.
-2. **Node resilience** — LLM-node retry with tier escalation
-   (`[resilience]`), scripted-provider error directives, provider connection
-   reuse + clean shutdown. Spec: specs/node-resilience.md.
-3. **Configurable routing table** — `[routing]` node-type → tier map replacing
-   the hardcoded `_select_tier` policy; prerequisite for the Phase 2.5 tier-ROI
-   selector. Also the lever for large-task economics — route planner and
-   synthesis nodes to capable tiers and the bulk of leaf nodes to cheap tiers,
-   concentrating spend where the hard reasoning is. Spec:
-   specs/routing-table.md.
-4. **Serving hardening** — lifespan runtime build, EventBus drop visibility +
-   per-task subscriptions, SSE keepalive, resume idempotency. Spec:
-   specs/serving-hardening.md (items 1–4; 5–6
-   land in the release window).
-5. **Small fixes / API cleanup** — remaining items of
-   specs/small-fixes.md (stray prompts into
-   `NodePrompts`, dead validator check, `ToolRisk` layer fix, `_Scripted`
-   consolidation, `Planner.plan()` removal, subplan id/confidence,
-   postprocess tests, image-tool docs).
-6. **Prompt caching for planner and node prompts** *(independent of the items
-   above; low-risk, land early)* — cache the static planner system prefix
-   (~3.8k tokens) and the per-node executor system prompts, and reorder the
-   planner prompt so the request-selected cookbook and the request itself trail
-   the static prefix that becomes the cache key. No caching exists today; the
-   prompt bytes are unchanged, so it is quality-neutral and cuts cost, not raw
-   token count. Measurement depends on the Track 2d planner-token accounting fix
-   — the run envelope counts execution nodes only, so the planner cost the cache
-   reduces is invisible until that lands.
+1. **Prompt caching for planner and node prompts** — cache the static planner
+   system prefix (~3.8k tokens) and the per-node executor system prompts, and
+   reorder the planner prompt so the request-selected cookbook and the request
+   itself trail the static prefix that becomes the cache key. No caching exists
+   today; the prompt bytes are unchanged, so it is quality-neutral and cuts
+   cost, not raw token count.
 
 ### Track 2b — Capability layer
 
@@ -271,7 +286,7 @@ running continuously alongside. Done since the Phase 1 baseline:
   diff-in-approval payload those tools produce. Sequence constraint — do not
   ship the file editing tools without this panel; approving blind edits is a
   worse UX than the current no-edit state.
-- **`foreach` node type** *(after Track 2a item 1 — parallel execution — plus
+- **`foreach` node type** *(after parallel execution ✓ plus
   upstream context awareness ✓ and registry schemas)* — fan-out iteration over a
   list using the existing subplan mechanism. Fields: `foreach_source` (upstream
   node id or literal list), `foreach_body` (nested Plan), `foreach_aggregation`
@@ -356,7 +371,7 @@ running continuously alongside. Done since the Phase 1 baseline:
 ### Track 2d — Evals & evidence (continuous)
 
 - **Result-node preservation of comparisons and trade-offs** *(next quality
-  ratchet; the prompt change is staged in the working tree)* — improve
+  ratchet; implementation pending)* — improve
   result-node prompting so final answers preserve named candidates, required
   comparison axes, and meaningful caveats from upstream reasoning. Current
   misses are concentrated here: `recommend-datastore-oltp` dropped the
@@ -372,19 +387,10 @@ running continuously alongside. Done since the Phase 1 baseline:
   `regression` as 5-clean-run streaks accumulate; promoted tasks block CI via
   the harness exit code.
 - **Comparative baselines** — raw model vs ReAct loop vs glassrail on answer
-  quality and tokens/task. Spec:
-  specs/comparative-baselines.md. First
-  three-way run (2026-06-17, qwen3-8b, trials=3): glassrail leads reliability
-  (pass@k 1.00 vs 0.92, and never hard-fails a task where both baselines whiff on
-  two each) but spends ~3–4x the tokens; held-out is clean (12/12). Follow-ups
-  before publishing: (1) count planner tokens — the run envelope sums execution
-  nodes only, so the reported figure excludes the largest cost center and
-  understates spend; (2) build `baseline-react-heldout` / `baseline-raw-heldout`
-  suites with the glassrail trajectory criteria stripped, for a neutral-ground
-  comparison; (3) re-run at trials=10, since pass^k is too thin at 3. Reframe the
-  published claim from a token-economics win (refuted at small-task scale) to
-  reliability + inspectability at a token premium, with the cost thesis to be
-  re-tested at large-task scale.
+  quality and tokens/task. The harness and initial suites are implemented, but
+  evidence remains internal until neutral held-out baselines and a sufficiently
+  powered rerun with full-run token accounting are complete. Publish the
+  methodology and results together only after that evidence review.
 
 ## Phase 2.5 — Dreaming
 

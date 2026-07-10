@@ -2,50 +2,24 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
-from collections.abc import AsyncIterator
-from collections.abc import Sequence as _Sequence
 from typing import cast
 
 from fastapi.testclient import TestClient
 
 from glassrail.config import Settings
-from glassrail.core import new_task_id
+from glassrail.core import ExecutionState, new_task_id
 from glassrail.events import EventBus
 from glassrail.executor import Executor, Orchestrator
 from glassrail.gateways.rest import create_app
+from glassrail.gateways.rest.app import event_stream
 from glassrail.harness import ToolHarness, register_builtins
 from glassrail.planner import Planner
-from glassrail.providers import Chunk, Message, TierRouter
+from glassrail.providers import TierRouter
 from glassrail.state import InMemoryStateStore
 from glassrail.validator import PlanValidator
-
-
-class _Scripted:
-    def __init__(self, responses: _Sequence[str]) -> None:
-        self._responses: list[str] = list(responses)
-
-    @property
-    def name(self) -> str:
-        return "scripted"
-
-    @property
-    def tier(self) -> int:
-        return 0
-
-    async def complete(
-        self,
-        messages: list[Message],
-        *,
-        json_mode: bool = False,
-        max_tokens: int = 1024,
-        timeout_s: float | None = None,
-    ) -> AsyncIterator[Chunk]:
-        del messages, json_mode, max_tokens, timeout_s
-        if not self._responses:
-            raise RuntimeError("scripted exhausted")
-        yield Chunk(text=self._responses.pop(0), tokens_used=1)
-
+from tests.conftest import make_scripted
 
 _PLAN_PAYLOAD = json.dumps(
     {
@@ -71,7 +45,7 @@ def _wired(responses: list[str], *, with_bus: bool = True) -> TestClient:
     bus = EventBus() if with_bus else None
     harness = ToolHarness()
     register_builtins(harness)
-    router = TierRouter([_Scripted(responses)])
+    router = TierRouter([make_scripted(responses)])
     validator = PlanValidator(harness=harness, settings=settings)
     planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
     executor = Executor(router=router, harness=harness, settings=settings, event_bus=bus)
@@ -135,3 +109,18 @@ def test_events_snapshot_for_failed_task() -> None:
     attempts = events[0]["attempts"]
     assert isinstance(attempts, list)
     assert len(cast("list[object]", attempts)) == 2
+
+
+async def test_sse_stream_emits_keepalive_comment_when_idle() -> None:
+    store = InMemoryStateStore()
+    bus = EventBus()
+    task_id = new_task_id()
+    await store.save_task(ExecutionState(task_id=task_id, user_request="wait"))
+
+    stream = event_stream(store, bus, task_id, keepalive_s=0.01)
+    try:
+        frame = await asyncio.wait_for(anext(stream), timeout=1.0)
+    finally:
+        await stream.aclose()
+
+    assert frame == ": keepalive\n\n"

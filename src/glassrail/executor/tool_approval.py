@@ -7,9 +7,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from glassrail.core import TaskId
+from glassrail.core import TaskId, ToolRisk
 from glassrail.events import EventBus, ToolApprovalRequested
-from glassrail.harness import ToolRisk
 
 
 @dataclass(frozen=True)

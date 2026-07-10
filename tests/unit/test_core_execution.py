@@ -9,6 +9,7 @@ from glassrail.core import (
     ExecutionState,
     NodeResult,
     NodeStatus,
+    PlanningAttempt,
     TaskId,
     TaskStatus,
     new_task_id,
@@ -47,6 +48,23 @@ def test_touch_advances_updated_at() -> None:
     time.sleep(0.002)
     state.touch()
     assert state.updated_at > earlier
+
+
+def test_total_tokens_includes_every_planning_attempt_and_node_result() -> None:
+    state = ExecutionState(
+        task_id=new_task_id(),
+        user_request="hi",
+        planning_attempts=[
+            PlanningAttempt(attempt=0, raw_output="invalid", tokens_used=11),
+            PlanningAttempt(attempt=1, raw_output='{"nodes": []}', tokens_used=13),
+        ],
+        results={
+            1: NodeResult(node_id=1, status=NodeStatus.COMPLETED, tokens_used=17),
+            2: NodeResult(node_id=2, status=NodeStatus.FAILED, tokens_used=19),
+        },
+    )
+
+    assert state.total_tokens == 60
 
 
 def test_node_result_defaults() -> None:

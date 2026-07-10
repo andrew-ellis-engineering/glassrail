@@ -13,8 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from glassrail.core import NodeStatus, NodeType, TaskId
-from glassrail.harness import ToolRisk
+from glassrail.core import NodeStatus, NodeType, TaskId, ToolRisk
 
 
 def _utcnow() -> datetime:
@@ -60,6 +59,7 @@ class NodeStarted(_BaseEvent):
     node_id: int
     node_type: NodeType
     tier: int
+    node_path: str | None = None
 
 
 class NodeFinished(_BaseEvent):
@@ -70,6 +70,7 @@ class NodeFinished(_BaseEvent):
     flagged: bool
     tier_used: int | None = None
     error: str | None = None
+    node_path: str | None = None
 
 
 class NodeOutputChunk(_BaseEvent):
@@ -86,6 +87,7 @@ class NodeOutputChunk(_BaseEvent):
     node_id: int
     node_type: NodeType
     text: str
+    node_path: str | None = None
 
 
 class ToolApprovalRequested(_BaseEvent):
@@ -103,6 +105,7 @@ class BranchDecided(_BaseEvent):
     node_id: int
     branch_taken: str | None
     confidence: float
+    node_path: str | None = None
 
 
 class TaskCompleted(_BaseEvent):

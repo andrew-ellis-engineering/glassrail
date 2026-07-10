@@ -192,9 +192,15 @@ class OpenAICompatSubject:
                 result_text="",
                 success=False,
                 error=f"endpoint error: {format_endpoint_error(exc)}",
+                infra_error=True,
             )
         except (json.JSONDecodeError, ValueError) as exc:
-            return RunResult(result_text="", success=False, error=f"{type(exc).__name__}: {exc}")
+            return RunResult(
+                result_text="",
+                success=False,
+                error=f"{type(exc).__name__}: {exc}",
+                infra_error=True,
+            )
         raw_tokens = usage.get("total_tokens")
         total_tokens = int(raw_tokens) if isinstance(raw_tokens, (int, float)) else None
         return RunResult(
@@ -206,4 +212,5 @@ class OpenAICompatSubject:
             error=None if text else "empty completion",
             raw_envelope=envelope,
             raw_stdout=json.dumps(envelope),
+            infra_error=not bool(text),
         )

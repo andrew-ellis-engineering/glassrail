@@ -153,21 +153,24 @@ async def _run_task(
 
     run_error: str | None = None
     try:
-        if timeout_s:
-            await asyncio.wait_for(rt.orchestrator.run(state.task_id), timeout=timeout_s)
-        else:
-            await rt.orchestrator.run(state.task_id)
-    except TimeoutError:
-        run_error = "timed out"
-        latest = await rt.store.load_task(state.task_id)
-        timed_out = latest or state
-        timed_out.status = TaskStatus.FAILED
-        timed_out.error = run_error
-        timed_out.touch()
-        await rt.store.save_task(timed_out)
+        try:
+            if timeout_s:
+                await asyncio.wait_for(rt.orchestrator.run(state.task_id), timeout=timeout_s)
+            else:
+                await rt.orchestrator.run(state.task_id)
+        except TimeoutError:
+            run_error = "timed out"
+            latest = await rt.store.load_task(state.task_id)
+            timed_out = latest or state
+            timed_out.status = TaskStatus.FAILED
+            timed_out.error = run_error
+            timed_out.touch()
+            await rt.store.save_task(timed_out)
 
-    final = await rt.store.load_task(state.task_id) or state
-    return _envelope(final, error=run_error)
+        final = await rt.store.load_task(state.task_id) or state
+        return _envelope(final, error=run_error)
+    finally:
+        await rt.aclose()
 
 
 def _node_token(node: Node) -> str:
@@ -210,6 +213,7 @@ def _trajectory(state: ExecutionState) -> list[dict[str, object]]:
                 "status": result.status.value if result else "pending",
                 "confidence": result.confidence if result else 1.0,
                 "flagged": result.flagged if result else False,
+                "retries": result.retries if result else 0,
                 "branch_taken": branch,
                 "args_used": result.args_used if result else None,
                 "output": out_str,
@@ -229,7 +233,6 @@ def _envelope(state: ExecutionState, *, error: str | None = None) -> dict[str, o
         )
         or error is not None
     )
-    total_tokens = sum(r.tokens_used for r in state.results.values())
     return {
         "result": state.final_output or "",
         "trajectory": _trajectory(state),
@@ -239,7 +242,7 @@ def _envelope(state: ExecutionState, *, error: str | None = None) -> dict[str, o
         # Local/self-hosted inference has no per-call dollar cost; tokens are the
         # meaningful budget signal and travel in the envelope for the record.
         "total_cost_usd": None,
-        "total_tokens": total_tokens,
+        "total_tokens": state.total_tokens,
         "task_id": str(state.task_id),
         "replan_count": state.replan_count,
         "plan": state.plan.model_dump(mode="json") if state.plan is not None else None,
@@ -333,52 +336,55 @@ async def _exec_plan(plan_data: object, *, no_validate: bool) -> dict[str, objec
     register_eval_tools(rt.harness)
 
     try:
-        plan = Plan.model_validate(plan_data)
-    except Exception as exc:
-        return {
-            "result": "",
-            "trajectory": [],
-            "status": "failed",
-            "is_error": True,
-            "error": f"plan parse failed: {exc}",
-            "total_cost_usd": None,
-            "total_tokens": 0,
-        }
-
-    if not no_validate:
-        validator = PlanValidator(harness=rt.harness, settings=settings)
         try:
-            plan.sorted_node_ids = validator.validate(plan)
+            plan = Plan.model_validate(plan_data)
         except Exception as exc:
             return {
                 "result": "",
                 "trajectory": [],
                 "status": "failed",
                 "is_error": True,
-                "error": f"plan validation failed: {exc}",
+                "error": f"plan parse failed: {exc}",
                 "total_cost_usd": None,
                 "total_tokens": 0,
             }
-    else:
-        # Skipping full validation (negative harness tests), but the executor
-        # still needs sorted_node_ids to iterate nodes. Topo-sort the plan and
-        # any nested subplans without structural checks; ignore errors (invalid
-        # deps are intentional in some fixtures and will surface as executor
-        # failures instead).
-        _topo_sort_recursive(plan)
 
-    state = ExecutionState(task_id=new_task_id(), user_request="<exec-plan>")
-    state.plan = plan
-    await rt.store.save_task(state)
+        if not no_validate:
+            validator = PlanValidator(harness=rt.harness, settings=settings)
+            try:
+                plan.sorted_node_ids = validator.validate(plan)
+            except Exception as exc:
+                return {
+                    "result": "",
+                    "trajectory": [],
+                    "status": "failed",
+                    "is_error": True,
+                    "error": f"plan validation failed: {exc}",
+                    "total_cost_usd": None,
+                    "total_tokens": 0,
+                }
+        else:
+            # Skipping full validation (negative harness tests), but the executor
+            # still needs sorted_node_ids to iterate nodes. Topo-sort the plan and
+            # any nested subplans without structural checks; ignore errors (invalid
+            # deps are intentional in some fixtures and will surface as executor
+            # failures instead).
+            _topo_sort_recursive(plan)
 
-    run_error: str | None = None
-    try:
-        await rt.orchestrator.execute_plan(state)
-    except TimeoutError:
-        run_error = "timed out"
+        state = ExecutionState(task_id=new_task_id(), user_request="<exec-plan>")
+        state.plan = plan
+        await rt.store.save_task(state)
 
-    final = await rt.store.load_task(state.task_id) or state
-    return _envelope(final, error=run_error)
+        run_error: str | None = None
+        try:
+            await rt.orchestrator.execute_plan(state)
+        except TimeoutError:
+            run_error = "timed out"
+
+        final = await rt.store.load_task(state.task_id) or state
+        return _envelope(final, error=run_error)
+    finally:
+        await rt.aclose()
 
 
 if __name__ == "__main__":

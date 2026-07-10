@@ -10,26 +10,18 @@ changing producers or consumers.
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 from types import TracebackType
 
+from glassrail.core import TaskId
 from glassrail.events.types import Event
 
-# A registry of live subscriber queues. The bus owns the set; each
-# Subscription adds and removes its own queue across its context lifetime.
-_QueueRegistry = set["asyncio.Queue[Event]"]
+# A registry of live subscriptions. The bus owns the set; each Subscription
+# adds and removes itself across its context lifetime.
+_SubscriptionRegistry = set["Subscription"]
 
-
-def _deliver(queue: asyncio.Queue[Event], event: Event) -> None:
-    """Enqueue an event, dropping the oldest if the queue is full.
-
-    A slow subscriber sheds its own backlog instead of applying
-    backpressure to producers (which would stall the whole task pipeline).
-    """
-    try:
-        queue.put_nowait(event)
-    except asyncio.QueueFull:
-        _ = queue.get_nowait()
-        queue.put_nowait(event)
+log = logging.getLogger(__name__)
 
 
 class Subscription:
@@ -43,12 +35,21 @@ class Subscription:
                 ...
     """
 
-    def __init__(self, *, queue: asyncio.Queue[Event], registry: _QueueRegistry) -> None:
+    def __init__(
+        self,
+        *,
+        queue: asyncio.Queue[Event],
+        registry: _SubscriptionRegistry,
+        task_id: TaskId | None,
+    ) -> None:
         self._queue = queue
         self._registry = registry
+        self._task_id = task_id
+        self._dropped = 0
+        self._last_drop_warning_s = 0.0
 
     async def __aenter__(self) -> Subscription:
-        self._registry.add(self._queue)
+        self._registry.add(self)
         return self
 
     async def __aexit__(
@@ -57,7 +58,7 @@ class Subscription:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        self._registry.discard(self._queue)
+        self._registry.discard(self)
 
     def __aiter__(self) -> Subscription:
         return self
@@ -65,12 +66,41 @@ class Subscription:
     async def __anext__(self) -> Event:
         return await self._queue.get()
 
+    @property
+    def dropped(self) -> int:
+        """Number of events evicted from this subscription's queue."""
+        return self._dropped
+
+    def deliver(self, event: Event) -> None:
+        if self._task_id is not None and event.task_id != self._task_id:
+            return
+        try:
+            self._queue.put_nowait(event)
+        except asyncio.QueueFull:
+            _ = self._queue.get_nowait()
+            self._queue.put_nowait(event)
+            self._dropped += 1
+            self._log_drop()
+
+    def _log_drop(self) -> None:
+        now = time.monotonic()
+        if now - self._last_drop_warning_s < 10.0:
+            return
+        self._last_drop_warning_s = now
+        log.warning(
+            "EventBus subscription dropped events",
+            extra={
+                "task_id": self._task_id,
+                "dropped": self._dropped,
+            },
+        )
+
 
 class EventBus:
     """Fans published events out to every active subscriber."""
 
     def __init__(self, *, max_queue: int = 1000) -> None:
-        self._registry: _QueueRegistry = set()
+        self._registry: _SubscriptionRegistry = set()
         self._max_queue = max_queue
 
     async def publish(self, event: Event) -> None:
@@ -79,17 +109,17 @@ class EventBus:
         Async by signature (so a future network-backed bus is a drop-in)
         even though the in-process implementation never awaits.
         """
-        for queue in list(self._registry):
-            _deliver(queue, event)
+        for subscription in list(self._registry):
+            subscription.deliver(event)
 
-    def subscribe(self) -> Subscription:
+    def subscribe(self, *, task_id: TaskId | None = None) -> Subscription:
         """Return a new, not-yet-registered :class:`Subscription`.
 
         Registration happens on ``__aenter__``; events published before
         then are not delivered to this subscriber.
         """
         queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=self._max_queue)
-        return Subscription(queue=queue, registry=self._registry)
+        return Subscription(queue=queue, registry=self._registry, task_id=task_id)
 
     @property
     def subscriber_count(self) -> int:

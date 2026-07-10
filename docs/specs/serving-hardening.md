@@ -1,6 +1,6 @@
 # Spec: Serving hardening
 
-Status: Proposed; items 5 and 6 implemented 2026-06-11.
+Status: Implemented (2026-06-19).
 Priority: P1, with items 5 (`glassrail run` exit codes) and 6
 (`glassrail serve`) suggested early — they are small and user-facing.
 Depends on: nothing. Items are independently mergeable; one item per PR.
@@ -13,7 +13,7 @@ event bus silently drops events under slow consumers, long streams have no
 keepalive, `/resume` can race, the CLI exits 0 on failure, and there is no
 `serve` command. Each item below fixes one of these.
 
-## Item 1 — Build the runtime in the FastAPI lifespan, not at import
+## Item 1 — Build the runtime in the FastAPI lifespan, not at import — implemented 2026-06-19
 
 **Current:** `src/glassrail/gateways/rest/app.py` ends with
 `app = create_default_app()`, which calls `build_runtime(get_settings())`
@@ -36,7 +36,7 @@ there is no shutdown hook.
 - `uvicorn glassrail.gateways.rest:app` keeps working (module-level `app`
   remains, but now construction of the runtime is deferred to startup).
 
-## Item 2 — EventBus: drop visibility and per-task subscriptions
+## Item 2 — EventBus: drop visibility and per-task subscriptions — implemented 2026-06-19
 
 **Current:** `src/glassrail/events/bus.py` fans out to bounded queues
 (`max_queue=1000`) with drop-oldest eviction and **no signal** when an event
@@ -56,7 +56,7 @@ is dropped; consumers filter by `task_id` manually.
   task-scoped subscription never sees another task's events (extend
   `tests/unit/test_events_bus.py`).
 
-## Item 3 — SSE keepalive
+## Item 3 — SSE keepalive — implemented 2026-06-19
 
 **Current:** no traffic during a long-running node; idle proxies and client
 timeouts kill the stream silently. (WebSocket is already covered by uvicorn's
@@ -72,23 +72,19 @@ unaffected — verify `gateways/tui/client.py` skips non-`data:` lines (it
 already strips by prefix; add a test). Document the keepalive in
 `docs/streaming.md`.
 
-## Item 4 — Resume idempotency
+## Item 4 — Resume idempotency — implemented 2026-06-19
 
-**Current:** `POST /task/{id}/resume` checks status then queues
-`orchestrator.resume` as a background task; two near-simultaneous calls can
-both pass the check and queue two resumes.
+**Implemented design:** `StateStore.transition_task_status` performs a durable
+compare-and-set rather than a read-then-save. The REST handler atomically moves
+`AWAITING_CONFIRMATION`/`PAUSED` to `RESUMING` and queues background work only
+when it wins that transition. `Orchestrator.resume` then atomically promotes
+`RESUMING` (or directly claimed non-REST paused states) to `EXECUTING`, so an
+accidentally duplicated background call also cannot run the plan twice.
 
-**Design:** in the REST handler, after the status check
-(`AWAITING_CONFIRMATION`/`PAUSED`), set `state.status = EXECUTING`, `touch()`,
-and `await store.save_task(state)` **before** queueing the background resume.
-A second call then fails the status check with the existing 400. Verify
-`Orchestrator.resume` tolerates loading a state already marked `EXECUTING`
-(it re-drives the executor; adjust its guard if it refuses). Apply the same
-check-and-set in the ACP gate path if it shares the race
-(`gateways/acp/server.py` `_handle_gate` — verify; it resumes via a created
-task after an explicit client response, so the race is narrower there).
-Test: two sequential resume calls — second gets 400; task completes once
-(count executor invocations with a scripted provider).
+The shared state-store contract verifies a single transition winner, including
+a SQLite test using two independent connections to represent multiple workers.
+Gateway tests cover duplicate and lost claims; orchestrator tests cover
+concurrent resume calls. ACP uses the same guarded orchestrator path.
 
 ## Item 5 — `glassrail run` exit codes (do early) — implemented 2026-06-11
 

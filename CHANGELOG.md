@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Independent ready DAG nodes now execute concurrently up to
+  `max_concurrent_nodes` (`GLASSRAIL_MAX_CONCURRENT_NODES`, default `4`), with
+  `1` preserving sequential execution.
+- REST event streams now include nested subplan node events with `node_path`
+  identifiers, while ACP and the Python TUI continue rendering only top-level
+  nodes.
+- Main LLM node calls now retry retry-safe provider failures via the
+  `[resilience]` settings, with retry counts recorded on `NodeResult`.
+- `[routing]` settings now configure the deterministic node-type to tier table,
+  including the `reasoning_required` tier floor.
+- EventBus subscriptions can now be scoped to a task and expose per-subscriber
+  drop counts, with warnings when slow consumers shed queued events.
+- SSE task event streams now emit idle keepalive comment frames so proxies and
+  clients can keep long-running streams open.
+- REST task resume now atomically claims a resumable task as `RESUMING` before
+  queueing background work, and the orchestrator atomically promotes that claim
+  to `EXECUTING`, preventing duplicate execution across durable-store workers.
+
+### Changed
+- Eval harness 0.5 excludes subject and judge infrastructure failures from
+  model-quality metrics and regression gates, invalidates poisoned runs, and
+  stages suite re-grades before replacing archived scores.
+- CLI JSON envelopes now count planner attempts as well as execution nodes in
+  `total_tokens`, including failed and retried planning calls.
+- Documentation and PyPI project links now point at the live product site and the
+  canonical docs domain; the README references the published product site instead of
+  the retired temporary URL.
+- OpenAI-compatible providers now reuse a persistent HTTP client, with
+  runtime shutdown closing provider resources across CLI, ACP, and REST entry
+  points.
+- The REST gateway now builds its default runtime during the FastAPI lifespan
+  instead of module import, while keeping injected test/runtime wiring explicit.
+- REST and ACP event consumers now use task-scoped EventBus subscriptions so
+  unrelated tasks cannot evict the active task's queued events.
+- Extract-args and summary variant prompts now flow through `NodePrompts`, so
+  all executor LLM prompt roles can be overridden from `[prompts]`.
+- Missing decision branch targets are now validated in the topological sort
+  path only, removing a duplicate unreachable validator pass.
+- `ToolRisk` now lives in `glassrail.core`, removing an events-to-harness layer
+  inversion while preserving the `glassrail.harness` re-export.
+- Test suites now share the scripted LLM provider fake from `tests/conftest.py`
+  instead of carrying per-file copies.
+- Provider output post-processing now has direct unit coverage for reasoning
+  block stripping, code fence unwrapping, passthrough, and empty outputs.
+- `Planner.plan()` and the legacy `PLANNER_SYSTEM` alias have been removed as a
+  pre-1.0 API cleanup; `Planner.plan_attempt()` remains the supported low-level
+  planner API, with retries owned by the orchestrator.
+- Nested subplans now execute with a derived child task id internally while
+  preserving parent-scoped nested node events for streaming consumers.
+- Subplan node confidence now reflects the nested node that produced the final
+  subplan output, so low-confidence nested answers are flagged at the parent
+  boundary.
+- Branch skip propagation now auto-skips downstream nodes whose declared
+  non-decision inputs were all skipped, while preserving shared join nodes that
+  consume at least one completed input.
+
 ## [0.1.2] - 2026-06-13
 
 ### Fixed

@@ -8,7 +8,13 @@ from pathlib import Path
 import pytest
 from pytest import MonkeyPatch
 
-from glassrail.config import Settings, TierConfig, ToolApprovalMode, ToolApprovalPolicy
+from glassrail.config import (
+    RoutingConfig,
+    Settings,
+    TierConfig,
+    ToolApprovalMode,
+    ToolApprovalPolicy,
+)
 
 
 def _clear_env(monkeypatch: MonkeyPatch) -> None:
@@ -34,6 +40,15 @@ def test_defaults(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     assert settings.tool_approval.default is ToolApprovalPolicy.ALLOW
     assert settings.tool_approval.mode is ToolApprovalMode.INTERACTIVE
     assert settings.tool_approval.overrides == {}
+    assert settings.resilience.max_llm_node_retries == 1
+    assert settings.resilience.escalate_tier_on_retry is True
+    assert settings.routing.decision == 0
+    assert settings.routing.tool == 0
+    assert settings.routing.synthesis == 0
+    assert settings.routing.think == 2
+    assert settings.routing.summary == 0
+    assert settings.routing.result == 0
+    assert settings.routing.reasoning_required == 2
     assert settings.tools.fs_roots is None
     assert settings.state_path == Path("./state.sqlite")
     assert len(settings.tiers) == 4
@@ -74,6 +89,36 @@ def test_tool_approval_settings_parse(tmp_path: Path, monkeypatch: MonkeyPatch) 
     assert settings.tool_approval.policy_for("file_write") is ToolApprovalPolicy.ASK
     assert settings.tool_approval.policy_for("shell_exec") is ToolApprovalPolicy.DENY
     assert settings.tool_approval.policy_for("file_read") is ToolApprovalPolicy.ALLOW
+
+
+def test_resilience_settings_parse(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("GLASSRAIL_RESILIENCE__MAX_LLM_NODE_RETRIES", "2")
+    monkeypatch.setenv("GLASSRAIL_RESILIENCE__ESCALATE_TIER_ON_RETRY", "false")
+
+    settings = Settings()
+
+    assert settings.resilience.max_llm_node_retries == 2
+    assert settings.resilience.escalate_tier_on_retry is False
+
+
+def test_routing_settings_parse(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("GLASSRAIL_ROUTING__THINK", "1")
+    monkeypatch.setenv("GLASSRAIL_ROUTING__SUMMARY", "1")
+
+    settings = Settings()
+
+    assert settings.routing.think == 1
+    assert settings.routing.summary == 1
+    assert settings.routing.result == 0
+
+
+def test_routing_config_validates_tier_range() -> None:
+    with pytest.raises(ValueError, match=r"routing\.think must be between 0 and 3"):
+        RoutingConfig(think=7)
 
 
 def test_tools_fs_roots_parse_from_toml(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:

@@ -7,8 +7,10 @@ to a bare provider.
 
 from __future__ import annotations
 
+import inspect
 import logging
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
+from typing import cast
 
 from opentelemetry.trace import Status, StatusCode
 
@@ -52,6 +54,15 @@ class TierRouter:
     @property
     def providers(self) -> list[LLMProvider]:
         return list(self._providers)
+
+    async def aclose(self) -> None:
+        """Close providers that expose an async ``aclose`` hook."""
+        for provider in self._providers:
+            close = getattr(provider, "aclose", None)
+            if callable(close):
+                result = cast("Callable[[], object]", close)()
+                if inspect.isawaitable(result):
+                    await result
 
     async def complete(
         self,

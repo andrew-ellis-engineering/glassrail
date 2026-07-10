@@ -81,7 +81,6 @@ class PlanValidator:
         self._check_forced_tiers(plan)
         sorted_ids = self._topological_sort(plan)
         self._check_decision_nesting(plan)
-        self._check_branch_references(plan)
         self._check_subplans(plan)
         plan.sorted_node_ids = sorted_ids
         return sorted_ids
@@ -204,19 +203,5 @@ class PlanValidator:
             self._check_forced_tiers(node.subplan)
             sub_sorted = self._topological_sort(node.subplan)
             self._check_decision_nesting(node.subplan)
-            self._check_branch_references(node.subplan)
             self._check_subplans(node.subplan)
             node.subplan.sorted_node_ids = sub_sorted
-
-    def _check_branch_references(self, plan: Plan) -> None:
-        all_ids = {n.id for n in plan.nodes}
-        for node in plan.nodes:
-            if node.type is not NodeType.DECISION or not node.branches:
-                continue
-            for branch_name, branch_nodes in node.branches.items():
-                for nid in branch_nodes:
-                    if nid not in all_ids:
-                        raise PlanValidationError(
-                            f"Decision node {node.id} branch '{branch_name}' "
-                            f"references non-existent node {nid}"
-                        )
