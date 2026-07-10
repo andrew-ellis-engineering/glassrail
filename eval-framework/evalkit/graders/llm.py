@@ -38,9 +38,15 @@ or UNKNOWN — nothing else on that line, no prefix, no label, no punctuation \
 of rationale (optional)."""
 
 
-def _result(criterion: Criterion, passed: bool, evidence: str) -> CriterionResult:
+def _result(
+    criterion: Criterion, passed: bool, evidence: str, *, infra_error: bool = False
+) -> CriterionResult:
     return CriterionResult(
-        criterion_text=criterion.text, passed=passed, evidence=evidence, grader_used="llm"
+        criterion_text=criterion.text,
+        passed=passed,
+        evidence=evidence,
+        grader_used="llm",
+        infra_error=infra_error,
     )
 
 
@@ -71,7 +77,10 @@ def grade(
     )
     verdict_text = judge(prompt, timeout_s=timeout_s)
     if verdict_text is None:
-        return _result(criterion, False, "judge invocation failed")
+        # The judge could not be reached (network, auth, quota, timeout). This is
+        # an infrastructure failure, NOT the agent failing the criterion — fail
+        # closed on the verdict but mark it infra so it isn't counted as content.
+        return _result(criterion, False, "judge invocation failed", infra_error=True)
 
     verdict_text = verdict_text.strip()
     lines = verdict_text.splitlines()

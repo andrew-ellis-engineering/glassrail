@@ -233,7 +233,6 @@ def _envelope(state: ExecutionState, *, error: str | None = None) -> dict[str, o
         )
         or error is not None
     )
-    total_tokens = sum(r.tokens_used for r in state.results.values())
     return {
         "result": state.final_output or "",
         "trajectory": _trajectory(state),
@@ -243,7 +242,7 @@ def _envelope(state: ExecutionState, *, error: str | None = None) -> dict[str, o
         # Local/self-hosted inference has no per-call dollar cost; tokens are the
         # meaningful budget signal and travel in the envelope for the record.
         "total_cost_usd": None,
-        "total_tokens": total_tokens,
+        "total_tokens": state.total_tokens,
         "task_id": str(state.task_id),
         "replan_count": state.replan_count,
         "plan": state.plan.model_dump(mode="json") if state.plan is not None else None,

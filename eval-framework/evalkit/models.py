@@ -90,6 +90,9 @@ class Trial:
     # Pre-run content of capture paths, so file_unchanged can compare without
     # re-reading live state (keeps grading decoupled from the environment).
     baseline: dict[str, str | None] = field(default_factory=dict)
+    # Set by the subject/runner when the invocation itself was not trustworthy.
+    # Parseable model failure envelopes deliberately leave this False.
+    infra_error: bool = False
 
 
 @dataclass
@@ -98,6 +101,10 @@ class CriterionResult:
     passed: bool
     evidence: str                   # human-readable explanation
     grader_used: str
+    # True when this criterion could not be evaluated for infrastructure reasons
+    # (e.g. the LLM judge could not be reached) rather than a content judgment.
+    # Folded into Score.infra_error so a dead judge never reads as a content fail.
+    infra_error: bool = False
 
 
 @dataclass
@@ -114,6 +121,9 @@ class Score:
     # no result text.  Surfaced in reports so infra failures are not silently
     # counted against the model.
     infra_error: bool = False
+    # False for --skip-grading placeholders. They still carry infrastructure
+    # status, but are never eligible for model-quality metrics.
+    graded: bool = True
 
 
 @dataclass
@@ -121,9 +131,11 @@ class TaskResult:
     task: Task
     trials: list[Trial]
     scores: list[Score]
-    pass_at_k: float
-    pass_pow_k: float
-    mean_pass_rate: float
+    # None means there were no trustworthy graded trials from which to compute
+    # model-quality metrics.
+    pass_at_k: float | None
+    pass_pow_k: float | None
+    mean_pass_rate: float | None
 
 
 @dataclass

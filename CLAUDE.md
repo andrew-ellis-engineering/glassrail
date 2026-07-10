@@ -105,11 +105,11 @@ rather than duplicating across files.
   `result`, `subplan`. The four single-LLM-call types (synthesis/think/summary/
   result) share `Executor._execute_llm_node` via `_LLM_NODE_SPECS` — add a new
   one by extending that table, not by copying a method.
-- **Node execution is currently sequential.** `Executor._run` awaits one node
-  at a time in topological order; independent nodes do not run concurrently
-  yet. Don't write docs or code that assume concurrency until
-  `docs/specs/parallel-execution.md` lands — and update this bullet when it
-  does.
+- **Node execution uses a bounded ready-set scheduler.** `Executor._run`
+  dispatches independent ready nodes concurrently up to
+  `max_concurrent_nodes`; setting it to `1` preserves sequential execution.
+  Dependency ordering and branch-control edges remain deterministic. See
+  `docs/specs/parallel-execution.md`.
 - **DAG acyclicity is a permanent, load-bearing invariant.** Plans are directed
   *acyclic* graphs; the validator enforces topological sort and cycle detection.
   Iteration is expressed *within* a node (a future `foreach` node fans out over

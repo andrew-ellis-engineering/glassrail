@@ -16,8 +16,43 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from evalkit import stats
+from evalkit import config, stats
 from evalkit.models import Score, SuiteResult, TaskResult, Trial
+
+
+def infra_error_stats(task_results: list[TaskResult]) -> tuple[int, int, float]:
+    """(infra-failed trials, total trials, rate) across a run's scores.
+
+    A trial counts as infra-failed when its Score.infra_error is set — a subject
+    crash / empty reply / provider error, or an unreachable LLM judge. The rate
+    drives the likely-invalid tripwire (``config.INVALID_RUN_INFRA_RATE``).
+    """
+    total = sum(len(tr.scores) for tr in task_results)
+    infra = sum(1 for tr in task_results for s in tr.scores if s.infra_error)
+    return infra, total, (infra / total if total else 0.0)
+
+
+def run_is_invalid(task_results: list[TaskResult]) -> bool:
+    """Whether infrastructure failures reach the run-invalidity threshold."""
+    _infra, total, rate = infra_error_stats(task_results)
+    return total > 0 and rate >= config.INVALID_RUN_INFRA_RATE
+
+
+def _quality_scores(result: TaskResult) -> list[Score]:
+    return [score for score in result.scores if score.graded and not score.infra_error]
+
+
+def _task_score_counts(result: TaskResult) -> dict[str, int | bool]:
+    graded = sum(1 for score in result.scores if score.graded)
+    infra = sum(1 for score in result.scores if score.infra_error)
+    quality = len(_quality_scores(result))
+    return {
+        "attempted_trials": len(result.trials),
+        "graded_trials": graded,
+        "model_quality_trials": quality,
+        "excluded_infra_trials": infra,
+        "metrics_valid": quality > 0,
+    }
 
 
 def _jsonable(obj: Any) -> Any:
@@ -39,31 +74,33 @@ def _write_json(path: Path, obj: Any) -> None:
     path.write_text(json.dumps(_jsonable(obj), indent=2), encoding="utf-8")
 
 
+def _task_metadata(result: TaskResult) -> dict[str, Any]:
+    return {
+        "id": result.task.id,
+        "name": result.task.name,
+        "suite": result.task.suite,
+        "path": str(result.task.path),
+        "type": result.task.type,
+        "difficulty": result.task.difficulty,
+        "backend": result.task.backend,
+        "model": result.task.model,
+        "control_for": result.task.control_for,
+        "tags": result.task.tags,
+        "num_criteria": len(result.task.criteria),
+        "pass_at_k": result.pass_at_k,
+        "pass_pow_k": result.pass_pow_k,
+        "mean_pass_rate": result.mean_pass_rate,
+        "mean_tokens": _task_tokens(result)[1],
+        **_task_score_counts(result),
+    }
+
+
 # ── Saving ─────────────────────────────────────────────────────────────────
 
 
 def save_task_artifacts(run_dir: Path, result: TaskResult) -> None:
     task_dir = run_dir / result.task.id
-    _write_json(
-        task_dir / "task_metadata.json",
-        {
-            "id": result.task.id,
-            "name": result.task.name,
-            "suite": result.task.suite,
-            "path": str(result.task.path),
-            "type": result.task.type,
-            "difficulty": result.task.difficulty,
-            "backend": result.task.backend,
-            "model": result.task.model,
-            "control_for": result.task.control_for,
-            "tags": result.task.tags,
-            "num_criteria": len(result.task.criteria),
-            "pass_at_k": result.pass_at_k,
-            "pass_pow_k": result.pass_pow_k,
-            "mean_pass_rate": result.mean_pass_rate,
-            "mean_tokens": _task_tokens(result)[1],
-        },
-    )
+    _write_json(task_dir / "task_metadata.json", _task_metadata(result))
     scores_by_run = {score.trial_num: score for score in result.scores}
     for trial in result.trials:
         td = task_dir / f"trial-{trial.run_number:02d}"
@@ -76,6 +113,11 @@ def save_task_artifacts(run_dir: Path, result: TaskResult) -> None:
 
 
 def save_run_metadata(run_dir: Path, suite: SuiteResult) -> None:
+    infra_trials, total, infra_rate = infra_error_stats(suite.task_results)
+    quality_trials = sum(len(_quality_scores(result)) for result in suite.task_results)
+    graded_trials = sum(
+        1 for result in suite.task_results for score in result.scores if score.graded
+    )
     _write_json(
         run_dir / "run_metadata.json",
         {
@@ -89,6 +131,11 @@ def save_run_metadata(run_dir: Path, suite: SuiteResult) -> None:
             "trials_per_task": suite.trials_per_task,
             "total_cost_usd": suite.total_cost_usd,
             "total_tokens": suite.total_tokens,
+            "infra_error_trials": infra_trials,
+            "infra_error_rate": round(infra_rate, 4),
+            "flagged_invalid": total > 0 and infra_rate >= config.INVALID_RUN_INFRA_RATE,
+            "graded_trials": graded_trials,
+            "model_quality_trials": quality_trials,
             "agent_seconds_total": sum(_task_seconds(tr)[0] for tr in suite.task_results),
             "wall_seconds": (
                 (suite.completed_at - suite.started_at).total_seconds()
@@ -132,35 +179,40 @@ def load_trial(path: Path) -> Trial:
         model=d.get("model", ""),
         harness_version=d.get("harness_version", ""),
         baseline=d.get("baseline", {}),
+        infra_error=bool(d.get("infra_error", False)),
     )
 
 
 def save_task_scores(run_dir: Path, result: TaskResult) -> None:
     """Persist re-graded scores without touching trial/stdout/stderr artifacts."""
     task_dir = run_dir / result.task.id
-    _write_json(
-        task_dir / "task_metadata.json",
-        {
-            "id": result.task.id,
-            "name": result.task.name,
-            "suite": result.task.suite,
-            "path": str(result.task.path),
-            "type": result.task.type,
-            "difficulty": result.task.difficulty,
-            "backend": result.task.backend,
-            "model": result.task.model,
-            "control_for": result.task.control_for,
-            "tags": result.task.tags,
-            "num_criteria": len(result.task.criteria),
-            "pass_at_k": result.pass_at_k,
-            "pass_pow_k": result.pass_pow_k,
-            "mean_pass_rate": result.mean_pass_rate,
-            "mean_tokens": _task_tokens(result)[1],
-        },
-    )
-    for trial, score in zip(result.trials, result.scores, strict=False):
-        td = task_dir / f"trial-{trial.run_number:02d}"
+    _write_json(task_dir / "task_metadata.json", _task_metadata(result))
+    for score in result.scores:
+        td = task_dir / f"trial-{score.trial_num:02d}"
         _write_json(td / "score.json", score)
+
+
+def update_run_metadata_scores(run_dir: Path, task_results: list[TaskResult]) -> None:
+    """Refresh run-level fields after a trustworthy suite re-grade."""
+    path = run_dir / "run_metadata.json"
+    metadata = json.loads(path.read_text(encoding="utf-8"))
+    infra, total, rate = infra_error_stats(task_results)
+    metadata.update(
+        {
+            "infra_error_trials": infra,
+            "infra_error_rate": round(rate, 4),
+            "flagged_invalid": total > 0 and rate >= config.INVALID_RUN_INFRA_RATE,
+            "graded_trials": sum(
+                1 for result in task_results for score in result.scores if score.graded
+            ),
+            "model_quality_trials": sum(
+                len(_quality_scores(result)) for result in task_results
+            ),
+            "scoring_harness_version": config.HARNESS_VERSION,
+            "regraded_at": datetime.now().astimezone(),
+        }
+    )
+    _write_json(path, metadata)
 
 
 def load_archived_trials(task_results_dir: Path) -> list[Trial]:
@@ -204,17 +256,27 @@ def _fmt_tokens(tokens: float | None) -> str:
 
 def print_task_result(result: TaskResult) -> None:
     scores = result.scores
-    k = len(scores)
+    quality_scores = _quality_scores(result)
+    k = len(quality_scores)
     print(f"\n── {result.task.id}  [{result.task.type}, difficulty {result.task.difficulty}] ──")
     if not scores:
         print("  (no trials)")
+        return
+
+    if not any(score.graded for score in scores):
+        infra_count = sum(1 for score in scores if score.infra_error)
+        print(f"  grading skipped; infrastructure failures: {infra_count}/{len(scores)}")
         return
 
     crit_texts = [c.criterion_text for c in scores[0].criterion_results]
     grader_for = {c.criterion_text: c.grader_used for c in scores[0].criterion_results}
     width = min(60, max((len(t) for t in crit_texts), default=10))
 
-    header = f"  {'criterion':<{width}} " + " ".join(f"T{i + 1:<4}" for i in range(k)) + " grader"
+    header = (
+        f"  {'criterion':<{width}} "
+        + " ".join(f"T{i + 1:<4}" for i in range(len(scores)))
+        + " grader"
+    )
     print(header)
     print("  " + "-" * (len(header) - 2))
     for ci, text in enumerate(crit_texts):
@@ -222,16 +284,22 @@ def print_task_result(result: TaskResult) -> None:
         label = text if len(text) <= width else text[: width - 1] + "…"
         print(f"  {label:<{width}} {cells} {grader_for[text]}")
 
-    perfect = sum(1 for s in scores if s.pass_rate == 1.0)
+    perfect = sum(1 for s in quality_scores if s.pass_rate == 1.0)
     infra_count = sum(1 for s in scores if s.infra_error)
     lo, hi = stats.wilson_ci(perfect, k)
     _total, mean_s = _task_seconds(result)
     _tokens_total, mean_tokens = _task_tokens(result)
-    infra_note = f"  ⚠ {infra_count}/{k} infra-error" if infra_count else ""
+    infra_note = f"  ⚠ {infra_count}/{len(scores)} infra-error" if infra_count else ""
+    if result.pass_at_k is None or result.pass_pow_k is None or result.mean_pass_rate is None:
+        metrics = "model-quality metrics unavailable (no trustworthy graded trials)"
+    else:
+        metrics = (
+            f"pass@{k}={result.pass_at_k:.2f}  pass^{k}={result.pass_pow_k:.2f}  "
+            f"mean={result.mean_pass_rate:.2f}  pass^k 95% CI=[{lo:.2f}, {hi:.2f}]"
+        )
     print(
-        f"  → pass@{k}={result.pass_at_k:.2f}  pass^{k}={result.pass_pow_k:.2f}  "
-        f"mean={result.mean_pass_rate:.2f}  pass^k 95% CI=[{lo:.2f}, {hi:.2f}]  "
-        f"mean trial={_fmt_secs(mean_s)}  mean tokens={_fmt_tokens(mean_tokens)}{infra_note}"
+        f"  → {metrics}  mean trial={_fmt_secs(mean_s)}  "
+        f"mean tokens={_fmt_tokens(mean_tokens)}{infra_note}"
     )
 
 
@@ -255,9 +323,11 @@ def print_suite_summary(suite: SuiteResult) -> None:
         total_s, mean_s = _task_seconds(tr)
         _tokens_total, mean_tokens = _task_tokens(tr)
         agent_secs += total_s
+        pass_at = "N/A" if tr.pass_at_k is None else f"{tr.pass_at_k:.2f}"
+        pass_pow = "N/A" if tr.pass_pow_k is None else f"{tr.pass_pow_k:.2f}"
         print(
             f"  {tr.task.id:<28} {tr.task.type:<11} "
-            f"pass@k={tr.pass_at_k:.2f} pass^k={tr.pass_pow_k:.2f} "
+            f"pass@k={pass_at:>4} pass^k={pass_pow:>4} "
             f"{_fmt_secs(mean_s):>6}/trial tokens={_fmt_tokens(mean_tokens):>6}{flag}"
         )
     _print_control_concordance(suite)
@@ -273,6 +343,26 @@ def print_suite_summary(suite: SuiteResult) -> None:
     )
     infra_note = f"   infra-errors: {total_infra}" if total_infra else ""
     print(f"  regression failures: {reg_fail}   total cost: ${suite.total_cost_usd:.4f}{infra_note}")
+    _infra, infra_total, infra_rate = infra_error_stats(suite.task_results)
+    if infra_total > 0 and infra_rate >= config.INVALID_RUN_INFRA_RATE:
+        judge_hit = sum(
+            1
+            for tr in suite.task_results
+            for s in tr.scores
+            if s.infra_error
+            and any("judge invocation failed" in (c.evidence or "") for c in s.criterion_results)
+        )
+        print("  " + "!" * 60)
+        print(
+            f"  ⚠ RUN INVALID — {total_infra}/{infra_total} trials "
+            f"({infra_rate:.0%}) hit infra failures (≥{config.INVALID_RUN_INFRA_RATE:.0%} tripwire)."
+        )
+        print(
+            f"    subject crash/empty/provider: {total_infra - judge_hit}   "
+            f"unreachable judge: {judge_hit}.  Broken plumbing, not the model — "
+            "fix and re-run; do not publish these numbers."
+        )
+        print("  " + "!" * 60)
     print(f"{'=' * 64}\n")
 
 

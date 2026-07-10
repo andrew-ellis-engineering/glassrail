@@ -259,17 +259,18 @@ running continuously alongside. Done since the Phase 1 baseline:
   [small-fixes spec](specs/small-fixes.md) is complete, including planner API
   cleanup, subplan state/confidence fixes, shared scripted-provider tests, and
   direct provider postprocess coverage.
+- **Planner-token accounting** ✓ — CLI run envelopes now include every
+  planning attempt and execution-node call in `total_tokens`, keeping failed
+  attempts and retry costs visible to eval reports and comparative baselines.
 
 ### Track 2a — Engine reliability core (in order)
 
 1. **Prompt caching for planner and node prompts** — cache the static planner
-   system prefix (~3.8k tokens) and the per-node executor system prompts, and reorder the
-   planner prompt so the request-selected cookbook and the request itself trail
-   the static prefix that becomes the cache key. No caching exists today; the
-   prompt bytes are unchanged, so it is quality-neutral and cuts cost, not raw
-   token count. Measurement depends on the Track 2d planner-token accounting fix
-   — the run envelope counts execution nodes only, so the planner cost the cache
-   reduces is invisible until that lands.
+   system prefix (~3.8k tokens) and the per-node executor system prompts, and
+   reorder the planner prompt so the request-selected cookbook and the request
+   itself trail the static prefix that becomes the cache key. No caching exists
+   today; the prompt bytes are unchanged, so it is quality-neutral and cuts
+   cost, not raw token count.
 
 ### Track 2b — Capability layer
 
@@ -285,7 +286,7 @@ running continuously alongside. Done since the Phase 1 baseline:
   diff-in-approval payload those tools produce. Sequence constraint — do not
   ship the file editing tools without this panel; approving blind edits is a
   worse UX than the current no-edit state.
-- **`foreach` node type** *(after Track 2a item 1 — parallel execution — plus
+- **`foreach` node type** *(after parallel execution ✓ plus
   upstream context awareness ✓ and registry schemas)* — fan-out iteration over a
   list using the existing subplan mechanism. Fields: `foreach_source` (upstream
   node id or literal list), `foreach_body` (nested Plan), `foreach_aggregation`
@@ -370,7 +371,7 @@ running continuously alongside. Done since the Phase 1 baseline:
 ### Track 2d — Evals & evidence (continuous)
 
 - **Result-node preservation of comparisons and trade-offs** *(next quality
-  ratchet; the prompt change is staged in the working tree)* — improve
+  ratchet; implementation pending)* — improve
   result-node prompting so final answers preserve named candidates, required
   comparison axes, and meaningful caveats from upstream reasoning. Current
   misses are concentrated here: `recommend-datastore-oltp` dropped the
@@ -391,11 +392,10 @@ running continuously alongside. Done since the Phase 1 baseline:
   three-way run (2026-06-17, qwen3-8b, trials=3): glassrail leads reliability
   (pass@k 1.00 vs 0.92, and never hard-fails a task where both baselines whiff on
   two each) but spends ~3–4x the tokens; held-out is clean (12/12). Follow-ups
-  before publishing: (1) count planner tokens — the run envelope sums execution
-  nodes only, so the reported figure excludes the largest cost center and
-  understates spend; (2) build `baseline-react-heldout` / `baseline-raw-heldout`
-  suites with the glassrail trajectory criteria stripped, for a neutral-ground
-  comparison; (3) re-run at trials=10, since pass^k is too thin at 3. Reframe the
+  before publishing: (1) build `baseline-react-heldout` /
+  `baseline-raw-heldout` suites with the glassrail trajectory criteria stripped,
+  for a neutral-ground comparison; (2) re-run at trials=10 with full-run token
+  accounting, since pass^k is too thin at 3. Reframe the
   published claim from a token-economics win (refuted at small-task scale) to
   reliability + inspectability at a token premium, with the cost thesis to be
   re-tested at large-task scale.

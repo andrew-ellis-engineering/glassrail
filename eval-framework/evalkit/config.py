@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 # Bump on any behavioral change to running or grading.
-HARNESS_VERSION = "0.4.0"
+HARNESS_VERSION = "0.5.0"
 
 # Framework root = parent of the evalkit/ package.
 FRAMEWORK_ROOT = Path(__file__).resolve().parent.parent
@@ -23,6 +23,14 @@ DEFAULT_TRIALS = 3
 DEFAULT_TIMEOUT_S = 180
 DEFAULT_MAX_TURNS = 10
 DEFAULT_PROMOTION_THRESHOLD = 5
+
+# A run whose trials hit infrastructure failures (subject crash, provider/credit
+# error, empty reply, or an unreachable LLM judge) at or above this fraction is
+# marked invalid — the numbers measure the broken plumbing, not the
+# model. A blunt tripwire on purpose: false positives cost a warning banner,
+# false negatives cost a corrupt run published as real (see the June 2026
+# judge-outage and mid-refactor-crash incidents).
+INVALID_RUN_INFRA_RATE = 0.2
 
 # Which system-under-test backend a suite drives, and which backend judges it.
 # A "subject" is the thing being evaluated (see evalkit.subjects); the judge is

@@ -140,6 +140,7 @@ class ClaudeCliSubject:
         raw_cost = envelope.get("total_cost_usd")
         cost = float(raw_cost) if isinstance(raw_cost, (int, float)) else None
         success = res.returncode == 0 and error is None and envelope.get("is_error") is not True
+        infra_error = res.timed_out or res.returncode == 127 or bool(res.stdout.strip() and not envelope)
         return RunResult(
             result_text=result_text,
             trajectory=_extract_trajectory(envelope),
@@ -149,4 +150,5 @@ class ClaudeCliSubject:
             raw_envelope=envelope,
             raw_stdout=res.stdout,
             raw_stderr=res.stderr,
+            infra_error=infra_error,
         )

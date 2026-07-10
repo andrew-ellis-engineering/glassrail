@@ -72,7 +72,9 @@ glassrail run "Is 246 even or odd?" --json --model qwen3.6-35b-moe
 recorded per step) so trajectory criteria work the same across backends. Logs go
 to stderr, so stdout stays a clean envelope.
 
-Trial artifacts also carry `total_tokens` when the subject exposes it. Suite
+Trial artifacts also carry `total_tokens` when the subject exposes it. For
+Glassrail CLI runs this includes every planning attempt and every executed node,
+including failed attempts, so retries and planner overhead remain visible. Suite
 summaries print mean tokens per task so raw-model, ReAct-loop, and Glassrail
 runs can be compared on economics as well as pass@k/pass^k.
 

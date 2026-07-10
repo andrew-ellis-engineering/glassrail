@@ -40,12 +40,18 @@ class GlassrailGatewaySubject:
         try:
             submitted = self._post("/task", {"request": prompt}, timeout_s)
         except (urllib.error.URLError, TimeoutError) as exc:
-            return RunResult(result_text="", success=False, error=f"gateway unreachable: {exc}")
+            return RunResult(
+                result_text="",
+                success=False,
+                error=f"gateway unreachable: {exc}",
+                infra_error=True,
+            )
         task_id = submitted.get("task_id")
         if not task_id:
             return RunResult(
                 result_text="", success=False, error="gateway returned no task_id",
                 raw_envelope=submitted,
+                infra_error=True,
             )
 
         deadline = time.monotonic() + timeout_s
@@ -54,12 +60,23 @@ class GlassrailGatewaySubject:
             try:
                 state = self._get(f"/task/{task_id}", timeout_s)
             except (urllib.error.URLError, TimeoutError) as exc:
-                return RunResult(result_text="", success=False, error=f"gateway poll failed: {exc}")
+                return RunResult(
+                    result_text="",
+                    success=False,
+                    error=f"gateway poll failed: {exc}",
+                    infra_error=True,
+                )
             if state.get("status") in _TERMINAL:
                 break
             time.sleep(self._poll_interval)
         else:
-            return RunResult(result_text="", success=False, error="timed out", raw_envelope=state)
+            return RunResult(
+                result_text="",
+                success=False,
+                error="timed out",
+                raw_envelope=state,
+                infra_error=True,
+            )
         return result_from_state(state)
 
     def _post(self, path: str, body: dict[str, Any], timeout_s: int) -> dict[str, Any]:
@@ -131,11 +148,17 @@ def result_from_state(state: dict[str, Any]) -> RunResult:
     error = state.get("error") if status == "failed" else None
     if status == "failed" and not error:
         error = "task failed"
-    tokens = sum(
+    execution_tokens = sum(
         int(r.get("tokens_used", 0))
         for r in (state.get("results") or {}).values()
         if isinstance(r, dict)
     )
+    planning_tokens = sum(
+        int(attempt.get("tokens_used", 0))
+        for attempt in (state.get("planning_attempts") or [])
+        if isinstance(attempt, dict)
+    )
+    tokens = planning_tokens + execution_tokens
     return RunResult(
         result_text=result_text,
         trajectory=trajectory_from_state(state),

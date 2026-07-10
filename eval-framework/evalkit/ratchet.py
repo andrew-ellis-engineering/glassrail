@@ -38,6 +38,14 @@ def _task_meta(run_dir: Path, task_id: str) -> dict[str, Any] | None:
     return json.loads(meta_path.read_text(encoding="utf-8"))
 
 
+def _run_is_invalid(run_dir: Path) -> bool:
+    meta_path = run_dir / "run_metadata.json"
+    if not meta_path.exists():
+        return True
+    metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+    return metadata.get("flagged_invalid") is True
+
+
 def find_promotion_candidates(
     suite_name: str, threshold: int, results_dir: Path | None = None
 ) -> list[dict[str, Any]]:
@@ -55,8 +63,11 @@ def find_promotion_candidates(
     for task_id in sorted(task_ids):
         consecutive = 0
         for _, run_dir in reversed(runs):  # newest first
+            if _run_is_invalid(run_dir):
+                break
             meta = _task_meta(run_dir, task_id)
-            if meta is not None and meta.get("pass_pow_k") == 1.0:
+            metrics_valid = meta is not None and meta.get("metrics_valid", True) is not False
+            if metrics_valid and meta is not None and meta.get("pass_pow_k") == 1.0:
                 consecutive += 1
             else:
                 break

@@ -13,7 +13,99 @@ from evalkit.judge import Judge
 from evalkit.models import CriterionResult, Score, Task, Trial
 
 
+_INFRA_ERROR_KEYWORDS = (
+    "timed out",
+    "cli not found",
+    "could not parse",
+    "endpoint error",
+    "gateway unreachable",
+    "gateway poll failed",
+    "http ",
+    "connect",
+    "provider unavailable",
+    "payment required",
+    "credit",
+    "quota",
+    "rate limit",
+    "missing openrouter credentials",
+    "empty completion",
+)
+_ENVELOPE_INFRA_KEYWORDS = (
+    "provider unavailable",
+    "payment required",
+    "insufficient credit",
+    "quota exceeded",
+    "rate limit",
+    "connection refused",
+    "connection reset",
+    "timed out",
+)
+
+
+def trial_infra_error(trial: Trial) -> bool:
+    """Classify subject/runtime failures, including pre-v0.5 archived trials.
+
+    New subjects stamp ``Trial.infra_error`` explicitly. The fallback keeps old
+    archives re-gradable: transport-like errors and failures with no parseable
+    envelope or gradeable evidence are infrastructure failures. A parseable
+    model failure envelope remains a model-quality outcome.
+    """
+    if trial.infra_error:
+        return True
+    if trial.success:
+        return False
+    error = (trial.error or "").lower()
+    if any(keyword in error for keyword in _INFRA_ERROR_KEYWORDS):
+        return True
+    envelope_text = str(trial.output_envelope).lower()
+    if any(keyword in envelope_text for keyword in _ENVELOPE_INFRA_KEYWORDS):
+        return True
+    no_evidence = not trial.result_text and not trial.trajectory
+    return no_evidence and not trial.output_envelope
+
+
+def ungraded_score(task: Task, trial: Trial) -> Score:
+    """Record infrastructure status for --skip-grading without quality scores."""
+    return Score(
+        task_id=task.id,
+        trial_num=trial.run_number,
+        criterion_results=[],
+        passed=0,
+        failed=0,
+        total=0,
+        pass_rate=0.0,
+        infra_error=trial_infra_error(trial),
+        graded=False,
+    )
+
+
+def _subject_infra_score(task: Task, trial: Trial) -> Score:
+    results = [
+        CriterionResult(
+            criterion_text=criterion.text,
+            passed=False,
+            evidence="not graded: subject infrastructure failure",
+            grader_used=criterion.grader,
+            infra_error=True,
+        )
+        for criterion in task.criteria
+    ]
+    return Score(
+        task_id=task.id,
+        trial_num=trial.run_number,
+        criterion_results=results,
+        passed=0,
+        failed=len(results),
+        total=len(results),
+        pass_rate=0.0,
+        infra_error=True,
+    )
+
+
 def grade(task: Task, trial: Trial, *, judge: Judge, cost_optimize: bool = True) -> Score:
+    if trial_infra_error(trial):
+        return _subject_infra_score(task, trial)
+
     results: dict[int, CriterionResult] = {}
 
     det = [i for i, c in enumerate(task.criteria) if c.grader == "deterministic"]
@@ -49,22 +141,7 @@ def grade(task: Task, trial: Trial, *, judge: Judge, cost_optimize: bool = True)
     passed = sum(1 for r in ordered if r.passed)
     total = len(ordered)
 
-    # Detect infrastructure failures so they are not silently counted as model
-    # quality failures.  Signals: planning/provider error strings, OR a trial
-    # that produced neither result text nor trajectory with no recorded error
-    # (the "empty trajectory, no error" fingerprint of a silent tier-0 failure).
-    _infra_keywords = (
-        "timed out",
-        "planning failed",
-        "provider",
-        "http ",
-        "connect",
-        "could not parse",
-    )
-    error_str = (trial.error or "").lower()
-    infra_error = bool(trial.error and any(kw in error_str for kw in _infra_keywords)) or (
-        not trial.success and not trial.result_text and not trial.trajectory and trial.error is None
-    )
+    infra_error = any(result.infra_error for result in ordered)
 
     return Score(
         task_id=task.id,

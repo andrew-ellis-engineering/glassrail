@@ -28,6 +28,9 @@ class RunResult:
     raw_envelope: dict[str, Any] = field(default_factory=dict)
     raw_stdout: str = ""
     raw_stderr: str = ""
+    # True only when the invocation plumbing failed. A parseable model/agent
+    # failure is gradeable evidence and leaves this False.
+    infra_error: bool = False
 
 
 class Subject(Protocol):

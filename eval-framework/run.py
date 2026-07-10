@@ -37,16 +37,28 @@ def _run_name(arg: str | None) -> str:
 
 
 def build_task_result(task: Task, trials: list[Trial], scores: list[Score]) -> TaskResult:
-    n = len(trials)
-    perfect = sum(1 for s in scores if s.pass_rate == 1.0)
+    quality_scores = [score for score in scores if score.graded and not score.infra_error]
+    n = len(quality_scores)
+    perfect = sum(1 for score in quality_scores if score.pass_rate == 1.0)
     return TaskResult(
         task=task,
         trials=trials,
         scores=scores,
-        pass_at_k=stats.pass_at_k(n, perfect, n) if n else 0.0,
-        pass_pow_k=stats.pass_pow_k(scores),
-        mean_pass_rate=stats.mean_pass_rate(scores),
+        pass_at_k=stats.pass_at_k(n, perfect, n) if n else None,
+        pass_pow_k=stats.pass_pow_k(quality_scores) if n else None,
+        mean_pass_rate=stats.mean_pass_rate(quality_scores) if n else None,
     )
+
+
+def _results_exit_code(results: list[TaskResult]) -> int:
+    """Return infrastructure invalidity before considering regression gates."""
+    _infra, _total, infra_rate = reporter.infra_error_stats(results)
+    if infra_rate >= config.INVALID_RUN_INFRA_RATE:
+        return EXIT_ERROR
+    regression_failed = any(
+        result.task.type == "regression" and result.pass_pow_k == 0.0 for result in results
+    )
+    return EXIT_REGRESSION if regression_failed else EXIT_OK
 
 
 def _make_judge(meta: dict[str, Any], args: argparse.Namespace) -> Judge:
@@ -222,8 +234,11 @@ def run_task(
             task, run_number, subject=subject, model=effective_model, timeout_s=effective_timeout
         )
         trial_records.append(trial)
-        if not skip_grading:
-            score_records.append(graders.grade(task, trial, judge=judge))
+        score_records.append(
+            graders.ungraded_score(task, trial)
+            if skip_grading
+            else graders.grade(task, trial, judge=judge)
+        )
     return build_task_result(task, trial_records, score_records)
 
 
@@ -283,12 +298,9 @@ def cmd_task(args: argparse.Namespace) -> int:
         tier_models=tier_models,
     )
     reporter.save_task_artifacts(run_dir, result)
-    if not args.skip_grading:
-        reporter.print_task_result(result)
+    reporter.print_task_result(result)
     print(f"\nArtifacts: {run_dir / task.id}")
-    if task.type == "regression" and result.pass_pow_k == 0.0:
-        return EXIT_REGRESSION
-    return EXIT_OK
+    return _results_exit_code([result])
 
 
 def _filter_suite_tasks(tasks: list[Task], args: argparse.Namespace) -> list[Task]:
@@ -384,14 +396,12 @@ def cmd_suite(args: argparse.Namespace) -> int:
     for result in results:
         reporter.save_task_artifacts(run_dir, result)
     reporter.save_run_metadata(run_dir, suite_result)
-    if not args.skip_grading:
-        for result in results:
-            reporter.print_task_result(result)
-        reporter.print_suite_summary(suite_result)
+    for result in results:
+        reporter.print_task_result(result)
+    reporter.print_suite_summary(suite_result)
     print(f"Artifacts: {run_dir}")
 
-    regression_failed = any(r.task.type == "regression" and r.pass_pow_k == 0.0 for r in results)
-    return EXIT_REGRESSION if regression_failed else EXIT_OK
+    return _results_exit_code(results)
 
 
 def cmd_score(args: argparse.Namespace) -> int:
@@ -411,7 +421,10 @@ def cmd_score(args: argparse.Namespace) -> int:
         return EXIT_ERROR
     scores = [graders.grade(task, trial, judge=judge) for trial in trials]
     result = build_task_result(task, trials, scores)
-    print(f"Re-graded {len(trials)} archived trial(s) with current criteria (zero inference):")
+    print(
+        f"Re-graded {len(trials)} archived trial(s) with current criteria "
+        "without rerunning the subject:"
+    )
     reporter.print_task_result(result)
     return EXIT_OK
 
@@ -444,11 +457,13 @@ def cmd_score_suite(args: argparse.Namespace) -> int:
         judge = _make_judge(suite_meta, args)
         trials = reporter.load_archived_trials(task_dir)
         if not trials:
-            print(f"  ! {task.id}: no archived trials, skipping", file=sys.stderr)
-            continue
+            print(
+                f"  ! {task.id}: no archived trials; re-grade aborted with artifacts unchanged",
+                file=sys.stderr,
+            )
+            return EXIT_ERROR
         scores = [graders.grade(task, trial, judge=judge) for trial in trials]
         result = build_task_result(task, trials, scores)
-        reporter.save_task_scores(run_dir, result)
         reporter.print_task_result(result)
         task_results.append(result)
 
@@ -456,6 +471,19 @@ def cmd_score_suite(args: argparse.Namespace) -> int:
     total = len(task_results)
     passing = sum(1 for r in task_results if r.pass_at_k == 1.0)
     print(f"\nRe-grade complete: {passing}/{total} tasks pass@k=1.0")
+    infra, infra_total, infra_rate = reporter.infra_error_stats(task_results)
+    if infra_total > 0 and infra_rate >= config.INVALID_RUN_INFRA_RATE:
+        print(
+            f"  ⚠ RE-GRADE INVALID — {infra}/{infra_total} trials ({infra_rate:.0%}) "
+            f"infra-failed (≥{config.INVALID_RUN_INFRA_RATE:.0%}). Archived scores, task "
+            "metadata, and run metadata were left unchanged. Restore the failing "
+            "infrastructure and re-grade."
+        )
+        return EXIT_ERROR
+
+    for result in task_results:
+        reporter.save_task_scores(run_dir, result)
+    reporter.update_run_metadata_scores(run_dir, task_results)
     print(f"Artifacts updated in {run_dir}")
     return EXIT_OK
 
@@ -580,11 +608,19 @@ def _matrix_row(run_dir: Path) -> dict[str, Any]:
     task_meta = [_load_json(path) for path in sorted(run_dir.glob("*/task_metadata.json"))]
     task_meta = [task for task in task_meta if task]
     task_count = len(task_meta)
-    pass_at_values = [float(task.get("pass_at_k", 0.0)) for task in task_meta]
-    pass_pow_values = [float(task.get("pass_pow_k", 0.0)) for task in task_meta]
+    metric_tasks = [
+        task
+        for task in task_meta
+        if task.get("metrics_valid", True) is not False
+        and isinstance(task.get("pass_at_k"), (int, float))
+        and isinstance(task.get("pass_pow_k"), (int, float))
+    ]
+    metric_task_count = len(metric_tasks)
+    pass_at_values = [float(task["pass_at_k"]) for task in metric_tasks]
+    pass_pow_values = [float(task["pass_pow_k"]) for task in metric_tasks]
     zero_tasks = [str(task.get("id", "")) for task in task_meta if task.get("pass_pow_k") == 0.0]
-    pass_at_full = sum(1 for task in task_meta if task.get("pass_at_k") == 1.0)
-    pass_pow_full = sum(1 for task in task_meta if task.get("pass_pow_k") == 1.0)
+    pass_at_full = sum(1 for task in metric_tasks if task.get("pass_at_k") == 1.0)
+    pass_pow_full = sum(1 for task in metric_tasks if task.get("pass_pow_k") == 1.0)
     error_trials = 0
     sample_errors: list[str] = []
     for trial_path in sorted(run_dir.glob("*/trial-*/trial.json")):
@@ -599,11 +635,12 @@ def _matrix_row(run_dir: Path) -> dict[str, Any]:
         "suite": str(meta.get("suite_name", "")),
         "model": _short_model_label(str(meta.get("model", ""))),
         "tasks": task_count,
+        "metric_tasks": metric_task_count,
         "pass_at_full": pass_at_full,
         "pass_pow_full": pass_pow_full,
         "pass_pow_zero": len(zero_tasks),
-        "mean_pass_at": sum(pass_at_values) / task_count if task_count else 0.0,
-        "mean_pass_pow": sum(pass_pow_values) / task_count if task_count else 0.0,
+        "mean_pass_at": sum(pass_at_values) / metric_task_count if metric_task_count else 0.0,
+        "mean_pass_pow": sum(pass_pow_values) / metric_task_count if metric_task_count else 0.0,
         "wall_min": float(meta.get("wall_seconds") or 0.0) / 60.0,
         "agent_min": float(meta.get("agent_seconds_total") or 0.0) / 60.0,
         "tokens": int(meta.get("total_tokens") or 0),
@@ -636,8 +673,8 @@ def _print_matrix_table(rows: list[dict[str, Any]]) -> None:
                 row["suite"],
                 row["model"],
                 str(row["tasks"]),
-                f"{row['pass_at_full']}/{row['tasks']}",
-                f"{row['pass_pow_full']}/{row['tasks']}",
+                f"{row['pass_at_full']}/{row['metric_tasks']}",
+                f"{row['pass_pow_full']}/{row['metric_tasks']}",
                 str(row["pass_pow_zero"]),
                 f"{row['mean_pass_at']:.3f}",
                 f"{row['mean_pass_pow']:.3f}",
@@ -742,7 +779,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_list.add_argument("path", nargs="?", default=None)
     p_list.set_defaults(func=cmd_list)
 
-    p_score = sub.add_parser("score", help="re-grade archived trials (zero inference)")
+    p_score = sub.add_parser("score", help="re-grade without rerunning the subject")
     p_score.add_argument("results_path")
     p_score.add_argument("--grader-model", default=None)
     p_score.add_argument(

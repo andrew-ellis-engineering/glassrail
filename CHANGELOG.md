@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preventing duplicate resume submissions from scheduling duplicate execution.
 
 ### Changed
+- Eval harness 0.5 excludes subject and judge infrastructure failures from
+  model-quality metrics and regression gates, invalidates poisoned runs, and
+  stages suite re-grades before replacing archived scores.
+- CLI JSON envelopes now count planner attempts as well as execution nodes in
+  `total_tokens`, including failed and retried planning calls.
 - Documentation and PyPI project links now point at the live product site and the
   canonical docs domain; the README references the published product site instead of
   the retired temporary URL.

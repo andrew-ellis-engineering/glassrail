@@ -42,7 +42,7 @@ python3 run.py suite suites/glassrail --trials 5
 # Run the claude-skill example suite instead
 python3 run.py suite suites/example --trials 3 --timeout 60
 
-# Re-grade archived trials with current criteria — zero inference cost
+# Re-grade archived trials without rerunning the subject (LLM judges may still run)
 python3 run.py score results/<run>/classify-even
 ```
 
@@ -86,8 +86,10 @@ Keep runs cheap:
   `--grader-model`), and they're skipped automatically when every
   deterministic criterion already failed. Prefer deterministic criteria
   (principle 1) and a cheap `--grader-model`.
-- **`score` is free** — re-grade archived trials to calibrate criteria instead
-  of re-running the suite. **`--dry-run`** validates wiring with zero calls.
+- **`score` avoids subject inference** — re-grade archived trials instead of
+  re-running the subject. Deterministic and trajectory criteria are free, but
+  `llm` criteria still call the configured judge. **`--dry-run`** validates
+  wiring with zero calls.
 - **`max_turns`** bounds the worst case — a looping agent burns the most.
 
 ## Principles (enforced by architecture, not convention)
@@ -102,6 +104,14 @@ Keep runs cheap:
 8. Control pairs — a paired task where the opposite answer is correct.
 9. Capability vs regression separation, with a human-gated promotion ratchet.
 10. The harness is versioned; every trial stamps `harness_version`.
+11. Infrastructure failures (subject crash, provider/credit error, empty reply,
+    unreachable judge) are flagged and excluded from pass@k, pass^k, mean, and
+    regression gates. A run whose infra-failure rate reaches
+    `INVALID_RUN_INFRA_RATE` is invalid, exits through the framework-error path,
+    and is marked in the summary and `run_metadata.json` (`flagged_invalid`).
+    `--skip-grading` still records subject/runtime infrastructure failures. An
+    invalid `score-suite` re-grade leaves archived score/task/run metadata
+    unchanged; a valid one updates all three consistently.
 
 The full rationale is in the methodology and cookbook docs this was built from.
 
@@ -133,7 +143,7 @@ results/               trial artifacts (gitignored)
 | `task <path>` | Run one task k times, grade, save artifacts. |
 | `suite <path>` | Run a whole suite. `--tags`, `--type` filter. |
 | `list [<path>]` | Validate + summarize a suite (or list suites). |
-| `score <results-path>` | Re-grade archived trials with current criteria (free). |
+| `score <results-path>` | Re-grade archived trials without rerunning the subject; LLM judges may run. |
 | `promote <task>` | Capability → regression (candidate-gated; `--force`). |
 | `demote <task> --reason` | Regression → capability. |
 | `candidates [<suite>]` | Show tasks eligible for promotion. |
@@ -153,8 +163,8 @@ python3 run.py suite suites/glassrail-openrouter \
   --workers 5
 ```
 
-**Exit codes:** `0` success · `1` a regression task scored pass^k = 0 (CI
-gating signal) · `2` framework error.
+**Exit codes:** `0` success · `1` a trustworthy regression task scored pass^k =
+0 (CI gating signal) · `2` framework error or infrastructure-invalid run.
 
 For model-matrix analysis, point `matrix` at explicit run directories or omit
 paths to summarize every completed `results/matrix-*` run:

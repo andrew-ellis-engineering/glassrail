@@ -126,3 +126,10 @@ class ExecutionState(BaseModel):
     def touch(self) -> None:
         """Stamp ``updated_at`` with the current UTC time."""
         self.updated_at = _utcnow()
+
+    @property
+    def total_tokens(self) -> int:
+        """Model tokens consumed across planning and node execution."""
+        planning = sum(attempt.tokens_used for attempt in self.planning_attempts)
+        execution = sum(result.tokens_used for result in self.results.values())
+        return planning + execution
