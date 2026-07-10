@@ -249,9 +249,10 @@ running continuously alongside. Done since the Phase 1 baseline:
   subscribe per task so unrelated task events cannot evict active streams.
 - **SSE keepalive** ✓ — task event streams emit idle comment frames while
   waiting for long-running nodes, with WebSocket liveness left to uvicorn pings.
-- **Resume idempotency** ✓ — REST resume claims a paused task as executing
-  before queueing background work, so duplicate submissions cannot schedule two
-  resumes.
+- **Resume idempotency** ✓ — state stores expose an atomic status transition;
+  REST claims paused tasks as resuming before queueing work, and the
+  orchestrator separately claims execution so duplicate submissions or workers
+  cannot execute a task twice.
 - **Executor prompt config cleanup** ✓ — extract-args plus concise/verbose
   summary prompts now live under `NodePrompts`, keeping all executor LLM prompt
   roles configurable from `[prompts]`.

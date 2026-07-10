@@ -90,6 +90,8 @@ class TaskStatus(StrEnum):
     PLANNING = "planning"
     AWAITING_CONFIRMATION = "awaiting_confirmation"
     """HITL gate — orchestrator paused, awaiting user resume."""
+    RESUMING = "resuming"
+    """A resume request has claimed the task but execution has not started."""
     EXECUTING = "executing"
     COMPLETED = "completed"
     FAILED = "failed"

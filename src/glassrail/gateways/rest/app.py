@@ -242,9 +242,13 @@ def _install_task_routes(api: FastAPI) -> None:
                 status_code=400,
                 detail=f"Task is in status '{state.status.value}', not resumable",
             )
-        state.status = TaskStatus.EXECUTING
-        state.touch()
-        await runtime.store.save_task(state)
+        claimed = await runtime.store.transition_task_status(
+            state.task_id,
+            from_statuses=(TaskStatus.AWAITING_CONFIRMATION, TaskStatus.PAUSED),
+            to_status=TaskStatus.RESUMING,
+        )
+        if claimed is None:
+            raise HTTPException(status_code=409, detail="Task resume was already claimed")
         background_tasks.add_task(runtime.orchestrator.resume, TaskId(task_id))
         return {"task_id": task_id, "status": "resuming"}
 

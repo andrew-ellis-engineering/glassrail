@@ -7,6 +7,7 @@ existing implementations and the Protocol itself extend together.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import Protocol, runtime_checkable
 
 from glassrail.core import ExecutionState, TaskId, TaskStatus
@@ -24,6 +25,20 @@ class StateStore(Protocol):
 
     async def load_task(self, task_id: TaskId) -> ExecutionState | None:
         """Return a copy of the stored state, or ``None`` if absent."""
+        ...
+
+    async def transition_task_status(
+        self,
+        task_id: TaskId,
+        *,
+        from_statuses: Collection[TaskStatus],
+        to_status: TaskStatus,
+    ) -> ExecutionState | None:
+        """Atomically change status when the current status is allowed.
+
+        Return the updated state when this caller wins the transition, or
+        ``None`` when the task is missing or its status no longer matches.
+        """
         ...
 
     async def list_tasks(

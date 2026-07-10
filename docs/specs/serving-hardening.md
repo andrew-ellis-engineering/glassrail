@@ -74,21 +74,17 @@ already strips by prefix; add a test). Document the keepalive in
 
 ## Item 4 — Resume idempotency — implemented 2026-06-19
 
-**Current:** `POST /task/{id}/resume` checks status then queues
-`orchestrator.resume` as a background task; two near-simultaneous calls can
-both pass the check and queue two resumes.
+**Implemented design:** `StateStore.transition_task_status` performs a durable
+compare-and-set rather than a read-then-save. The REST handler atomically moves
+`AWAITING_CONFIRMATION`/`PAUSED` to `RESUMING` and queues background work only
+when it wins that transition. `Orchestrator.resume` then atomically promotes
+`RESUMING` (or directly claimed non-REST paused states) to `EXECUTING`, so an
+accidentally duplicated background call also cannot run the plan twice.
 
-**Design:** in the REST handler, after the status check
-(`AWAITING_CONFIRMATION`/`PAUSED`), set `state.status = EXECUTING`, `touch()`,
-and `await store.save_task(state)` **before** queueing the background resume.
-A second call then fails the status check with the existing 400. Verify
-`Orchestrator.resume` tolerates loading a state already marked `EXECUTING`
-(it re-drives the executor; adjust its guard if it refuses). Apply the same
-check-and-set in the ACP gate path if it shares the race
-(`gateways/acp/server.py` `_handle_gate` — verify; it resumes via a created
-task after an explicit client response, so the race is narrower there).
-Test: two sequential resume calls — second gets 400; task completes once
-(count executor invocations with a scripted provider).
+The shared state-store contract verifies a single transition winner, including
+a SQLite test using two independent connections to represent multiple workers.
+Gateway tests cover duplicate and lost claims; orchestrator tests cover
+concurrent resume calls. ACP uses the same guarded orchestrator path.
 
 ## Item 5 — `glassrail run` exit codes (do early) — implemented 2026-06-11
 

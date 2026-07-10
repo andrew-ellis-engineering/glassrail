@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Collection
 from typing import cast
 
 import pytest
@@ -204,10 +205,50 @@ async def test_resume_claims_task_before_queueing_background_resume() -> None:
 
     assert first.status_code == 200
     assert second.status_code == 400
-    assert second.json()["detail"] == "Task is in status 'executing', not resumable"
+    assert second.json()["detail"] == "Task is in status 'resuming', not resumable"
     assert saved is not None
-    assert saved.status is TaskStatus.EXECUTING
+    assert saved.status is TaskStatus.RESUMING
     assert spy.calls == [task_id]
+
+
+async def test_resume_returns_conflict_when_atomic_claim_loses() -> None:
+    class _LosingClaimStore(InMemoryStateStore):
+        async def transition_task_status(
+            self,
+            task_id: TaskId,
+            *,
+            from_statuses: Collection[TaskStatus],
+            to_status: TaskStatus,
+        ) -> ExecutionState | None:
+            return None
+
+    class _ResumeSpy:
+        def __init__(self) -> None:
+            self.calls: list[TaskId] = []
+
+        async def resume(self, task_id: TaskId) -> None:
+            self.calls.append(task_id)
+
+    store = _LosingClaimStore()
+    state = ExecutionState(
+        task_id=new_task_id(),
+        user_request="approve me",
+        plan=Plan(nodes=[]),
+        status=TaskStatus.PAUSED,
+    )
+    await store.save_task(state)
+    spy = _ResumeSpy()
+    app = create_app(
+        orchestrator=cast("Orchestrator", spy),
+        store=store,
+        harness=ToolHarness(),
+    )
+
+    response = TestClient(app).post(f"/task/{state.task_id}/resume")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Task resume was already claimed"
+    assert spy.calls == []
 
 
 async def test_branch_log_endpoint(

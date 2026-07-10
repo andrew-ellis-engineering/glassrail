@@ -22,8 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   drop counts, with warnings when slow consumers shed queued events.
 - SSE task event streams now emit idle keepalive comment frames so proxies and
   clients can keep long-running streams open.
-- REST task resume now claims a resumable task before queueing background work,
-  preventing duplicate resume submissions from scheduling duplicate execution.
+- REST task resume now atomically claims a resumable task as `RESUMING` before
+  queueing background work, and the orchestrator atomically promotes that claim
+  to `EXECUTING`, preventing duplicate execution across durable-store workers.
 
 ### Changed
 - Eval harness 0.5 excludes subject and judge infrastructure failures from

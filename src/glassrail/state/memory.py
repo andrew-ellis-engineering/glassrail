@@ -11,6 +11,8 @@ database-backed implementation provides.
 
 from __future__ import annotations
 
+from collections.abc import Collection
+
 from glassrail.core import ExecutionState, TaskId, TaskStatus
 
 
@@ -26,6 +28,22 @@ class InMemoryStateStore:
     async def load_task(self, task_id: TaskId) -> ExecutionState | None:
         stored = self._tasks.get(task_id)
         return stored.model_copy(deep=True) if stored is not None else None
+
+    async def transition_task_status(
+        self,
+        task_id: TaskId,
+        *,
+        from_statuses: Collection[TaskStatus],
+        to_status: TaskStatus,
+    ) -> ExecutionState | None:
+        stored = self._tasks.get(task_id)
+        if stored is None or stored.status not in from_statuses:
+            return None
+        updated = stored.model_copy(deep=True)
+        updated.status = to_status
+        updated.touch()
+        self._tasks[task_id] = updated.model_copy(deep=True)
+        return updated
 
     async def list_tasks(
         self,
