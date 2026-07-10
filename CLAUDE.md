@@ -179,6 +179,15 @@ pass^k) are not pytest — they live in the standalone `eval-framework/` and run
 the real agent over its tier routing via `glassrail run --json`. See
 `docs/evals.md` and `eval-framework/CLAUDE.md`.
 
+## Pull requests
+
+- One coherent feature, bug fix, or infrastructure workstream per PR.
+- Keep its implementation, required refactors, tests, docs, and changelog entry
+  together. Move unrelated cleanup or follow-up work to a separate branch.
+- When work depends on an unmerged change, wait for the prerequisite or open a
+  clearly identified stacked PR based on that prerequisite branch.
+- Every PR must be independently reviewable and green before merge.
+
 ## Commits
 
 - Show the drafted commit message and wait for approval before committing.
