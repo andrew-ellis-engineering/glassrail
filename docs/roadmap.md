@@ -255,10 +255,9 @@ running continuously alongside. Done since the Phase 1 baseline:
 - **Executor prompt config cleanup** ✓ — extract-args plus concise/verbose
   summary prompts now live under `NodePrompts`, keeping all executor LLM prompt
   roles configurable from `[prompts]`.
-- **Small fixes / API cleanup** ✓ — the
-  [small-fixes spec](specs/small-fixes.md) is complete, including planner API
-  cleanup, subplan state/confidence fixes, shared scripted-provider tests, and
-  direct provider postprocess coverage.
+- **Small fixes / API cleanup** ✓ — the small-fixes spec is complete, including
+  planner API cleanup, subplan state/confidence fixes, shared scripted-provider
+  tests, and direct provider postprocess coverage.
 - **Planner-token accounting** ✓ — CLI run envelopes now include every
   planning attempt and execution-node call in `total_tokens`, keeping failed
   attempts and retry costs visible to eval reports and comparative baselines.
@@ -387,18 +386,10 @@ running continuously alongside. Done since the Phase 1 baseline:
   `regression` as 5-clean-run streaks accumulate; promoted tasks block CI via
   the harness exit code.
 - **Comparative baselines** — raw model vs ReAct loop vs glassrail on answer
-  quality and tokens/task. Spec:
-  specs/comparative-baselines.md. First
-  three-way run (2026-06-17, qwen3-8b, trials=3): glassrail leads reliability
-  (pass@k 1.00 vs 0.92, and never hard-fails a task where both baselines whiff on
-  two each) but spends ~3–4x the tokens; held-out is clean (12/12). Follow-ups
-  before publishing: (1) build `baseline-react-heldout` /
-  `baseline-raw-heldout` suites with the glassrail trajectory criteria stripped,
-  for a neutral-ground comparison; (2) re-run at trials=10 with full-run token
-  accounting, since pass^k is too thin at 3. Reframe the
-  published claim from a token-economics win (refuted at small-task scale) to
-  reliability + inspectability at a token premium, with the cost thesis to be
-  re-tested at large-task scale.
+  quality and tokens/task. The harness and initial suites are implemented, but
+  evidence remains internal until neutral held-out baselines and a sufficiently
+  powered rerun with full-run token accounting are complete. Publish the
+  methodology and results together only after that evidence review.
 
 ## Phase 2.5 — Dreaming
 
