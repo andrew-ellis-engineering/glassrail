@@ -16,6 +16,7 @@ import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, NamedTuple, cast
+from urllib.parse import urlparse
 
 import httpx
 
@@ -31,6 +32,8 @@ class _EventFields(NamedTuple):
     tool_name: str | None
     tool_args: str
     tokens: int | None
+    cache_read_tokens: int | None
+    cache_write_tokens: int | None
 
 
 @dataclass
@@ -43,6 +46,8 @@ class _StreamState:
     tool_call_args: str = ""
     finish_reason: str | None = None
     tokens: int | None = None
+    cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
 
     def apply(self, fields: _EventFields) -> Chunk | None:
         if fields.finish_reason is not None:
@@ -53,6 +58,10 @@ class _StreamState:
         self.tool_call_args += fields.tool_args
         if fields.tokens is not None:
             self.tokens = fields.tokens
+        if fields.cache_read_tokens is not None:
+            self.cache_read_tokens = fields.cache_read_tokens
+        if fields.cache_write_tokens is not None:
+            self.cache_write_tokens = fields.cache_write_tokens
         if not fields.content:
             return None
         self.emitted_content = True
@@ -71,6 +80,7 @@ class OpenAICompatProvider:
         model: str,
         api_key: str = "",
         default_timeout_s: float = 60.0,
+        prompt_caching: bool | None = None,
         extra_body: dict[str, Any] | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
@@ -80,6 +90,9 @@ class OpenAICompatProvider:
         self._model = model
         self._api_key = api_key
         self._default_timeout_s = default_timeout_s
+        self._prompt_caching = (
+            _is_openrouter_url(self._base_url) if prompt_caching is None else prompt_caching
+        )
         self._extra_body: dict[str, Any] = extra_body or {}
         # Injectable for tests (httpx.MockTransport). None → httpx default.
         self._transport = transport
@@ -96,6 +109,11 @@ class OpenAICompatProvider:
     @property
     def model(self) -> str:
         return self._model
+
+    @property
+    def prompt_caching(self) -> bool:
+        """Whether semantic cache hints become explicit wire breakpoints."""
+        return self._prompt_caching
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -212,6 +230,8 @@ class OpenAICompatProvider:
                 text=tool_content,
                 finish_reason=state.finish_reason,
                 tokens_used=state.tokens,
+                cache_read_tokens=state.cache_read_tokens,
+                cache_write_tokens=state.cache_write_tokens,
             )
 
     def _raise_for_status(self, resp: httpx.Response) -> None:
@@ -240,7 +260,7 @@ class OpenAICompatProvider:
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "model": self._model,
-            "messages": list(messages),
+            "messages": _wire_messages(messages, prompt_caching=self._prompt_caching),
             "max_tokens": max_tokens,
             "stream": True,
             # Ask for usage in the final SSE event. Servers that don't grok
@@ -340,12 +360,66 @@ def _parse_event(event: Any) -> _EventFields:
 
     tokens: int | None = None
     usage: Any = event.get("usage")
+    cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
     if usage:
         total = usage.get("total_tokens")
         if isinstance(total, int):
             tokens = total
+        raw_prompt_details: Any = usage.get("prompt_tokens_details")
+        if isinstance(raw_prompt_details, dict):
+            prompt_details = cast("dict[str, Any]", raw_prompt_details)
+            cached = prompt_details.get("cached_tokens")
+            written = prompt_details.get("cache_write_tokens")
+            if isinstance(cached, int):
+                cache_read_tokens = cached
+            if isinstance(written, int):
+                cache_write_tokens = written
 
-    return _EventFields(content, reasoning, finish_reason, tool_name, tool_args, tokens)
+    return _EventFields(
+        content,
+        reasoning,
+        finish_reason,
+        tool_name,
+        tool_args,
+        tokens,
+        cache_read_tokens,
+        cache_write_tokens,
+    )
+
+
+def _is_openrouter_url(base_url: str) -> bool:
+    hostname = (urlparse(base_url).hostname or "").lower()
+    return hostname == "openrouter.ai" or hostname.endswith(".openrouter.ai")
+
+
+def _wire_messages(
+    messages: list[Message],
+    *,
+    prompt_caching: bool,
+) -> list[dict[str, Any]]:
+    """Strip semantic metadata and emit explicit cache blocks when enabled."""
+    wire: list[dict[str, Any]] = []
+    for message in messages:
+        content = message["content"]
+        breakpoint = message.get("cache_prefix_chars")
+        if not prompt_caching or breakpoint is None:
+            wire.append({"role": message["role"], "content": content})
+            continue
+
+        if breakpoint <= 0 or breakpoint > len(content):
+            raise ValueError("cache prefix must end within non-empty message content")
+        blocks: list[dict[str, Any]] = [
+            {
+                "type": "text",
+                "text": content[:breakpoint],
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+        if breakpoint < len(content):
+            blocks.append({"type": "text", "text": content[breakpoint:]})
+        wire.append({"role": message["role"], "content": blocks})
+    return wire
 
 
 def _synthesise_tool_content(name: str, raw_args: str) -> str:

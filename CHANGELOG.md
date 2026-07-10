@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Planner and executor prompts now mark stable prefixes for provider prompt
+  caching. OpenRouter tiers emit explicit cache breakpoints by default,
+  local endpoints keep plain-string messages, and cache read/write tokens are
+  recorded on LLM spans when the provider reports them.
 - Independent ready DAG nodes now execute concurrently up to
   `max_concurrent_nodes` (`GLASSRAIL_MAX_CONCURRENT_NODES`, default `4`), with
   `1` preserving sequential execution.

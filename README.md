@@ -148,6 +148,7 @@ parsed by `pydantic-settings`. Tiers are nested, so use the `__` delimiter:
 | Tier 0 endpoint | `GLASSRAIL_TIER0__BASE_URL` | `http://localhost:8080/v1` |
 | Tier 0 timeout (s) | `GLASSRAIL_TIER0__TIMEOUT_S` | `10.0` |
 | Tier 1 API key | `GLASSRAIL_TIER1__API_KEY` | *(empty)* |
+| Tier 1 prompt caching | `GLASSRAIL_TIER1__PROMPT_CACHING` | automatic (on for OpenRouter) |
 | HITL plan gate | `GLASSRAIL_CONFIRM_PLANS` | `false` |
 | Tool approval mode | `GLASSRAIL_TOOL_APPROVAL__MODE` | `interactive` |
 | Max concurrent nodes | `GLASSRAIL_MAX_CONCURRENT_NODES` | `4` |
@@ -163,6 +164,17 @@ Tiers 1–3 default to OpenRouter models; override any field the same way. With 
 local model as your only tier, raise `GLASSRAIL_TIER0__TIMEOUT_S` (e.g. to `120`)
 — a large local model can take longer than the 10 s default, and a timeout is
 treated as the tier being unavailable.
+
+Planner and executor system prompts mark their stable prefixes for
+[prompt caching](https://openrouter.ai/docs/guides/best-practices/prompt-caching).
+When `tierN.prompt_caching` is omitted, OpenRouter endpoints receive explicit
+five-minute cache breakpoints and other OpenAI-compatible endpoints receive the
+same plain-string prompts as before. Set it to `true` to force breakpoints for
+another compatible endpoint or `false` to disable them. Cache support, minimum
+prompt length, and read/write pricing remain model/provider specific; a hint
+does not guarantee a hit, and cached input still counts toward reported tokens.
+When tracing is enabled, inspect `glassrail.cache.read_tokens` and
+`glassrail.cache.write_tokens` on `gen_ai.completion` spans.
 
 Independent DAG nodes can run concurrently up to `max_concurrent_nodes`; set it
 to `1` to force sequential execution. A local tier-0 server may still serve one

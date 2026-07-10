@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 import pytest
 
-from glassrail.providers import Message, ProviderUnavailableError, collect
+from glassrail.providers import Message, ProviderUnavailableError, cacheable_message, collect
 from glassrail.providers.openai_compat import OpenAICompatProvider
 
 _MSG: list[Message] = [{"role": "user", "content": "hi"}]
@@ -35,13 +35,16 @@ def _provider(
     *,
     api_key: str = "",
     extra_body: dict[str, object] | None = None,
+    prompt_caching: bool | None = None,
+    base_url: str = "http://test.local/v1",
 ) -> OpenAICompatProvider:
     return OpenAICompatProvider(
         name="tier0",
         tier=0,
-        base_url="http://test.local/v1",
+        base_url=base_url,
         model="test-model",
         api_key=api_key,
+        prompt_caching=prompt_caching,
         extra_body=extra_body,
         transport=handler,
     )
@@ -80,6 +83,28 @@ async def test_reports_usage_and_finish_reason() -> None:
     assert chunks[-1].tokens_used == 42
 
 
+async def test_reports_prompt_cache_usage() -> None:
+    body = _sse(
+        _content_event("answer", finish="stop"),
+        {
+            "choices": [],
+            "usage": {
+                "total_tokens": 42,
+                "prompt_tokens_details": {
+                    "cached_tokens": 30,
+                    "cache_write_tokens": 10,
+                },
+            },
+        },
+    )
+    provider = _provider(httpx.MockTransport(lambda _req: httpx.Response(200, text=body)))
+
+    chunks = [chunk async for chunk in provider.complete(_MSG)]
+
+    assert chunks[-1].cache_read_tokens == 30
+    assert chunks[-1].cache_write_tokens == 10
+
+
 async def test_request_sets_stream_and_auth() -> None:
     captured: dict[str, object] = {}
 
@@ -97,6 +122,75 @@ async def test_request_sets_stream_and_auth() -> None:
     assert sent["stream_options"] == {"include_usage": True}
     assert sent["response_format"] == {"type": "json_object"}
     assert captured["auth"] == "Bearer secret"
+
+
+async def test_explicit_cache_prefixes_become_openrouter_content_blocks() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, text=_sse(_content_event("ok", finish="stop")))
+
+    provider = _provider(httpx.MockTransport(handler), prompt_caching=True)
+    messages = [
+        cacheable_message("system", "stable system"),
+        cacheable_message("user", "stable\n\ndynamic", prefix_chars=len("stable\n\n")),
+    ]
+
+    await collect(provider.complete(messages))
+
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert body["messages"] == [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "stable system",
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "stable\n\n",
+                    "cache_control": {"type": "ephemeral"},
+                },
+                {"type": "text", "text": "dynamic"},
+            ],
+        },
+    ]
+
+
+async def test_disabled_cache_hints_leave_plain_message_content() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, text=_sse(_content_event("ok", finish="stop")))
+
+    provider = _provider(httpx.MockTransport(handler), prompt_caching=False)
+
+    await collect(provider.complete([cacheable_message("system", "unchanged")]))
+
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert body["messages"] == [{"role": "system", "content": "unchanged"}]
+
+
+def test_prompt_caching_auto_enables_only_for_openrouter() -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(200, text=_sse(_content_event("ok")))
+    )
+    local = _provider(transport)
+    openrouter = _provider(transport, base_url="https://openrouter.ai/api/v1")
+
+    assert local.prompt_caching is False
+    assert openrouter.prompt_caching is True
 
 
 async def test_reasoning_mandatory_error_retries_without_disabled_reasoning() -> None:

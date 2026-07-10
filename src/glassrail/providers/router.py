@@ -10,9 +10,10 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import AsyncIterator, Callable, Sequence
+from dataclasses import dataclass
 from typing import cast
 
-from opentelemetry.trace import Status, StatusCode
+from opentelemetry.trace import Span, Status, StatusCode
 
 from glassrail.providers.base import (
     Chunk,
@@ -22,6 +23,8 @@ from glassrail.providers.base import (
     ProviderUnavailableError,
 )
 from glassrail.telemetry import (
+    ATTR_CACHE_READ_TOKENS,
+    ATTR_CACHE_WRITE_TOKENS,
     ATTR_GEN_AI_OPERATION,
     ATTR_GEN_AI_REQUEST_MODEL,
     ATTR_GEN_AI_SYSTEM,
@@ -35,6 +38,29 @@ from glassrail.telemetry import (
 )
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class _Usage:
+    total_tokens: int = 0
+    cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
+
+    def update(self, chunk: Chunk) -> None:
+        if chunk.tokens_used is not None:
+            self.total_tokens = chunk.tokens_used
+        if chunk.cache_read_tokens is not None:
+            self.cache_read_tokens = chunk.cache_read_tokens
+        if chunk.cache_write_tokens is not None:
+            self.cache_write_tokens = chunk.cache_write_tokens
+
+    def apply_to(self, span: Span) -> None:
+        if self.total_tokens:
+            span.set_attribute(ATTR_GEN_AI_USAGE_TOTAL_TOKENS, self.total_tokens)
+        if self.cache_read_tokens is not None:
+            span.set_attribute(ATTR_CACHE_READ_TOKENS, self.cache_read_tokens)
+        if self.cache_write_tokens is not None:
+            span.set_attribute(ATTR_CACHE_WRITE_TOKENS, self.cache_write_tokens)
 
 
 class TierRouter:
@@ -154,14 +180,13 @@ class TierRouter:
                 if model is not None:
                     span.set_attribute(ATTR_GEN_AI_REQUEST_MODEL, model)
 
-                total_tokens = first.tokens_used or 0
+                usage = _Usage()
+                usage.update(first)
                 yield first
                 async for chunk in stream:
-                    if chunk.tokens_used is not None:
-                        total_tokens = chunk.tokens_used
+                    usage.update(chunk)
                     yield chunk
-                if total_tokens:
-                    span.set_attribute(ATTR_GEN_AI_USAGE_TOTAL_TOKENS, total_tokens)
+                usage.apply_to(span)
                 span.set_status(Status(StatusCode.OK))
                 return
 

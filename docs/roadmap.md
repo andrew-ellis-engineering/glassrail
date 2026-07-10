@@ -265,12 +265,13 @@ running continuously alongside. Done since the Phase 1 baseline:
 
 ### Track 2a — Engine reliability core (in order)
 
-1. **Prompt caching for planner and node prompts** — cache the static planner
-   system prefix (~3.8k tokens) and the per-node executor system prompts, and
-   reorder the planner prompt so the request-selected cookbook and the request
-   itself trail the static prefix that becomes the cache key. No caching exists
-   today; the prompt bytes are unchanged, so it is quality-neutral and cuts
-   cost, not raw token count.
+1. **Prompt caching for planner and node prompts** ✓ — static planner and
+   executor system prompts now carry provider-neutral cache hints. The planner's
+   limits, tier context, tool digest, and schemas form a second stable prefix;
+   request-selected cookbook content, the request, and retry feedback trail it.
+   OpenRouter tiers serialize explicit breakpoints, local endpoints retain the
+   same plain-string prompts, and provider-reported cache reads/writes appear on
+   LLM spans. This cuts supported-provider cost, not raw token counts.
 
 ### Track 2b — Capability layer
 

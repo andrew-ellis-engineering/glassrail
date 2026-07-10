@@ -1259,6 +1259,8 @@ async def test_content_node_uses_configured_prompt() -> None:
 
     await executor.execute(state)
     assert provider.system_seen == ["CUSTOM SUMMARY PROMPT"]
+    system = provider.messages_seen[0][0]
+    assert system.get("cache_prefix_chars") == len("CUSTOM SUMMARY PROMPT")
 
 
 async def test_summary_format_uses_configured_variant_prompts() -> None:
@@ -1354,6 +1356,9 @@ async def test_extract_args_uses_configured_prompt() -> None:
     await executor.execute(state)
 
     assert provider.system_seen[0] == "CUSTOM EXTRACT ARGS PROMPT"
+    for messages in provider.messages_seen:
+        system = next(message for message in messages if message["role"] == "system")
+        assert system.get("cache_prefix_chars") == len(system["content"])
     assert "Tool schema:" in provider.user_seen[0]
     assert state.results[2].args_used == {"path": "/tmp/value.txt"}
 

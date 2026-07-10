@@ -24,6 +24,8 @@ from glassrail.planner import Planner
 from glassrail.providers import TierRouter
 from glassrail.state import InMemoryStateStore
 from glassrail.telemetry import (
+    ATTR_CACHE_READ_TOKENS,
+    ATTR_CACHE_WRITE_TOKENS,
     ATTR_GEN_AI_USAGE_TOTAL_TOKENS,
     ATTR_NODE_TYPE,
     ATTR_TASK_STATUS,
@@ -56,11 +58,24 @@ _SHAPE_OK = json.dumps({"matches_expectation": True, "issue": None})
 _RESULT = json.dumps({"output": "nothing scheduled.", "confidence": 0.9})
 
 
-def _build(responses: list[str]) -> tuple[Orchestrator, InMemoryStateStore]:
+def _build(
+    responses: list[str],
+    *,
+    cache_read_tokens: int | None = None,
+    cache_write_tokens: int | None = None,
+) -> tuple[Orchestrator, InMemoryStateStore]:
     settings = Settings()
     harness = ToolHarness()
     register_builtins(harness)
-    router = TierRouter([make_scripted(responses)])
+    router = TierRouter(
+        [
+            make_scripted(
+                responses,
+                cache_read_tokens=cache_read_tokens,
+                cache_write_tokens=cache_write_tokens,
+            )
+        ]
+    )
     validator = PlanValidator(harness=harness, settings=settings)
     planner = Planner(router=router, harness=harness, validator=validator, settings=settings)
     executor = Executor(router=router, harness=harness, settings=settings)
@@ -84,7 +99,11 @@ async def test_run_emits_task_plan_node_llm_span_tree() -> None:
     assert configure_tracing(Settings(), span_exporter=exporter) is True
     exporter.clear()  # drop anything other tests may have recorded first
 
-    orch, store = _build([_PLAN, _SHAPE_OK, _RESULT])
+    orch, store = _build(
+        [_PLAN, _SHAPE_OK, _RESULT],
+        cache_read_tokens=100,
+        cache_write_tokens=25,
+    )
     state = ExecutionState(task_id=new_task_id(), user_request="what do I have today?")
     await store.save_task(state)
     await orch.run(state.task_id)
@@ -122,6 +141,8 @@ async def test_run_emits_task_plan_node_llm_span_tree() -> None:
     node_types = {_attr(s, ATTR_NODE_TYPE) for s in spans if s.name == SPAN_NODE}
     assert node_types == {"tool", "result"}
     assert any(_attr(s, ATTR_GEN_AI_USAGE_TOTAL_TOKENS) == 1 for s in llm_spans)
+    assert all(_attr(s, ATTR_CACHE_READ_TOKENS) == 100 for s in llm_spans)
+    assert all(_attr(s, ATTR_CACHE_WRITE_TOKENS) == 25 for s in llm_spans)
     assert all(_attr(s, ATTR_TIER) == 0 for s in llm_spans)
     task_span = next(s for s in spans if s.name == SPAN_TASK)
     assert _attr(task_span, ATTR_TASK_STATUS) == TaskStatus.COMPLETED.value

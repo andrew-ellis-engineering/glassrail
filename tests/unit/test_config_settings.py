@@ -176,6 +176,7 @@ def test_tier_config_validates() -> None:
     tier = TierConfig(base_url="http://x", model="m")
     assert tier.api_key == ""
     assert tier.timeout_s == 60.0
+    assert tier.prompt_caching is None
 
 
 def test_tiers_property_is_ordered() -> None:

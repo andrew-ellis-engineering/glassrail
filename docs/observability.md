@@ -30,9 +30,11 @@ conventions; `glassrail.*` are ours):
 | `glassrail.task` | `glassrail.task_id`, `glassrail.task.status` |
 | `glassrail.plan` | `glassrail.min_tier`, `glassrail.plan.node_count` |
 | `glassrail.node` | `glassrail.node.id`, `glassrail.node.type`, `glassrail.tier`, `glassrail.node.status`, `glassrail.node.confidence` |
-| `gen_ai.completion` | `gen_ai.system`, `gen_ai.request.model`, `gen_ai.operation.name`, `gen_ai.usage.total_tokens`, `glassrail.tier` |
+| `gen_ai.completion` | `gen_ai.system`, `gen_ai.request.model`, `gen_ai.operation.name`, `gen_ai.usage.total_tokens`, `glassrail.tier`, `glassrail.cache.read_tokens`, `glassrail.cache.write_tokens` |
 
 A failed node or task sets the span status to `ERROR` with the recorded error.
+Cache attributes appear only when the provider reports its prompt-cache usage;
+their absence means "not reported," not necessarily "not cached."
 
 ## Enabling it
 
