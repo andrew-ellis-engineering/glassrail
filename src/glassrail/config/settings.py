@@ -44,6 +44,12 @@ class TierConfig(BaseModel):
     model: str = ""
     api_key: str = ""
     timeout_s: float = 60.0
+    prompt_caching: bool | None = None
+    """Explicit prefix caching for this tier. ``None`` enables it automatically
+    for OpenRouter and leaves other OpenAI-compatible endpoints unchanged;
+    ``True`` forces cache breakpoints for a compatible custom endpoint and
+    ``False`` disables them.
+    """
     scripted_path: str = ""
     """Absolute path to a JSONL responses file. Required when ``kind=scripted``."""
     extra_body: dict[str, Any] = Field(default_factory=dict)

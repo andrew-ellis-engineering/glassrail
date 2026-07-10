@@ -49,6 +49,7 @@ from glassrail.providers import (
     Message,
     ProviderUnavailableError,
     TierRouter,
+    cacheable_message,
     collect,
     strip_model_output,
 )
@@ -642,7 +643,7 @@ class Executor:
         )
         allowed = list(node.branches.keys()) if node.branches else ["yes", "no"]
         messages: list[Message] = [
-            {"role": "system", "content": self._settings.prompts.decision},
+            cacheable_message("system", self._settings.prompts.decision),
             {
                 "role": "user",
                 "content": (
@@ -822,7 +823,7 @@ class Executor:
             else ""
         )
         messages: list[Message] = [
-            {"role": "system", "content": self._node_system_prompt(node)},
+            cacheable_message("system", self._node_system_prompt(node)),
             {
                 "role": "user",
                 "content": f"{task_prefix}Task: {node.description}\n\n{spec.context_label}\n{ctx}",
@@ -1164,7 +1165,7 @@ class Executor:
             raw, _ = await collect(
                 self._router.complete(
                     [
-                        {"role": "system", "content": self._settings.prompts.extract_args},
+                        cacheable_message("system", self._settings.prompts.extract_args),
                         {"role": "user", "content": prompt},
                     ],
                     min_tier=tier,
@@ -1198,7 +1199,7 @@ class Executor:
             raw, _ = await collect(
                 self._router.complete(
                     [
-                        {"role": "system", "content": self._settings.prompts.shape_check},
+                        cacheable_message("system", self._settings.prompts.shape_check),
                         {"role": "user", "content": prompt},
                     ],
                     min_tier=tier,

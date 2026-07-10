@@ -8,7 +8,7 @@ from glassrail.providers import OpenAICompatProvider, TierRouter, router_from_se
 
 def test_router_from_settings_builds_one_provider_per_tier() -> None:
     settings = Settings(
-        tier0=TierConfig(base_url="http://t0", model="m0", timeout_s=5.0),
+        tier0=TierConfig(base_url="http://t0", model="m0", timeout_s=5.0, prompt_caching=True),
         tier1=TierConfig(base_url="http://t1", model="m1", api_key="k1"),
         tier2=TierConfig(base_url="http://t2", model="m2"),
         tier3=TierConfig(base_url="http://t3", model="m3"),
@@ -20,3 +20,5 @@ def test_router_from_settings_builds_one_provider_per_tier() -> None:
     assert all(isinstance(p, OpenAICompatProvider) for p in providers)
     assert [p.tier for p in providers] == [0, 1, 2, 3]
     assert [p.name for p in providers] == ["tier0", "tier1", "tier2", "tier3"]
+    assert isinstance(providers[0], OpenAICompatProvider)
+    assert providers[0].prompt_caching is True

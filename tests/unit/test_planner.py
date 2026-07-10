@@ -175,6 +175,30 @@ async def test_planner_includes_plan_cookbook(harness: ToolHarness) -> None:
     assert "Candidate 2:" in user_msg
 
 
+async def test_planner_cache_prefix_excludes_cookbook_and_request(
+    harness: ToolHarness,
+) -> None:
+    payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})
+    provider = make_capturing_scripted([payload], tokens_used=42)
+    planner = _planner_from(provider, harness, Settings(planner_min_tier=0))
+
+    await planner.plan_attempt("Do a web search for Raft consensus", attempt=0)
+
+    system, user = provider.messages_seen[0]
+    assert system.get("cache_prefix_chars") == len(system["content"])
+    breakpoint = user.get("cache_prefix_chars")
+    assert breakpoint is not None
+    stable_prefix = user["content"][:breakpoint]
+    dynamic_suffix = user["content"][breakpoint:]
+    assert "Plan limits" in stable_prefix
+    assert "Tool capability digest:" in stable_prefix
+    assert "Available tools:" in stable_prefix
+    assert "Planning cookbook:" not in stable_prefix
+    assert "User request:" not in stable_prefix
+    assert dynamic_suffix.startswith("Planning cookbook:")
+    assert "User request: Do a web search for Raft consensus" in dynamic_suffix
+
+
 async def test_planner_includes_tool_capability_digest(harness: ToolHarness) -> None:
     """The planner sees a coarse capability map before raw tool schemas."""
     payload = json.dumps({"nodes": [{"id": 1, "type": "result", "description": "x"}]})

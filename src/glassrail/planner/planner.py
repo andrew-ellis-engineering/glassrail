@@ -20,7 +20,13 @@ from glassrail.core import Plan, PlanningAttempt, PlanValidationError
 from glassrail.harness import ToolHarness
 from glassrail.planner.cookbook import PlannerCookbook
 from glassrail.planner.tool_digest import render_tool_capability_digest
-from glassrail.providers import Message, TierRouter, collect, strip_model_output
+from glassrail.providers import (
+    Message,
+    TierRouter,
+    cacheable_message,
+    collect,
+    strip_model_output,
+)
 from glassrail.telemetry import ATTR_MIN_TIER, ATTR_PLAN_NODE_COUNT, SPAN_PLAN, get_tracer
 from glassrail.validator import PlanValidator
 
@@ -180,14 +186,13 @@ class Planner:
                 tool_names=self._harness.all_names(),
             )
             tool_digest = render_tool_capability_digest(tool_schemas)
-            user_content = (
+            cacheable_prefix = (
                 f"{self._limits_block()}\n\n"
                 f"{self._tier_block(min_tier=min_tier)}\n\n"
-                f"{cookbook}\n\n"
                 f"{tool_digest}\n\n"
                 f"Available tools:\n{tool_schemas_str}\n\n"
-                f"User request: {request}"
             )
+            user_content = f"{cacheable_prefix}{cookbook}\n\nUser request: {request}"
             if feedback:
                 user_content += (
                     "\n\nA previous plan for this request was rejected. Produce a "
@@ -224,8 +229,12 @@ class Planner:
                 system_prompt = system_prompt.removesuffix("\n/no_think")
 
             messages: list[Message] = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
+                cacheable_message("system", system_prompt),
+                cacheable_message(
+                    "user",
+                    user_content,
+                    prefix_chars=len(cacheable_prefix),
+                ),
             ]
 
             stream = self._router.complete(

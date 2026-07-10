@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from glassrail.providers import Chunk, LLMProvider, Message, collect
+import pytest
+
+from glassrail.providers import Chunk, LLMProvider, Message, cacheable_message, collect
 
 
 async def _stream(chunks: list[Chunk]) -> AsyncIterator[Chunk]:
@@ -33,6 +35,21 @@ async def test_collect_no_token_reports() -> None:
     text, tokens = await collect(_stream(chunks))
     assert text == "xy"
     assert tokens == 0
+
+
+def test_cacheable_message_marks_full_or_partial_prefix() -> None:
+    full = cacheable_message("system", "stable")
+    partial = cacheable_message("user", "stable-dynamic", prefix_chars=7)
+
+    assert full == {"role": "system", "content": "stable", "cache_prefix_chars": 6}
+    breakpoint = partial.get("cache_prefix_chars")
+    assert breakpoint == 7
+    assert partial["content"][:breakpoint] == "stable-"
+
+
+def test_cacheable_message_rejects_out_of_range_prefix() -> None:
+    with pytest.raises(ValueError, match="cache prefix"):
+        cacheable_message("user", "content", prefix_chars=99)
 
 
 class _FakeProvider:

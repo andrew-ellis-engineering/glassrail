@@ -8,6 +8,8 @@ spans is free when tracing is off.
 from __future__ import annotations
 
 from glassrail.telemetry.tracing import (
+    ATTR_CACHE_READ_TOKENS,
+    ATTR_CACHE_WRITE_TOKENS,
     ATTR_GEN_AI_OPERATION,
     ATTR_GEN_AI_REQUEST_MODEL,
     ATTR_GEN_AI_SYSTEM,
@@ -34,6 +36,8 @@ from glassrail.telemetry.tracing import (
 )
 
 __all__ = [
+    "ATTR_CACHE_READ_TOKENS",
+    "ATTR_CACHE_WRITE_TOKENS",
     "ATTR_GEN_AI_OPERATION",
     "ATTR_GEN_AI_REQUEST_MODEL",
     "ATTR_GEN_AI_SYSTEM",

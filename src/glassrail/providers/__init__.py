@@ -17,6 +17,7 @@ from glassrail.providers.base import (
     Message,
     ProviderError,
     ProviderUnavailableError,
+    cacheable_message,
     collect,
 )
 from glassrail.providers.factory import router_from_settings
@@ -34,6 +35,7 @@ __all__ = [
     "ProviderUnavailableError",
     "ScriptedProvider",
     "TierRouter",
+    "cacheable_message",
     "collect",
     "router_from_settings",
     "strip_model_output",

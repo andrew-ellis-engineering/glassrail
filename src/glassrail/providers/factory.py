@@ -28,6 +28,7 @@ def _provider_from_tier(tier: int, cfg: TierConfig) -> LLMProvider:
         model=cfg.model,
         api_key=cfg.api_key,
         default_timeout_s=cfg.timeout_s,
+        prompt_caching=cfg.prompt_caching,
         extra_body=cfg.extra_body or None,
     )
 

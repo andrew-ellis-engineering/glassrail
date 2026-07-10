@@ -7,6 +7,7 @@ by more than one subtree (event bus, ULID seeding, etc.) belongs here.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
+from copy import deepcopy
 
 import pytest
 
@@ -24,15 +25,20 @@ class ScriptedProvider:
         name: str = "scripted",
         model: str = "scripted-model",
         tokens_used: int = 1,
+        cache_read_tokens: int | None = None,
+        cache_write_tokens: int | None = None,
     ) -> None:
         self._responses: list[str | Exception] = list(responses)
         self._tier = tier
         self._name = name
         self._model = model
         self._tokens_used = tokens_used
+        self._cache_read_tokens = cache_read_tokens
+        self._cache_write_tokens = cache_write_tokens
         self.max_tokens_seen: list[int] = []
         self.system_seen: list[str] = []
         self.user_seen: list[str] = []
+        self.messages_seen: list[list[Message]] = []
 
     @property
     def name(self) -> str:
@@ -61,6 +67,7 @@ class ScriptedProvider:
     ) -> AsyncIterator[Chunk]:
         del json_mode, timeout_s
         self.max_tokens_seen.append(max_tokens)
+        self.messages_seen.append(deepcopy(messages))
         self.system_seen.append(next((m["content"] for m in messages if m["role"] == "system"), ""))
         self.user_seen.append(next((m["content"] for m in messages if m["role"] == "user"), ""))
         if not self._responses:
@@ -68,7 +75,12 @@ class ScriptedProvider:
         response = self._responses.pop(0)
         if isinstance(response, Exception):
             raise response
-        yield Chunk(text=response, tokens_used=self._tokens_used)
+        yield Chunk(
+            text=response,
+            tokens_used=self._tokens_used,
+            cache_read_tokens=self._cache_read_tokens,
+            cache_write_tokens=self._cache_write_tokens,
+        )
 
 
 def make_scripted(
@@ -78,6 +90,8 @@ def make_scripted(
     name: str = "scripted",
     model: str = "scripted-model",
     tokens_used: int = 1,
+    cache_read_tokens: int | None = None,
+    cache_write_tokens: int | None = None,
 ) -> ScriptedProvider:
     return ScriptedProvider(
         responses,
@@ -85,6 +99,8 @@ def make_scripted(
         name=name,
         model=model,
         tokens_used=tokens_used,
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
     )
 
 
@@ -95,6 +111,8 @@ def make_capturing_scripted(
     name: str = "capturing",
     model: str = "scripted-model",
     tokens_used: int = 1,
+    cache_read_tokens: int | None = None,
+    cache_write_tokens: int | None = None,
 ) -> ScriptedProvider:
     return make_scripted(
         responses,
@@ -102,6 +120,8 @@ def make_capturing_scripted(
         name=name,
         model=model,
         tokens_used=tokens_used,
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
     )
 
 
