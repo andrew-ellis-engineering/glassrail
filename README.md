@@ -331,8 +331,7 @@ startup.
 ### Security notes
 
 Glassrail is early 0.x software run by its operator, not a hardened service.
-Current posture (hardening is tracked in
-[Security baseline](https://www.andrewellisengineering.com/glassrail/specs/security-baseline/)):
+Current posture:
 
 - The REST gateway is unauthenticated by default for local development. Set
   `GLASSRAIL_API_KEY` before exposing it beyond localhost; when set, every REST
@@ -373,9 +372,7 @@ uv run pytest
 
 See
 [CONTRIBUTING.md](https://github.com/andrew-ellis-engineering/glassrail/blob/main/CONTRIBUTING.md)
-for the full check sweep and PR guidelines,
-[CLAUDE.md](https://github.com/andrew-ellis-engineering/glassrail/blob/main/CLAUDE.md)
-for the package layout and conventions, and the
+for the full check sweep, package conventions, and PR guidelines, and the
 [docs site](https://www.andrewellisengineering.com/glassrail/) for the
 architecture, streaming, observability, and deployment references.
 
