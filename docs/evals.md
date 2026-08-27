@@ -9,8 +9,8 @@ Evals live in the vendored [`eval-framework/`](https://github.com/andrew-ellis-e
 a standalone, stdlib-only harness that runs each task *k* times, captures the
 output / trajectory / side-effects, grades with a deterministic → trajectory →
 LLM cascade, and reports **pass@k** (capability — can it ever?) vs **pass^k**
-(reliability — does it every time?). See `eval-framework/README.md` for the full
-manual and `eval-framework/CLAUDE.md` for its operating constraints.
+(reliability — does it every time?). The repository's eval-framework directory
+contains the full command reference and suite definitions.
 
 ## Pluggable subjects — benchmark the model you ship
 
@@ -224,4 +224,4 @@ not masquerade as model-quality failures.
 Trials cost real inference. Keep criteria deterministic where possible (only
 `llm` criteria call a model), default the judge to a cheap model, re-grade
 archived trials for free with `run.py score`, and validate wiring with
-`--dry-run` before a broad run. See `eval-framework/README.md`'s cost section.
+`--dry-run` before a broad run.

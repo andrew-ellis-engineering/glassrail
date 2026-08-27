@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to `EXECUTING`, preventing duplicate execution across durable-store workers.
 
 ### Changed
+- Engineering source-of-truth cleanup moved the file-editing, node-contract,
+  `foreach`, and tier-ROI specs into `docs/specs/`, replaced private-vault links
+  with repository-relative references, and expanded the architecture document
+  to distinguish current components from planned boundaries.
 - Eval harness 0.5 excludes subject and judge infrastructure failures from
   model-quality metrics and regression gates, invalidates poisoned runs, and
   stages suite re-grades before replacing archived scores.

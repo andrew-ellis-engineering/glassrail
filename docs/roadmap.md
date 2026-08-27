@@ -1,13 +1,11 @@
 # Roadmap
 
-*Stub — full roadmap lives in the design vault and is being ported here.*
-
 **Direction (decided 2026-06-10):** Glassrail's wedge is the *local-first,
 eval-gated, auditable agent runtime* — engine reliability, security posture,
 and eval integrity come before assistant-platform features (memory, channels,
 Telegram). Phase 2 below is sliced into ordered tracks to encode that.
-Engineering specs from the June 2026 architecture audit live in
-docs/specs/ — the specs own *how*, this file owns *when*.
+Internal engineering specifications own implementation detail; this public
+roadmap owns high-level sequencing and shipped status.
 
 ## Phase 0 — Prototype (done)
 
@@ -106,11 +104,8 @@ number instead of folding the task back into prompt work.
 
 ### Gate definition and integrity caveats (added 2026-06-10)
 
-This table is the **single operative gate definition** — it supersedes the
-original exit-gate sketch in `eval-framework/suites/glassrail/EVAL_PLAN.md`
-(which proposed a promoted-regression set at `pass^5 = 1.0`; that remains the
-*aspirational* shape the ratchet works toward). `PHASE1_REMAINING.md` has been
-absorbed into specs/eval-integrity.md and deleted.
+This table is the **single operative gate definition**. A promoted-regression
+set at `pass^5 = 1.0` remains the aspirational shape the ratchet works toward.
 Stated honestly, the gate as met has three caveats, now reconciled for the
 0.1.0 release decision:
 
@@ -154,12 +149,9 @@ Items originally deferred to Phase 2 (do not block the gate):
 
 ## Release 0.1.0 — blocking workstream
 
-The release process itself is specced in `docs/release/`
-(pre-release hygiene →
-PyPI release →
-product website →
-grassroots marketing). From the June 2026
-audit, these additionally gate the work:
+The release sequence is pre-release hygiene → PyPI release → product website →
+grassroots marketing. From the June 2026 audit, these additionally gate the
+work:
 
 **Before the `v0.1.0` tag:**
 
@@ -220,14 +212,13 @@ running continuously alongside. Done since the Phase 1 baseline:
   `auto` execution mode, surfaced over ACP `session/request_permission` with
   "always allow" promotion. *(was "Per-tool HITL configuration", deferred from
   Phase 1; the remaining gap — risk-derived defaults so `write`/`execute`
-  tools ask by default — is specs/security-baseline.md
-  item 2.)*
+  tools ask by default — has since landed.)*
 - **Parallel node ready-set scheduler** ✓ — independent nodes now execute
   concurrently up to `max_concurrent_nodes`, with `1` preserving sequential
   execution. Branch skip propagation now records skipped branch targets
   immediately and auto-skips downstream nodes whose declared content inputs were
   all skipped, while preserving shared joins with at least one completed input.
-   Spec: specs/parallel-execution.md Part A.
+   This is the scheduling foundation for later bounded fan-out.
 - **Subplan event visibility** ✓ — nested subplan node events now carry
    `node_path` on the REST event stream, while ACP and the Python TUI filter
    nested child events to preserve their current top-level rendering.
@@ -275,8 +266,8 @@ running continuously alongside. Done since the Phase 1 baseline:
 
 ### Track 2b — Capability layer
 
-- **File editing tools** *(unblocks TUI coding harness)* — `file_edit(path, old_str, new_str)` with exact-once match semantics (fails closed if old_str matches zero or multiple times), `file_create` (new files only), `file_write` (full overwrite). Requires: path-root confinement (`tools.fs_roots` — provided by specs/security-baseline.md item 1), git-repo guard (configurable), risk-derived HITL defaults (provided by security-baseline item 2), diff-in-approval payload so humans approve a *change* not raw args. `obsidian_write` is a thin specialisation of this (vault root as `fs_roots`), not a parallel implementation. See `vault/Spec - File Editing Tools.md`.
-- **Tool registry output schemas** *(ships alongside file editing)* — tools declare their output shape at `@harness.tool` registration time. The validator checks `args_template` references against the producing tool's registered schema at plan-validation time, catching tool→tool key mismatches before execution. No burden on the LLM planner — schemas are author-supplied, not LLM-generated. Retroactively add schemas to existing built-in tools. See `vault/Spec - Node Contracts and Context Flow.md`.
+- **File editing tools** *(unblocks TUI coding harness)* — `file_edit(path, old_str, new_str)` with exact-once match semantics (fails closed if old_str matches zero or multiple times), `file_create` (new files only), `file_write` (full overwrite). Requires path-root confinement, a configurable git-repository guard, risk-derived HITL defaults, and a diff-in-approval payload so humans approve a *change* rather than raw arguments.
+- **Tool registry output schemas** *(ships alongside file editing)* — tools declare their output shape at registration time. The validator checks references against the producing tool's registered schema before execution, catching tool-to-tool key mismatches without asking the planner to invent schemas.
 - **TUI: file viewer panel** *(ships with file editing tools — they are a unit)*
   — a dedicated tab in the Rust TUI for browsing the local file tree and
   viewing file contents. Primary role is surfacing diffs when the agent proposes
@@ -291,12 +282,13 @@ running continuously alongside. Done since the Phase 1 baseline:
   upstream context awareness ✓ and registry schemas)* — fan-out iteration over a
   list using the existing subplan mechanism. Fields: `foreach_source` (upstream
   node id or literal list), `foreach_body` (nested Plan), `foreach_aggregation`
-  (`collect` or `synthesis`). Iterations are independent and parallelisable with
-  a bounded concurrency semaphore. Aggregation v1: `collect` (list of outputs)
-  and `synthesis` (hand off to a synthesis node). No `reduce` or conditional
-  loops. Conditional loops ("repeat until X") belong at the orchestrator layer.
-  See `vault/Spec - Foreach Node (Loops).md`. This is the breadth path for large
-  plans — wide, enumerable fan-out over a (possibly runtime-discovered) list,
+  (`collect` in v1). Iterations are independent and parallelisable with
+  a bounded concurrency semaphore. Aggregation v1 is `collect` (an ordered list
+  of outputs); map-to-synthesis uses an explicit downstream synthesis node. No
+  implicit reduction or conditional loops. Conditional loops ("repeat until
+  X") belong at the orchestrator layer.
+  This is the breadth path for large plans: wide, enumerable fan-out over a
+  (possibly runtime-discovered) list,
   cheap parallel leaves, one capable synthesis. The first large-plan demo and
   eval target should be a wide research/analysis task, not a refactor; it plays
   to the architecture's strengths, and the depth path (graph growth driven by
@@ -380,8 +372,7 @@ running continuously alongside. Done since the Phase 1 baseline:
   `research-compare-3` and `research-constrained` lost comparison depth or
   trade-off nuance. Measure against `suites/glassrail-openrouter`, targeting at
   least 22/23 full-pass without weakening deterministic checks.
-- **Held-out suite ratchet** — keep `suites/glassrail-heldout` (from
-  specs/eval-integrity.md) growing alongside the
+- **Held-out suite ratchet** — keep `suites/glassrail-heldout` growing alongside the
   main suite; publish both numbers; treat a widening main-vs-held-out gap as a
   P1 overfitting regression.
 - **Promotion ratchet in use** — promote d1–d2 tasks (and controls) to
@@ -414,8 +405,7 @@ Memory consolidation cron, audit trail, user-curation workflow, cloud tier routi
 
 - **`glassrail routing recompute` — one-shot tier-ROI model selector** *(prerequisites:
   cloud tiers 2–3 wired to real OpenRouter endpoints, **and** the configurable
-  routing table from specs/routing-table.md — the
-  selector writes into that surface)* — a CLI command that
+  routing table — the selector writes into that surface)* — a CLI command that
   deterministically selects the highest-ROI OpenRouter model for each cloud tier
   (2–3; local tiers 0–1 are out of scope) and writes `routing_table.json` for
   the tier router to consume. Not a cron — run manually and inspect outputs for
@@ -458,8 +448,7 @@ Memory consolidation cron, audit trail, user-curation workflow, cloud tier routi
   Artificial Analysis access for `Q` or manual `quality_scores.yaml`; (3)
   measured input:output blend weights from telemetry; (4) provider blocklist
   policy (relevant given Chinese-origin models dominating value tiers); (5)
-  whether to include `preview` models. Full spec: `vault/Spec - Tier ROI Model
-  Selector.md`.
+  whether to include `preview` models.
 
 ## Phase 3 — Insomnia
 
@@ -546,5 +535,4 @@ Security & sandboxing, MCP client, SKILL.md plugin format, plugin SDK + marketpl
   may not change more than once per N days), `--snapshot <path>` replay flag for
   audit and debugging against old snapshots without re-fetching. Exit codes
   wired to the health monitor: `0` success, `2` published with warnings, `3` no
-  publish / kept prior, `4` invalid config. Full spec: `vault/Spec - Tier ROI
-  Model Selector.md`.
+  publish / kept prior, `4` invalid config.

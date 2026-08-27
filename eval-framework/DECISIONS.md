@@ -3,11 +3,10 @@
 Non-obvious calls made while building from `EVAL_FRAMEWORK_SPEC.md`. The spec's
 prompt said to make reasonable choices and record them here rather than ask.
 
-1. **Build location — standalone `~/eval-framework/`.** The spec frames the
-   framework as self-contained ("root of an empty directory") and generic
-   (evaluates any AI skill via `claude -p`), so it lives in its own directory
-   rather than inside another project. Move it anywhere; nothing is hard-coded
-   to this path (`config.FRAMEWORK_ROOT` derives from the package location).
+1. **Build location — self-contained `eval-framework/` subtree.** The framework
+   remains dependency-isolated and generic while living in the Glassrail repo.
+   Nothing is hard-coded to a checkout path (`config.FRAMEWORK_ROOT` derives
+   from the package location).
 
 2. **Added a `file_unchanged` deterministic check.** The Cookbook (recipe 5,
    read-only advisory skills) uses it, but it isn't in the Rebuild Spec's check

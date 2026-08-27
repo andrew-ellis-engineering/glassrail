@@ -71,8 +71,8 @@ rather than duplicating across files.
   section points here instead of listing components.
 - `CONTRIBUTING.md` — the full check sweep and PR guidelines for contributors.
 - `docs/index.md` — published-site landing page (the "why DAG planning?" intro).
-- `docs/architecture.md` — the layered architecture and how the pieces fit
-  (currently a stub being ported from the design vault).
+- `docs/architecture.md` — the layered architecture, current boundaries, and
+  how the pieces fit.
 - `docs/roadmap.md` — phases and what's next.
 - `docs/specs/` — implementable engineering specs from the June 2026
   architecture audit; `docs/specs/index.md` is the index with priorities,
@@ -117,7 +117,7 @@ rather than duplicating across files.
   break the validator, the topological executor, the ACP plan mapping, and the
   OTel span tree simultaneously. Do not add cycles to the plan grammar.
   Conditional loops ("repeat until X") belong at the orchestrator/session layer,
-  not the plan layer. See `vault/Spec - Foreach Node (Loops).md`.
+  not the plan layer. See `docs/specs/foreach-node.md`.
 
 ## Package map
 

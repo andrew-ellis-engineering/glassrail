@@ -1,11 +1,11 @@
 # Engineering specs
 
-Implementable specifications produced by the June 2026 full-repo architecture
-audit. Each spec is self-contained: it states the current behaviour, the
-required behaviour, the design decision (one design — no open choices), the
-files to change, the tests to add, and runnable acceptance criteria. They are
-written to be implemented by a coding agent (Claude Sonnet/Opus, GPT-class)
-without access to the audit conversation.
+Engineering specifications produced by the architecture audit and subsequent
+roadmap work. A spec marked ready or implemented is self-contained: it states
+the current behavior, required behavior, locked decisions, files, tests, and
+acceptance criteria. Draft and "needs further specification" documents retain
+their unresolved decisions explicitly and must not be implemented by guesswork.
+No spec may depend on a private design vault or checkout-specific path.
 
 The roadmap ([roadmap](../roadmap.md)) owns *when* these happen; the specs own
 *how*. Release-process specs live separately in `docs/release/`.
@@ -21,11 +21,17 @@ The roadmap ([roadmap](../roadmap.md)) owns *when* these happen; the specs own
 | [Parallel execution](parallel-execution.md) | P1 — first engine workstream; prerequisite for `foreach` | — | Implemented |
 | [Node resilience](node-resilience.md) | P1 — independent; suggested after parallel execution to avoid rebase churn | — | Implemented |
 | [Routing table](routing-table.md) | P1 — prerequisite for the Phase 2.5 tier-ROI selector | — | Implemented |
+| [Node contracts and context flow](node-contracts.md) | P1 — prerequisite for tool-to-tool chains and `foreach` | — | Part 1 implemented; Part 2 planned |
+| [File editing tools](file-editing-tools.md) | P1 — capability layer and coding-harness prerequisite | Node contracts; diff-review TUI | Planned |
+| [`foreach` node](foreach-node.md) | P1 — bounded runtime fan-out | Parallel execution; node contracts | Needs further specification |
 | [Comparative baselines](comparative-baselines.md) | P2 — launch evidence asset | Eval integrity (held-out suite) | Harness/suites implemented; full runs pending |
+| [Tier-ROI selector](tier-roi-selector.md) | P2.5 — manual cloud-tier selection before automation | Routing table; quality/price inputs | Draft |
 
-Suggested engine order: parallel-execution → node-resilience → routing-table →
-serving-hardening (remaining items) → `foreach` (external vault spec). The P0
-specs and small fixes can proceed in parallel with anything.
+The reliability sequence through prompt caching is complete. The next
+capability sequence is node-contract registry metadata → file-editing safety
+and review surfaces → `foreach`. Do not begin file editing or `foreach` until
+their remaining design dependencies are resolved. The P0 specs and small fixes
+can proceed in parallel with anything.
 
 ## How to implement a spec (instructions for the implementing agent)
 
@@ -34,12 +40,11 @@ specs and small fixes can proceed in parallel with anything.
    `asyncio` only, ruff, `uv`, src-layout, `core/` imports nothing.
 2. **One spec — or one numbered item from a multi-item spec — per branch/PR.**
    Branch off `main`. Do not bundle unrelated items.
-3. **Verify before editing.** These specs were written 2026-06-10 against
-   commit `c79cebb` plus the in-flight release working tree. File paths and
-   symbol names are accurate as of then; line numbers are hints only. `grep -n`
-   for every named symbol before changing it. If a named behaviour has already
-   changed, the spec's *behavioural contract* sections are normative — adapt
-   the mechanics, keep the contract.
+3. **Verify before editing.** Specs record the status and assumptions they were
+   written against; file paths and line numbers are hints. Search for every
+   named symbol before changing it. If behavior has already changed, the spec's
+   locked behavioral contract is normative — adapt mechanics without reviving
+   stale implementation assumptions.
 4. **Check sweep before claiming done** (zero failures, zero lint findings,
    pyright clean with zero warnings):
 
